@@ -38,6 +38,28 @@ NEVER skip mandatory Tier-1/Tier-2 routing for matching historical, decision, ca
 
 **RULE:** This is SILENT — do not announce "I'm checking impact via graphify" unless the user explicitly asks. Just do it and incorporate the results into your analysis.
 
+### STEP 3c — Proactive Session Context (silent, before starting tasks)
+
+**WHEN:** Before starting any non-trivial task (implementation, debugging, architecture decision) — if the qdrant-session-memory plugin is active (`.openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py` exists).
+
+**HOW:**
+1. Extract the core topic of the current task (entity name, feature name, bug description, decision topic).
+2. Run: `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<topic>" --limit 3`
+3. If top score ≥ 0.5: read the matching session summary. Look for:
+   - Past decisions that affect the current task
+   - Lessons learned from similar work
+   - Known issues or gotchas encountered before
+   - Files or entities that were discussed
+4. Incorporate relevant context silently — reference prior decisions, avoid repeating past mistakes, build on established patterns.
+5. If Qdrant is unavailable or score < 0.5: skip silently — no fallback needed, this is an enhancement.
+
+**EXAMPLES:**
+- Task: "Implement comment deletion" → Query: "comment deletion" → Found: Sprint 15 discussion about soft-delete pattern → Agent uses soft-delete instead of hard-delete
+- Task: "Fix blank images in feed" → Query: "feed images blank" → Found: Session summary about media URL normalization → Agent checks the same root cause first
+- Task: "Add rate limiting to polls" → Query: "rate limiting polls" → Found: Decision about sliding window policy → Agent follows established pattern
+
+**RULE:** This is SILENT — do not announce "I'm checking past sessions via Qdrant" unless the user explicitly asks. Just query, read relevant context, and incorporate into your task execution.
+
 ## STEP 4 — Skill discovery and loading
 
 Walk through the active task and load every skill whose `description` matches:
