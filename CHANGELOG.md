@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.0] - 2026-05-22
+
+### Added
+- `init-openskills` skill: `/initOpenSkills` command for automatic brownfield adoption
+  - Auto-detects tech stack from manifest files (csproj, package.json, go.mod, Cargo.toml, etc.)
+  - Identifies architecture pattern from directory structure (Clean Arch, MVC, microservices, monorepo, etc.)
+  - Detects code conventions from existing source files (naming, error handling, validation, testing)
+  - Generates AGENTS.md, RULE_REGISTRY.md, rules, wiki pages, and IDE pointers in one pass
+  - Interactive confirmation before writing any files
+
+### Fixed
+- Subagent-driven-development: added independent review option (4th choice after task completion)
+- Graphify plugin: corrected installation to `uv tool install graphifyy` (PyPI, not npm)
+- Graphify plugin: added "No API Key Required for Queries" clarification
+- Proactive impact analysis: agent now queries graphify before code changes to detect affected dependents
+
 ## [0.1.0] - 2026-05-22
 
 ### Added
