@@ -167,6 +167,12 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 <path>.openskills/skills/self-improvement-curator/SKILL.md</path>
 </skill>
 
+<skill activation="lazy">
+<name>init-openskills</name>
+<description>Use when the user says '/initOpenSkills', 'init openskills', 'kur openskills', or 'setup openskills' in an existing project — auto-detects tech stack, architecture, and conventions, then generates AGENTS.md, rules, wiki, and IDE pointers.</description>
+<path>.openskills/skills/init-openskills/SKILL.md</path>
+</skill>
+
 <skill activation="eager">
 <name>context-handoff</name>
 <description>Use when context compaction warnings appear, after 8+ major tool sequences, after 3+ large file reads plus 2+ review cycles, when a sprint task closes mid-session with more work pending, or when the user asks for a handoff prompt, says 'context doldu mu', 'yeni session', 'handoff hazırla'.</description>
