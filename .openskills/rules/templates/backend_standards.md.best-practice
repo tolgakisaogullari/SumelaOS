@@ -1,0 +1,74 @@
+---
+type: rule
+tags: [backend, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Backend Standards
+
+> This rule defines coding standards and conventions for backend development.
+> Customize these standards for your project's specific needs.
+
+## Architecture & Layers
+
+- **Pattern:** Clean Architecture or Hexagonal Architecture — dependencies point inward.
+- **Domain Layer:** Zero external dependencies. Contains entities, value objects, domain events, and business rules.
+- **Application Layer:** Orchestrates use cases. Defines interfaces (ports) implemented by infrastructure. No direct dependency on infrastructure.
+- **Infrastructure Layer:** Implements adapters — database, message broker, external APIs. Depends on application interfaces.
+- **API/Presentation Layer:** Handles HTTP concerns only — routing, serialization, authentication. No business logic.
+- **Logic Isolation:** Controllers/handlers remain thin. They delegate to application services immediately.
+
+## Naming Conventions
+
+- **Services:** `{Entity}Service` (e.g., `OrderService`).
+- **Repositories:** `{Entity}Repository` (e.g., `OrderRepository`).
+- **Interfaces:** `I{Entity}Service`, `I{Entity}Repository`.
+- **Request DTOs:** `{Action}Request` (e.g., `CreateOrderRequest`).
+- **Response DTOs:** `{Entity}Response` (e.g., `OrderResponse`, `OrderDetailResponse`).
+- **Domain Events:** `{Entity}{PastTense}Event` (e.g., `OrderCreatedEvent`, `PaymentProcessedEvent`).
+- **Consumers/Subscribers:** `{Event}Consumer` (e.g., `OrderCreatedEventConsumer`).
+
+## Data Access (ORM/Repository)
+
+- **Repository Pattern:** Each aggregate root gets its own repository. Repositories return domain entities, not raw query results.
+- **Unit of Work:** Wrap multi-entity mutations in a single transaction scope. Commit once at the service boundary.
+- **Read Optimization:** Use read-only projections (no-tracking queries) for all read operations. Reserve tracked queries for writes.
+- **N+1 Prevention:** Eagerly load related data for list queries. Use split queries for complex joins to avoid Cartesian explosion.
+- **Migration Strategy:** Batch migrations at the end of feature branches. Never generate per-commit migrations in shared branches.
+
+## API Design (REST/GraphQL)
+
+- **Versioning:** Prefix all routes with `/api/v{N}/` (e.g., `/api/v1/orders`).
+- **Resource Naming:** Plural nouns for collections (`/orders`), singular with ID for specific resources (`/orders/{id}`).
+- **HTTP Methods:** GET (read), POST (create), PUT/PATCH (update), DELETE (remove). Never use POST for reads.
+- **Response Envelope:** Return consistent shape — `{ data, errors, pagination }`.
+- **Pagination:** Cursor-based for large datasets, offset-based for admin/UI tables.
+- **Rate Limiting:** Apply per-endpoint sliding window limits. Document limits in OpenAPI/Swagger.
+- **Content Negotiation:** Support `application/json` as default. Return `406 Not Acceptable` for unsupported types.
+
+## Error Handling
+
+- **Global Exception Middleware:** Never use try-catch in controllers/handlers. A single exception middleware catches all unhandled exceptions and returns structured error responses.
+- **Error Response Format:** `{ "type": "https://tools.ietf.org/html/rfc7807", "title": "...", "status": 400, "detail": "...", "errors": [...] }`.
+- **Validation Errors:** Return `400 Bad Request` with field-level error messages. Use FluentValidation or equivalent at input boundaries.
+- **Domain Errors:** Translate domain exceptions to appropriate HTTP status codes (404 for not found, 409 for conflicts, 422 for business rule violations).
+- **Unexpected Errors:** Log full exception server-side, return generic `500 Internal Server Error` to client — never leak stack traces.
+
+## Testing Policy
+
+- **Unit Tests:** Test application services and domain logic in isolation. Mock external dependencies (repositories, message brokers, external APIs).
+- **Integration Tests:** Test repository implementations against a real or in-memory database. Test API endpoints through the full middleware pipeline.
+- **Coverage Target:** Aim for 80%+ on domain and application layers. Infrastructure and API layers can be lower if covered by integration tests.
+- **Test Naming:** `{MethodUnderTest}_{Scenario}_{ExpectedBehavior}` (e.g., `CreateOrder_WithInvalidRequest_ReturnsValidationError`).
+- **Test Data:** Use builders or factories for complex test objects. Avoid shared mutable test fixtures.
+
+## Security
+
+- **Authentication:** Use industry-standard token-based auth (JWT, OAuth 2.0). Never roll custom auth.
+- **Authorization:** Enforce at both controller/action level (declarative) and service level (imperative checks for complex rules).
+- **Input Validation:** Validate all input at API boundaries. Reject unknown fields. Sanitize string inputs.
+- **Secrets Management:** Never commit secrets to source control. Use environment variables or a secrets manager (Vault, AWS Secrets Manager, etc.).
+- **SQL Injection:** Use parameterized queries or ORM. Never concatenate user input into raw SQL.
+- **Rate Limiting:** Protect auth endpoints and expensive operations with stricter rate limits.
+- **CORS:** Restrict origins to known frontends. Never use `AllowAnyOrigin` with `AllowCredentials` in production.

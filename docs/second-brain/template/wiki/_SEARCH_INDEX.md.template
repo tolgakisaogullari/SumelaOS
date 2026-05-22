@@ -1,0 +1,23 @@
+# Wiki Search Index
+
+<!-- Agent-optimized search index. Match query terms against Tags and Key Terms columns,
+     then read only matched pages. Updated on every ingest, code-commit, and lint operation.
+
+     Maintenance rules:
+     - New wiki page → add new row.
+     - Page archived → update row with archive/ prefix.
+     - Page NEVER deleted (always archive) → row never removed.
+     - Parity with _INDEX.md checked during lint: every _INDEX entry must exist here and vice versa.
+
+     Column rules:
+     - Page: Obsidian wikilink (clickable)
+     - Type: page type from _SCHEMA.md Section 2 (core, entity, concept, decision, insight, archive, source-summary)
+     - Tags: copy of frontmatter tags field (comma-separated)
+     - Key Terms: 5-15 search terms extracted from page content — technical concepts, technology names, IDs, domain terms
+     - Summary: single line, max ~100 characters
+
+     Details: _SCHEMA.md Section 13. -->
+
+| Page | Type | Tags | Key Terms | Summary |
+|---|---|---|---|---|
+| [[active-project-context]] | core | active-context, sprint | current-state, next-steps | Active sprint snapshot |

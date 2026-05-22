@@ -1,0 +1,9 @@
+# {{project_name}} — Kilo Code Agent Configuration
+
+> **This is a pointer file.** Canonical agent instructions live in `AGENTS.md` at the project root. Read that file first.
+
+**Directives:**
+1. Read `AGENTS.md` — it is the single source of truth for agent behavior.
+2. Follow `.openskills/SKILL_REGISTRY.md` for skill resolution.
+3. Follow `.openskills/RULE_REGISTRY.md` for project rule discovery.
+4. Do not duplicate instructions across IDE-specific files.

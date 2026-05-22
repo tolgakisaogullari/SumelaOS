@@ -1,0 +1,77 @@
+---
+type: rule
+tags: [mobile, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Mobile Standards
+
+> This rule defines coding standards and conventions for mobile application development.
+> Customize these standards for your project's specific needs.
+
+## Platform & Framework
+
+- **Language/Type:** TypeScript strict mode (`strict: true` in tsconfig). No `any` types — use `unknown` and type guards.
+- **Framework:** Choose one cross-platform framework (React Native, Flutter, .NET MAUI) or native (Swift/Kotlin). Do not mix.
+- **Minimum OS:** Define minimum supported OS versions. Drop support for versions with < 5% market share.
+- **Dependency Policy:** Prefer well-maintained libraries (> 1000 weekly downloads, active maintenance). Audit new dependencies before adding.
+- **Code Sharing:** Extract shared logic (API clients, utilities, types) into a shared package/module.
+
+## Navigation
+
+- **Library:** Use the framework's recommended navigation library. Define all routes in a single route configuration.
+- **Type Safety:** Use typed route params — never pass untyped objects between screens.
+- **Deep Linking:** Configure deep linking for all primary user flows. Handle both cold start and warm resume.
+- **Navigation State:** Persist navigation state across app restarts for recovery.
+- **Back Behavior:** Define hardware back button behavior (Android). Never allow back to exit the app without confirmation.
+
+## Data Layer
+
+- **API Client:** Use a centralized HTTP client with interceptors for auth token injection, refresh, and error handling.
+- **Serialization:** Use runtime validation (Zod, io-ts) for API responses. Never trust API data without validation.
+- **Caching:** Implement a cache layer with TTL for API responses. Invalidate on mutation.
+- **State Management:** Use the framework's recommended pattern (Context + hooks, Riverpod, BLoC). Keep server state separate from UI state.
+- **Data Freshness:** Implement pull-to-refresh and background refresh for data-heavy screens.
+
+## Offline Support
+
+- **Strategy:** Offline-first — queue mutations locally when offline, sync when connectivity returns.
+- **Local Storage:** Use a structured local database (SQLite, Realm, WatermelonDB) for offline data. Not just key-value storage.
+- **Conflict Resolution:** Define a conflict resolution strategy (last-write-wins, merge, manual) for concurrent edits.
+- **Connectivity Detection:** Use the platform's connectivity API, not just network reachability. Verify actual internet access before sync.
+- **User Feedback:** Show clear offline indicators. Never silently fail — inform the user when actions are queued.
+
+## Security (Secure Storage)
+
+- **Token Storage:** Store auth tokens in platform secure storage (iOS Keychain, Android Keystore). Never use AsyncStorage/UserDefaults for secrets.
+- **Certificate Pinning:** Pin certificates or public keys for API communication in production builds.
+- **Data Encryption:** Encrypt sensitive local data at rest. Use the platform's built-in encryption APIs.
+- **Biometrics:** Use the platform's biometric APIs for sensitive operations. Do not store biometric data — use the OS-provided secure enclave.
+- **Input Security:** Disable autocomplete and screenshot capture for sensitive fields (passwords, OTP codes).
+
+## Push Notifications
+
+- **Permission Handling:** Request permission at a contextually appropriate time, not on first launch. Explain the value before requesting.
+- **Token Management:** Register and store push tokens server-side. Handle token refresh. Unregister on logout.
+- **Message Handling:** Handle notifications in all app states (foreground, background, killed). Define tap actions for each notification type.
+- **Rich Notifications:** Support images, action buttons, and grouping where the platform allows.
+- **Rate Limiting:** Throttle notification display on the client to avoid overwhelming the user.
+
+## Performance
+
+- **Startup Time:** Target cold start < 2 seconds. Defer non-critical initialization to after first render.
+- **Memory Management:** Monitor memory usage. Fix leaks — especially in image-heavy screens and long-lived listeners.
+- **Bundle Size:** Analyze and minimize bundle size. Use platform-specific code splitting where available.
+- **List Performance:** Use virtualized/flat lists for long lists. Implement windowing for lists > 50 items.
+- **Image Handling:** Resize images to display size before rendering. Use progressive loading and placeholders.
+- **Animations:** Use native driver for animations (60fps target). Avoid JS-driven animations for anything visible on screen.
+
+## Testing
+
+- **Unit Tests:** Test business logic, hooks, and utilities in isolation. Mock native modules.
+- **Component Tests:** Test screen components with mocked navigation and API. Verify rendering and interactions.
+- **Integration Tests:** Test feature flows through multiple screens. Verify data persistence and state transitions.
+- **E2E Tests:** Cover critical paths (login, checkout, onboarding) with Detox or Appium. Run on CI against emulators.
+- **Device Testing:** Test on at least one low-end device per platform. Verify on both phone and tablet form factors.
+- **Regression:** Run the full test suite before every release. Block release on test failures.

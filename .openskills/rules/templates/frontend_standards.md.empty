@@ -1,0 +1,53 @@
+---
+type: rule
+tags: [frontend, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Frontend Standards
+
+> This rule defines coding standards and conventions for frontend development.
+> Customize these standards for your project's specific needs.
+
+## Component Structure
+
+Define component organization, file naming, and composition patterns.
+
+<!-- Write your frontend standards here -->
+
+## State Management
+
+Define local vs global state rules, data flow patterns, and side-effect handling.
+
+<!-- Write your frontend standards here -->
+
+## Styling
+
+Define styling approach (CSS Modules, Tailwind, styled-components), theming, and responsive design rules.
+
+<!-- Write your frontend standards here -->
+
+## Accessibility
+
+Define WCAG compliance level, semantic HTML requirements, and ARIA usage rules.
+
+<!-- Write your frontend standards here -->
+
+## Performance
+
+Define performance budgets, code splitting strategy, and optimization rules.
+
+<!-- Write your frontend standards here -->
+
+## Testing
+
+Define component testing approach, snapshot vs behavior testing, and coverage expectations.
+
+<!-- Write your frontend standards here -->
+
+## Error Handling
+
+Define error boundary strategy, fallback UI, and error reporting rules.
+
+<!-- Write your frontend standards here -->

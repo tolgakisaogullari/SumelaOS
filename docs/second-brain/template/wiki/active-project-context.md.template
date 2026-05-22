@@ -1,0 +1,57 @@
+---
+type: core
+tags: [active-context, sprint, {{project_name}}]
+date_created: {{date_created}}
+date_updated: {{date_created}}
+status: active
+---
+
+# Active Project Context — {{project_name}}
+
+> **This file is read at the start of every session.** Holds only the **active sprint, next steps, and open tech-debt headings**. Keep it slim.
+
+---
+
+## Active Sprint
+
+<!-- Current sprint or feature work goes here. Include sprint name, goal, and status. -->
+
+---
+
+## Latest Maintenance
+
+<!-- Last maintenance activity (lint, migration, tech-debt cleanup). Brief — one or two lines. -->
+
+---
+
+## Last Completed Sprint
+
+<!-- Move the completed sprint summary here when a new sprint starts. -->
+
+---
+
+## Infrastructure Updates
+
+<!-- Docker, CI/CD, deployment, or infrastructure changes since last sprint. -->
+
+---
+
+## Next Steps
+
+1. <!-- Next step 1 -->
+2. <!-- Next step 2 -->
+
+---
+
+## Open Tech Debt
+
+<!-- High-level tech-debt headings only. For details see [[tech-debt-and-known-issues]]. -->
+
+---
+
+## References
+
+- **Architecture decisions:** [[architecture-decisions]]
+- **Domain entities:** [[domain-entities]]
+- **Tech debt:** [[tech-debt-and-known-issues]]
+- **API registry:** [[api-registry]]

@@ -1,0 +1,19 @@
+# Activity Log
+
+<!-- Append-only. Each entry: ## [YYYY-MM-DD] type | topic.
+     Type whitelist (single word, lowercase):
+       code-commit  — development branch finished, wiki reflection done
+       decision     — new architecture decision recorded
+       evolve       — self-improvement queue review (/evolve)
+       ingest       — new raw_source processed, wiki pages updated
+       lint         — wiki health check performed
+       migration    — wiki structural change (folder move, format update)
+       query        — user question answered and insight saved to wiki
+     Parse validation: grep "^## \[" docs/second-brain/wiki/_LOG.md | tail -10
+     Details: _SCHEMA.md Section 6. -->
+
+## [{{date_created}}] migration | Initial second brain adoption
+
+- Second brain template adopted for {{project_name}}.
+- Template files installed: _INDEX, _LOG, _SCHEMA, _SEARCH_INDEX, _IMPROVEMENT_QUEUE, active-project-context.
+- Affected wiki pages: [[active-project-context]], [[_INDEX]], [[_SEARCH_INDEX]]

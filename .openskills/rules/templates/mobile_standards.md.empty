@@ -1,0 +1,59 @@
+---
+type: rule
+tags: [mobile, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Mobile Standards
+
+> This rule defines coding standards and conventions for mobile application development.
+> Customize these standards for your project's specific needs.
+
+## Platform & Framework
+
+Define target platforms, framework choice, and language/type settings.
+
+<!-- Write your mobile standards here -->
+
+## Navigation
+
+Define navigation library, route structure, and deep linking strategy.
+
+<!-- Write your mobile standards here -->
+
+## Data Layer
+
+Define API client setup, caching strategy, and data synchronization patterns.
+
+<!-- Write your mobile standards here -->
+
+## Offline Support
+
+Define offline-first approach, local storage, and sync queue behavior.
+
+<!-- Write your mobile standards here -->
+
+## Security (Secure Storage)
+
+Define secure storage for tokens/secrets, certificate pinning, and data encryption rules.
+
+<!-- Write your mobile standards here -->
+
+## Push Notifications
+
+Define notification handling, background processing, and permission management.
+
+<!-- Write your mobile standards here -->
+
+## Performance
+
+Define memory management, bundle size limits, and startup time targets.
+
+<!-- Write your mobile standards here -->
+
+## Testing
+
+Define unit test, integration test, and E2E test strategy for mobile.
+
+<!-- Write your mobile standards here -->

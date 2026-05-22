@@ -1,0 +1,86 @@
+# OPERATIONAL EXCELLENCE & MAINTENANCE (IRON LAWS)
+
+> **Universal rule** — applies to all stacks. Later sections may contain stack-specific guidance; adapt to your technology choices.
+
+## 📊 OBSERVABILITY & STRUCTURED LOGGING
+* **Structured Logging (Serilog):** Do not use plain string logs. Every log entry must be structured with properties (e.g., `Log.Information("User {UserId} created entity {EntityId}", userId, entityId)`).
+* **Correlation IDs:** Every request (HTTP) or message (message broker) must carry a `CorrelationId`. Ensure this ID is propagated across all service boundaries to enable end-to-end tracing.
+* **Error Context:** When logging exceptions, always include the relevant DTO or State that caused the failure (excluding sensitive data) to speed up the `superpowers:systematic-debugging` process.
+
+## 🔄 API EVOLUTION & VERSIONING
+* **Mobile-First Versioning:** All API endpoints must be versioned (e.g., `/api/v1/<resource>`).
+* **Backward Compatibility:** Never introduce "Breaking Changes" (removing fields, changing types) in an existing version. If a breaking change is required, implement a new version (`v2`) and maintain `v1` for existing mobile users.
+* **Deprecation Policy:** Proactively mark old endpoints as `[Obsolete]` and provide a migration path in the documentation.
+
+## ✅ DEFINITION OF DONE (DoD)
+A task is NOT "Done" until the following checklist is verified:
+1. **Plan Update:** The corresponding `.md` file in `docs/second-brain/artifacts/plans/` is updated to "Completed" with the actual implementation date.
+2. **Schema & Config:** If new environment variables or settings were added, the `appsettings.json.example` (or README) is updated immediately.
+3. **Audit Alignment:** The code passes the **"Proactive Audit Protocol"** (No N+1, no magic strings, no security gaps).
+4. **Documentation:** If a new public API or complex business logic was added, the relevant Second Brain wiki pages (e.g., `api-registry.md`, `architecture-decisions.md`) are updated to reflect the change.
+
+## 🛠️ SUPERPOWERS INTEGRATION
+* **Writing Plans:** When planning a feature that involves a background consumer (message broker), the plan **MUST** include a "Logging & Tracing" section.
+* **Verification:** Use the `superpowers:verification-before-completion` skill to double-check that no "Hardcoded Configurations" are left in the code and all new endpoints are versioned correctly.  
+## 🧠 SECOND BRAIN RELIABILITY (PROACTIVE MAINTENANCE)
+
+Second Brain is project-critical infrastructure, not optional documentation.
+When delegated to repair or clean up the Second Brain, proactively address ALL
+of the following together — never fix one in isolation:
+- Schema/frontmatter parity (all pages follow _SCHEMA.md)
+- _INDEX.md ↔ wiki/ file parity (no orphaned pages, no missing entries)
+- _SEARCH_INDEX.md ↔ wiki/summaries/ parity (un-ingested sources flagged to user)
+- _SEARCH_INDEX.md ↔ wiki/ parity (every page has a row, key terms current)
+- active-project-context.md drift (reflects latest sprint state)
+- _LOG.md completeness (no silent commits)
+
+Run explicit health checks (list mismatches, report count) before declaring
+Second Brain maintenance complete.
+
+## SPRINT PLANNING DETAIL STANDARD
+
+When creating sprint specs for a project, do not stop at a high-level task
+list. The companion implementation plan must be detailed enough for a fresh
+agent to execute: include dependency graph, priority stack, explicit file
+paths, per-task steps, acceptance criteria, verification commands, security
+constraints, and task-boundary review gates.
+
+## SPRINT TASK BOUNDARY PROTOCOL
+
+At every new sprint task boundary, ask the user whether to continue the task
+in the current session or produce a detailed handoff prompt for a new
+agent/session. Do this before dispatching implementation work.
+
+## LOCAL MOBILE SMOKE STARTUP
+
+When the user asks to start services for an emulator or local mobile smoke
+testing, do not assume Docker-managed project services are required and do not
+start Docker containers by default.
+
+Prefer the repo's local runtime surfaces:
+- API on its configured local port for mobile/emulator access.
+- Expo/Metro on port `8081` when a development bundle is needed.
+- Any auxiliary services from their own virtual environments.
+
+Before starting anything, inspect current ports/processes and emulator ADB
+device state. Prefer readiness probes over logs alone:
+- API: verify a lightweight health or config route.
+- Metro: verify `http://127.0.0.1:8081/status`.
+- Emulator: verify device connectivity and reverse port mappings.
+
+When launching the compiled API DLL directly, use the API project directory as
+the working directory so Development configuration and user-secrets resolve
+correctly.
+
+Do not rebuild a debug APK for JS-only mobile changes when the installed
+package is already `DEBUGGABLE`; refresh Metro and restart the app. Rebuild and
+install a debug APK only when native dependencies, Android/app config, or
+package debuggability changed.
+
+Classify non-blocking local-smoke noise separately: Expo compatibility warnings
+do not block if bundling succeeds; push-token Project ID warnings and Android
+WebView/CookieManager warnings do not block if the app renders and logcat has
+no fatal exception.
+
+Avoid printing secrets from `.env` files or logs. Only touch Docker if the user
+explicitly asks for Docker.

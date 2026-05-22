@@ -1,0 +1,34 @@
+# Wiki Index — {{project_name}}
+
+> **Schema reference:** See `[[_SCHEMA]]` before any wiki write.
+
+## Core Pages
+[[active-project-context]] - Current sprint, next steps, open tech-debt. Slim snapshot (read every session).
+
+## Entity & Concept Pages
+<!-- Entity and concept pages added here as they are created. -->
+
+## Decision Records
+<!-- Architecture decision records (ADR) added here as they are created. -->
+
+## Insights
+<!-- Query write-back analyses saved here. Format: [[insights/YYYY-MM-DD-topic]] -->
+
+## Plans & Specs (Immutable Artifacts)
+
+Plans and specs live under `docs/second-brain/artifacts/` as **immutable artifacts** (Karpathy pattern: wiki = live synthesis, artifacts = production outputs).
+
+- [plans/](../artifacts/plans/) — Sprint implementation plans.
+- [specs/](../artifacts/specs/) — Design specs.
+
+### Active
+<!-- Active plan and spec links go here. -->
+
+### Recently Completed
+<!-- Completed plan and spec links move here. -->
+
+## Session Summaries
+<!-- Agent session summaries directory. Format: [[session-summaries/YYYY-MM-DD-topic]] -->
+
+## Source Summaries
+<!-- Each raw_source file's summary page listed here. Format: [[summaries/source-slug]] -->

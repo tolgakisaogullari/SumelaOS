@@ -1,0 +1,53 @@
+---
+type: rule
+tags: [backend, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Backend Standards
+
+> This rule defines coding standards and conventions for backend development.
+> Customize these standards for your project's specific needs.
+
+## Architecture & Layers
+
+Define your architectural pattern (Clean Architecture, Hexagonal, etc.) and layer responsibilities.
+
+<!-- Write your backend standards here -->
+
+## Naming Conventions
+
+Define naming rules for services, repositories, DTOs, controllers, and other backend artifacts.
+
+<!-- Write your backend standards here -->
+
+## Data Access (ORM/Repository)
+
+Define data access patterns, query optimization rules, and repository conventions.
+
+<!-- Write your backend standards here -->
+
+## API Design (REST/GraphQL)
+
+Define endpoint conventions, versioning strategy, response formats, and contract rules.
+
+<!-- Write your backend standards here -->
+
+## Error Handling
+
+Define global error handling strategy, exception middleware, and error response format.
+
+<!-- Write your backend standards here -->
+
+## Testing Policy
+
+Define unit test requirements, integration test strategy, and coverage expectations.
+
+<!-- Write your backend standards here -->
+
+## Security
+
+Define authentication, authorization, input validation, and secrets management rules.
+
+<!-- Write your backend standards here -->

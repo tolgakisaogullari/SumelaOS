@@ -1,0 +1,71 @@
+---
+type: rule
+tags: [frontend, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Frontend Standards
+
+> This rule defines coding standards and conventions for frontend development.
+> Customize these standards for your project's specific needs.
+
+## Component Structure
+
+- **Organization:** Feature folders — group components, hooks, and utilities by feature/domain, not by type.
+- **File Naming:** PascalCase for component files (`UserProfile.tsx`), camelCase for hooks (`useUserProfile.ts`), utilities (`formatDate.ts`).
+- **Component Size:** Single responsibility. If a component exceeds 150 lines, extract sub-components or custom hooks.
+- **Props Interface:** Define explicit props interface/type for every component. Never use inline prop types.
+- **Composition over Inheritance:** Use composition patterns (children, render props, slots) instead of class inheritance.
+- **Container/Presentational Split:** Separate data-fetching (container) from rendering (presentational) where complexity warrants it.
+
+## State Management
+
+- **Local State:** Use framework primitives (`useState`, `useReducer`) for component-scoped state. Default to local.
+- **Global State:** Use a state library (Zustand, Redux Toolkit, Jotai) only for truly cross-cutting state (auth, theme, locale).
+- **Server State:** Use a server-state library (TanStack Query, SWR) for API data. Never store server data in global client state.
+- **Derived State:** Compute derived values at render time or with memoization. Never store derived values in state.
+- **Side Effects:** Isolate side effects in custom hooks or effect handlers. Never mix side effects with rendering logic.
+
+## Styling
+
+- **Approach:** Use a consistent system — CSS Modules, Tailwind CSS, or CSS-in-JS. Do not mix multiple systems in the same project.
+- **Mobile-First:** Write base styles for mobile, layer desktop styles with `min-width` media queries.
+- **Design Tokens:** Define colors, spacing, typography, and shadows as tokens (CSS variables or theme config). Never hardcode values in components.
+- **Responsive Breakpoints:** Use a consistent breakpoint scale (e.g., `sm: 640px, md: 768px, lg: 1024px, xl: 1280px`).
+- **Theming:** Support light/dark mode via CSS variables or theme provider. All colors reference tokens, not raw hex/rgb.
+
+## Accessibility
+
+- **Standard:** Target WCAG 2.1 AA compliance.
+- **Semantic HTML:** Use native elements (`<button>`, `<nav>`, `<main>`, `<label>`) before ARIA. ARIA is a supplement, not a replacement.
+- **Keyboard Navigation:** All interactive elements must be reachable and operable via keyboard. Visible focus indicators are mandatory.
+- **Color Contrast:** Minimum 4.5:1 for normal text, 3:1 for large text. Never convey information by color alone.
+- **Screen Readers:** Provide `alt` text for images, `aria-label` for icon-only buttons, and `aria-live` regions for dynamic content.
+- **Forms:** Every input must have an associated `<label>`. Error messages must be linked to inputs via `aria-describedby`.
+
+## Performance
+
+- **Budgets:** LCP < 2.5s, FID < 100ms, CLS < 0.1. Enforce in CI with Lighthouse or Web Vitals.
+- **Code Splitting:** Lazy-load routes and heavy components. Use dynamic `import()` for below-the-fold content.
+- **Bundle Analysis:** Run bundle analyzer before merging. Flag any chunk > 250KB (gzipped). Investigate and split.
+- **Image Optimization:** Use responsive images (`srcset`), modern formats (WebP/AVIF), and lazy loading for below-fold images.
+- **Memoization:** Use `React.memo`, `useMemo`, `useCallback` judiciously for expensive computations — not as a default.
+- **Caching:** Set appropriate cache headers for static assets. Use service workers or CDN for asset delivery.
+
+## Testing
+
+- **Unit Tests:** Test custom hooks and utility functions in isolation.
+- **Component Tests:** Test user interactions and rendered output, not implementation details. Use Testing Library patterns.
+- **Integration Tests:** Test feature flows (form submission, navigation, data fetching) through the component tree.
+- **E2E Tests:** Cover critical user journeys (login, checkout, core workflows) with Playwright or Cypress.
+- **Snapshot Tests:** Use sparingly — only for stable, presentational components. Avoid snapshot churn.
+- **Coverage:** Aim for 80%+ on hooks/utilities, lower on pure UI components where visual regression testing covers gaps.
+
+## Error Handling
+
+- **Error Boundaries:** Wrap route-level components and major feature sections in error boundaries. Provide meaningful fallback UI.
+- **Fallback UI:** Show user-friendly error messages with a retry action. Never expose raw error objects or stack traces.
+- **API Errors:** Intercept HTTP errors globally (Axios interceptors, fetch wrapper). Map status codes to user-facing messages.
+- **Logging:** Report client-side errors to a monitoring service (Sentry, LogRocket). Include user context and breadcrumbs.
+- **Graceful Degradation:** Core functionality should work without JavaScript where feasible. At minimum, show a meaningful "unsupported" message.

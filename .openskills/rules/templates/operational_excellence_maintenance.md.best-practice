@@ -1,0 +1,70 @@
+---
+type: rule
+tags: [operations, maintenance, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Operational Excellence & Maintenance
+
+> This rule defines standards for operational readiness, monitoring, and team processes.
+> Customize these standards for your project's specific needs.
+
+## Structured Logging
+
+- **Format:** JSON-structured logs. Every log entry is a parseable JSON object — never free-text log lines.
+- **Required Fields:** `timestamp`, `level`, `message`, `correlationId`, `service`, `environment`.
+- **Correlation IDs:** Generate a correlation ID at the API gateway/entry point. Propagate through all downstream calls (HTTP headers, message metadata, log context).
+- **Log Levels:** `ERROR` (actionable, page-worthy), `WARN` (degraded but functioning), `INFO` (business events), `DEBUG` (development troubleshooting). No `TRACE` in production.
+- **Sensitive Data:** Never log tokens, passwords, PII, raw request bodies, or search queries. Redact at the logging layer, not at individual call sites.
+- **Performance:** Use async logging. Never block the request thread on log writes.
+
+## Monitoring & Alerting
+
+- **Health Endpoints:** Expose `/health` (liveness — is the process alive?) and `/ready` (readiness — can it serve traffic?).
+- **Key Metrics:** Track request rate, error rate (4xx/5xx), latency (p50/p95/p99), and saturation (CPU, memory, connections).
+- **Alert Thresholds:** Define actionable alerts, not noise. Alert on symptoms (error rate spike, latency degradation), not causes (CPU usage alone).
+- **Dashboard:** Maintain a single-pane-of-graff dashboard showing service health, key business metrics, and infrastructure status.
+- **On-Call Rotation:** Define on-call schedule, escalation policy, and response time SLAs (e.g., P1: 15 min, P2: 1 hour).
+- **Tracing:** Implement distributed tracing (OpenTelemetry, Jaeger) for multi-service request flows.
+
+## Deployment Strategy
+
+- **Pipeline:** Automated CI/CD pipeline — build, test, security scan, deploy. No manual deployments to production.
+- **Strategy:** Blue/green or canary deployments for zero-downtime releases. Avoid in-place rolling updates for stateful services.
+- **Environment Promotion:** `dev` → `staging` → `production`. Each gate requires passing tests and approvals.
+- **Rollback:** Documented rollback procedure for every deployment. Automated rollback on health check failure post-deploy.
+- **Feature Flags:** Use feature flags for incomplete features, A/B tests, and gradual rollouts. Decouple deploy from release.
+- **Database Migrations:** Run migrations as a separate pre-deploy step. Migrations must be backward-compatible (expand-then-contract pattern).
+
+## Incident Response
+
+- **Severity Levels:** P1 (service down), P2 (degraded, workaround exists), P3 (minor impact), P4 (cosmetic/scheduled).
+- **Escalation Path:** On-call → Team Lead → Engineering Manager → CTO. Escalation time: 15 min for P1.
+- **Communication:** Incident channel (Slack/Teams) opened within 5 min of P1/P2 detection. Status page updated within 15 min.
+- **Post-Mortem:** Blameless post-mortem for every P1/P2 within 48 hours. Document timeline, root cause, contributing factors, and action items.
+- **Action Items:** Every post-mortem produces trackable action items with owners and due dates. Review completion in next sprint.
+- **Runbooks:** Maintain runbooks for known failure modes (database failover, cache flush, certificate renewal, third-party outage).
+
+## Definition of Done
+
+A task is **done** when ALL of the following are true:
+
+- [ ] Code compiles and passes all existing tests.
+- [ ] New code has corresponding tests (unit or integration as appropriate).
+- [ ] Code has been reviewed and approved by at least one peer.
+- [ ] No known security vulnerabilities introduced (dependency scan, code review).
+- [ ] Documentation updated if public API or behavior changed.
+- [ ] Feature flag configured if applicable.
+- [ ] Migrations tested forward and rollback.
+- [ ] Deployed to staging and verified manually for user-facing changes.
+- [ ] Changelog/release notes updated.
+
+## Sprint Planning
+
+- **Cadence:** Fixed-length sprints (1 or 2 weeks). Define and maintain consistent rhythm.
+- **Tech Debt Allocation:** Reserve 20% of sprint capacity for tech debt, refactoring, and tooling improvements.
+- **Estimation:** Use relative sizing (story points or t-shirt sizes). Track velocity over time for predictability.
+- **Refinement:** Refine upcoming stories before sprint start. Every story must have acceptance criteria before entering a sprint.
+- **Retrospective:** Every sprint ends with a retro. Action items from the previous retro are reviewed first.
+- **Carry-Over:** Minimize carry-over. If a story doesn't finish, re-estimate and re-prioritize — don't just roll it over.

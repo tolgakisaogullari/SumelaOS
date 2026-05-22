@@ -1,0 +1,47 @@
+---
+type: rule
+tags: [operations, maintenance, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# Operational Excellence & Maintenance
+
+> This rule defines standards for operational readiness, monitoring, and team processes.
+> Customize these standards for your project's specific needs.
+
+## Structured Logging
+
+Define log format, log levels, correlation IDs, and sensitive data redaction rules.
+
+<!-- Write your operational standards here -->
+
+## Monitoring & Alerting
+
+Define health check endpoints, key metrics, alert thresholds, and dashboard requirements.
+
+<!-- Write your operational standards here -->
+
+## Deployment Strategy
+
+Define deployment pipeline, environment promotion, and rollback procedures.
+
+<!-- Write your operational standards here -->
+
+## Incident Response
+
+Define severity levels, escalation paths, communication channels, and post-mortem process.
+
+<!-- Write your operational standards here -->
+
+## Definition of Done
+
+Define the checklist a task must satisfy before it is considered complete.
+
+<!-- Write your operational standards here -->
+
+## Sprint Planning
+
+Define sprint cadence, tech debt allocation, and estimation approach.
+
+<!-- Write your operational standards here -->
