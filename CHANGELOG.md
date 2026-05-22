@@ -13,12 +13,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Detects code conventions from existing source files (naming, error handling, validation, testing)
   - Generates AGENTS.md, RULE_REGISTRY.md, rules, wiki pages, and IDE pointers in one pass
   - Interactive confirmation before writing any files
+- **Proactive Qdrant session context (STEP 3c)**: Agent silently queries Qdrant before starting non-trivial tasks
+  - Checks past sessions for relevant decisions, lessons, and context
+  - 5 scenarios: task start, entity encounter, architecture decision, debugging, file history
+  - Mirrors Graphify's proactive impact analysis pattern
 
 ### Fixed
 - Subagent-driven-development: added independent review option (4th choice after task completion)
 - Graphify plugin: corrected installation to `uv tool install graphifyy` (PyPI, not npm)
 - Graphify plugin: added "No API Key Required for Queries" clarification
-- Proactive impact analysis: agent now queries graphify before code changes to detect affected dependents
+- **Proactive impact analysis (STEP 3b)**: Agent now queries graphify before code changes to detect affected dependents
 
 ## [0.1.0] - 2026-05-22
 
