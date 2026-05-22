@@ -14,15 +14,32 @@ powershell scripts/setup.ps1 # Windows
 
 The setup script asks for your project name, tech stacks, and IDE — then generates `AGENTS.md`, rule files, IDE pointers, and wiki scaffolding. Total time: ~2 minutes.
 
+### Existing Projects (Auto-Detection)
+
+If you have an existing project, use `/initOpenSkills` in your AI coding assistant:
+
+```
+/initOpenSkills
+```
+
+The agent will:
+1. Scan your project for manifest files (package.json, *.csproj, go.mod, etc.)
+2. Detect the tech stack, architecture pattern, and code conventions
+3. Present the analysis for your confirmation
+4. Generate all configuration files automatically
+
+No manual template filling required.
+
 ## Features
 
 - **20 universal agent skills** — brainstorming, planning, TDD, debugging, code review, shipping, and more
-- **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile, AI, infra)
+- **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile)
 - **Second-brain wiki** — Karpathy LLM Wiki pattern with structured knowledge capture
 - **Memory plugins** — optional Qdrant session memory (Tier-1) and Graphify code graph (Tier-2)
 - **IDE-agnostic** — one `AGENTS.md` serves all IDEs via thin pointer files
 - **Self-improvement loop** — `/evolve` command captures corrections and friction signals
 - **Setup automation** — `setup.sh` / `setup.ps1` with interactive and non-interactive modes
+- **Auto-detection** — `/initOpenSkills` scans your existing project and generates configuration automatically
 
 ## Architecture
 
