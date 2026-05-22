@@ -27,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.1.0] - 2026-05-22
 
 ### Added
-- 20 universal agent skills (brainstorming, planning, TDD, debugging, code review, shipping, etc.)
+- 27 universal agent skills (brainstorming, planning, TDD, debugging, code review, shipping, etc.)
 - 7 universal rules + stack-specific rule templates (empty + best-practice variants)
 - Second-brain wiki template with Karpathy LLM Wiki pattern (raw_sources → artifacts → wiki)
 - Memory plugins: Qdrant session memory (Tier-1), Graphify code graph (Tier-2)

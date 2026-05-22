@@ -53,6 +53,7 @@ EXPECTED_SKILLS=(
   "dispatching-parallel-agents"
   "executing-plans"
   "finishing-a-development-branch"
+  "init-openskills"
   "performance-optimization"
   "receiving-code-review"
   "requesting-code-review"

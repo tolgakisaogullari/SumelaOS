@@ -1,6 +1,6 @@
 # OpenSkills — Project-Agnostic AI Agent Framework
 
-A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 20 universal skills, structured rules, and a living knowledge base from the first session.
+A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 27 universal skills, structured rules, and a living knowledge base from the first session.
 
 ## Quick Start
 
@@ -32,7 +32,7 @@ No manual template filling required.
 
 ## Features
 
-- **20 universal agent skills** — brainstorming, planning, TDD, debugging, code review, shipping, and more
+- **27 universal agent skills** — brainstorming, planning, TDD, debugging, code review, shipping, and more
 - **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile)
 - **Second-brain wiki** — Karpathy LLM Wiki pattern with structured knowledge capture
 - **Memory plugins** — optional Qdrant session memory (Tier-1) and Graphify code graph (Tier-2)
