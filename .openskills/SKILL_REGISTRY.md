@@ -163,7 +163,7 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="lazy">
 <name>self-improvement-curator</name>
-<description>Use after every user turn to capture correction, confirmation, decision, friction, or challenge signals; or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'pending önerileri incele', or asks to review captured learnings.</description>
+<description>Use after every user turn to capture correction, confirmation, decision, friction, or challenge signals; or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'review suggestions', 'pending önerileri incele', or asks to review captured learnings.</description>
 <path>.openskills/skills/self-improvement-curator/SKILL.md</path>
 </skill>
 
@@ -187,7 +187,7 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="eager">
 <name>context-handoff</name>
-<description>Use when context compaction warnings appear, after 8+ major tool sequences, after 3+ large file reads plus 2+ review cycles, when a sprint task closes mid-session with more work pending, or when the user asks for a handoff prompt, says 'context doldu mu', 'yeni session', 'handoff hazırla'.</description>
+<description>Use when context compaction warnings appear, after 8+ major tool sequences, after 3+ large file reads plus 2+ review cycles, when a sprint task closes mid-session with more work pending, or when the user asks for a handoff prompt, says 'context handoff', 'new session', 'prepare handoff', 'context doldu mu', 'yeni session', 'handoff hazırla'.</description>
 <path>.openskills/skills/context-handoff/SKILL.md</path>
 </skill>
 

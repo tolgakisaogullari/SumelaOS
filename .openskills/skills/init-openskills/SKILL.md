@@ -110,7 +110,7 @@ Clean Architecture + DDD (light) + CQRS-leaning
 - Validation: FluentValidation at boundaries
 - Testing: xUnit, separate test project
 
-### Altyapı
+### Infrastructure
 - Database: PostgreSQL (EF Core)
 - Cache: Redis
 - Message Broker: RabbitMQ
@@ -123,10 +123,10 @@ Clean Architecture + DDD (light) + CQRS-leaning
 
 ---
 
-Bu doğru mu? Düzeltilmesi gereken bir şey var mı?
-1. Onayla ve devam et
-2. Düzeltme yap (hangi kısım?)
-3. İptal et
+Is this correct? Anything that needs fixing?
+1. Confirm and continue
+2. Make corrections (which part?)
+3. Cancel
 ```
 
 **WAIT for user confirmation.** If user says "2", ask which part to correct and re-analyze. If user says "3", abort.
@@ -136,22 +136,22 @@ Bu doğru mu? Düzeltilmesi gereken bir şey var mı?
 After the user confirms the analysis, MUST ask about optional memory plugins. NEVER skip this step.
 
 ```
-## 🧩 Opsiyonel Memory Plugin'leri
+## 🧩 Optional Memory Plugins
 
-OpenSkills framework'ü iki opsiyonel memory plugin'i ile gelir. Bunlar agent'ın
-geçmiş session'lardan ve kod yapısından öğrenmesini sağlar. Kurmak istediklerini seç:
+OpenSkills comes with two optional memory plugins. They help the agent learn from
+past sessions and code structure. Select which ones to install:
 
-| Plugin | Ne Yapıyor | Gereksinimler |
+| Plugin | What It Does | Requirements |
 |---|---|---|
-| **Qdrant Session Memory** (Tier-1) | Geçmiş session'ları semantic search ile bulur. "Daha önce ne karar verdik?" sorularını yanıtlar. Kod ve wiki dosyalarını indexler. | Python 3.10+, Qdrant, Ollama (qwen3-embedding:0.6b) |
-| **Graphify Code Graph** (Tier-2) | Kod çağrı grafiğini analiz eder. "X nerede kullanılıyor?" ve "X'i değiştirsem ne etkilenir?" sorularını yanıtlar. | Python 3.10+, graphify CLI (uv tool install graphifyy) |
+| **Qdrant Session Memory** (Tier-1) | Finds past sessions via semantic search. Answers "what did we decide before?" questions. Indexes code and wiki files. | Python 3.10+, Qdrant, Ollama (qwen3-embedding:0.6b) |
+| **Graphify Code Graph** (Tier-2) | Analyzes code call graphs. Answers "where is X used?" and "what breaks if I change X?" questions. | Python 3.10+, graphify CLI (uv tool install graphifyy) |
 
-Bu plugin'ler olmadan da framework çalışır — Tier-3 (wiki search) ve Tier-4 (grep fallback) her zaman aktif.
+The framework works without these plugins — Tier-3 (wiki search) and Tier-4 (grep fallback) are always active.
 
-1. Her ikisini de kur (Qdrant + Graphify)
-2. Sadece Qdrant'ı kur
-3. Sadece Graphify'ı kur
-4. Hiçbirini kurma (sadece core framework)
+1. Install both (Qdrant + Graphify)
+2. Install Qdrant only
+3. Install Graphify only
+4. Install none (core framework only)
 ```
 
 **WAIT for user choice.** Store the selection as `PLUGIN_CHOICE`.
@@ -231,28 +231,28 @@ All checks must pass.
 ### Step 4.2: Present Summary
 
 ```
-## ✅ OpenSkills Kurulumu Tamamlandı
+## ✅ OpenSkills Setup Complete
 
-### Oluşturulan Dosyalar
-| Dosya | Durum |
+### Generated Files
+| File | Status |
 |---|---|
-| AGENTS.md | ✅ Oluşturuldu (proje bilgileriyle dolduruldu) |
-| .openskills/RULE_REGISTRY.md | ✅ Oluşturuldu |
+| AGENTS.md | ✅ Created (filled with project info) |
+| .openskills/RULE_REGISTRY.md | ✅ Created |
 | .openskills/rules/backend_standards.md | ✅ best-practice variant |
 | .openskills/rules/frontend_standards.md | ✅ best-practice variant |
-| .openskills/rules/operational_excellence_maintenance.md | ✅ Oluşturuldu |
-| docs/second-brain/wiki/active-project-context.md | ✅ Oluşturuldu |
-| CLAUDE.md | ✅ Oluşturuldu |
+| .openskills/rules/operational_excellence_maintenance.md | ✅ Created |
+| docs/second-brain/wiki/active-project-context.md | ✅ Created |
+| CLAUDE.md | ✅ Created |
 | ... | |
 
-### Sonraki Adımlar
-1. Oluşturulan dosyaları incele ve gerekirse özelleştir
-2. İlk session'da agent автоматik olarak Context Manifest basacak
-3. `/evolve` ile self-improvement döngüsünü başlat
-4. (Opsiyonel) Memory plugin'leri aktive et — `/initOpenSkills` sırasında sormuş olmalı
+### Next Steps
+1. Review the generated files and customize if needed
+2. On the first session, the agent will automatically print the Context Manifest
+3. Start the self-improvement loop with `/evolve`
+4. (Optional) Activate memory plugins — should have been asked during `/initOpenSkills`
 
 ### Git
-Tüm dosyalar staged. Commit etmek ister misin?
+All files staged. Would you like to commit?
 ```
 
 ### Step 4.3: Offer Commit

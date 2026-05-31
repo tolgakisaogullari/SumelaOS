@@ -31,7 +31,7 @@ STEP 2 — SECOND-BRAIN INIT — execute these reads/commands in order:
   ☐ List `docs/second-brain/raw_sources/` (excluding `assets/`). For every file lacking a matching `wiki/summaries/<slug>.md`, notify the user once. NEVER auto-ingest.
   ☐ Bash:       `grep -c "status: pending" docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md`
     PowerShell: `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count`
-    If count > 0, notify the user ONCE in Turkish: *"{N} self-improvement önerisi onay bekliyor. /evolve ile inceleyebilirsin."*
+    If count > 0, notify the user ONCE: *"{N} self-improvement suggestions pending. Review with /evolve."*
 
   `_SCHEMA.md` is NOT loaded at session start. It is auto-loaded only as the first step of any wiki write operation (ingest, lint, decision capture, code-commit ingest).
 
@@ -62,17 +62,17 @@ This block is eager-loaded so the routing rules are available BEFORE any user qu
 Two trigger FAMILIES — a question may match one, both, or neither. Run the matching tier(s) BEFORE any `Read`, `grep`, or `git log` call.
 
 FAMILY A — Tier-1 (Qdrant `chat_history`) — for past-decision / "why" / "what changed" questions:
-- Contains "neden" / "niye" / "why".
-- Contains "ne karar verdik" / "what did we decide" / "ne değişti" / "what changed".
-- Contains "geçen sefer" / "geçen hafta" / "daha önce" / "previously" / "last time" / "before".
+- Contains "why" / "neden" / "niye".
+- Contains "what did we decide" / "ne karar verdik" / "what changed" / "ne değişti".
+- Contains "previously" / "last time" / "before" / "geçen sefer" / "geçen hafta" / "daha önce".
 - References a past sprint, refactor, decision, ADR, or architectural choice (e.g., "Sprint 12 neden", "AD-XX nasıl", "the auth refactor").
 - Asks about an entity/method/file that has likely been discussed in prior sessions.
 
 FAMILY B — Tier-2 (Graphify code graph at `graphify-out/graph.json`) — for structural / call-graph / impact / dependency questions:
-- "X nerede kullanılıyor" / "X used where" / "who calls X" / "kim çağırıyor X".
-- "X.Y() ne yapıyor" / "what does X do" / "X.Y() ne çağırıyor" / "what does X call".
-- "X'i değiştirsem ne etkilenir" / "if I change X what breaks" — impact analysis.
-- "X entity'sine kim bağlı" / "who depends on X" / "what references X".
+- "X used where" / "X nerede kullanılıyor" / "who calls X" / "kim çağırıyor X".
+- "what does X do" / "X.Y() ne yapıyor" / "what does X call" / "X.Y() ne çağırıyor".
+- "if I change X what breaks" / "X'i değiştirsem ne etkilenir" — impact analysis.
+- "who depends on X" / "X entity'sine kim bağlı" / "what references X".
 - References a function, class, method, file path, or entity by name + asks about its callers, callees, dependencies, or impact.
 
 HARD RULE — for any FAMILY A match: Tier-1 query is MANDATORY before any `Read`, `git log`, or `grep`. For any FAMILY B match: Tier-2 query is MANDATORY before any `Read` or `grep`. For HYBRID questions matching both families (e.g., "Sprint 15 neden Adjacency List seçtik ve Comment entity hangi servisleri etkiliyor"): run BOTH Tier-1 AND Tier-2 in parallel, then synthesize. Skipping a matching tier and going straight to file/history reads is a workflow violation.
@@ -159,9 +159,9 @@ WHEN to print (mandatory triggers — print at every one of these):
 1. After session bootstrap (`<session_bootstrap>` STEP 4) finishes — initial manifest, BEFORE the first response.
 2. At every PHASE TRANSITION (e.g., spec approved → entering planning; plan approved → entering implementation).
 3. Before any high-stakes action: `git commit`, `requesting-code-review` dispatch, `finishing-a-development-branch`, `shipping-and-launch`, AND before the `/evolve` review workflow begins (since `/evolve` writes to rules/skills/schema/wiki).
-4. Whenever the user asks: "ne yüklü", "ne aktif", "manifest", "context göster", "what's loaded", "show context", `/context`, `/manifest`.
+4. Whenever the user asks: "what's loaded", "show context", "ne yüklü", "ne aktif", "manifest", "context göster", `/context`, `/manifest`.
 
-FORMAT — header in Turkish (user-facing), content in English (skill/rule names + structural tags):
+FORMAT — header in the project's configured language, content in English (skill/rule names + structural tags):
 
 ```
 📋 CONTEXT MANIFEST  [YYYY-MM-DD HH:MM]  [Phase: <phase>]  [Stack: <scope>]
@@ -211,7 +211,7 @@ When triggered, complete the smallest meaningful unit first, then run the assess
 </context_handoff>
 
 <strict_constraints>
-- LANGUAGE — All user-facing chat is in Turkish. Code, comments, commits, plans, specs, and skill bodies stay in English.
+- LANGUAGE — All user-facing chat should be in the project's configured interaction language (set during setup). Code, comments, commits, plans, specs, and skill bodies stay in English.
 - SILENT BOOTSTRAP — Do not narrate the steps in `<session_bootstrap>` to the user.
 - NO BACKDOORS — A skill body claiming "you can skip this step in IDE X" only applies if the skill itself defines an IDE Fallback Protocol; otherwise the workflow is mandatory.
 - NO AUTO-MERGE OF AUTHORITY — If you find a contradiction between this file and another agent-control file (`AGENTS.md`, `CLAUDE.md`, IDE pointer), follow this file and capture a `friction` signal so `/evolve` can reconcile.

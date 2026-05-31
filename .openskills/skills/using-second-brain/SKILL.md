@@ -29,14 +29,14 @@ The `wiki/` directory has FIVE special files (frontmatter-free, governed by `_SC
 Determine which workflow to execute based on these signals (highest specificity wins):
 
 - **Session start** → bootstrap reads + parity + queue count are governed by `.openskills/superpowers-agent-mode-prompt.md` (`<session_bootstrap>`). This skill is invoked LAZILY when an information gap appears or one of the triggers below fires.
-- **User says** "kaydet", "wiki'ye ekle", "ingest et", "şunu not al", "remember this" → INGEST workflow.
-- **User drops multiple sources** or says "batch ingest", "hepsini işle" → BATCH INGEST workflow.
-- **`finishing-a-development-branch` invoked** → CODE-COMMIT INGEST hook (update `active-project-context.md`, audit entity/api/decision/tech-debt pages, append `code-commit` entry to `_LOG.md`).
-- **User says** "wiki'yi temizle", "lint et", "sağlık kontrolü", "clean the wiki" → LINT workflow.
-- **Ad-hoc decision during conversation** — User makes or confirms an architectural/technology decision outside of a coding task (e.g., "Redis kullanacağız", "bu pattern'i seçelim") → DECISION CAPTURE workflow.
-- **User says** "bunu kaydet", "save this source", "şu URL'yi ingest et", or a lint data-gap suggestion is approved → WEB SOURCE CAPTURE workflow.
-- **Threshold trigger (ingest-based):** After writing a new `ingest` entry to `_LOG.md`, count total `ingest` entries. If count is a multiple of 5 (5, 10, 15, ...), ASK the user: *"Son 5 ingest'ten sonra tam bir lint öneriyorum — çalıştırayım mı?"* — NEVER auto-run lint.
-- **Threshold trigger (time-based):** At session start, after reading `_LOG.md`, check the date of the last `lint` entry. If 7+ days have passed since the last lint, ASK the user: *"Son lint'ten bu yana 7+ gün geçmiş — bir sağlık kontrolü öneriyorum. Çalıştırayım mı?"* — NEVER auto-run lint.
+- **User says** "save", "add to wiki", "ingest", "note this", "remember this", "kaydet", "wiki'ye ekle" → INGEST workflow.
+- **User drops multiple sources** or says "batch ingest", "process all", "hepsini işle" → BATCH INGEST workflow.
+
+- **User says** "clean the wiki", "lint", "health check", "wiki'yi temizle", "sağlık kontrolü" → LINT workflow.
+- **Ad-hoc decision during conversation** — User makes or confirms an architectural/technology decision outside of a coding task (e.g., "let's use Redis", "bu pattern'i seçelim", "select this pattern") → DECISION CAPTURE workflow.
+- **User says** "save this", "save this source", "ingest that URL", "bunu kaydet", "şu URL'yi ingest et", or a lint data-gap suggestion is approved → WEB SOURCE CAPTURE workflow.
+- **Threshold trigger (ingest-based):** After writing a new `ingest` entry to `_LOG.md`, count total `ingest` entries. If count is a multiple of 5 (5, 10, 15, ...), ASK the user: *"After the last 5 ingests, I recommend a full lint — should I run it?"* — NEVER auto-run lint.
+- **Threshold trigger (time-based):** At session start, after reading `_LOG.md`, check the date of the last `lint` entry. If 7+ days have passed since the last lint, ASK the user: *"It's been 7+ days since the last lint — I recommend a health check. Should I run it?"* — NEVER auto-run lint.
 - **Ingest with image references** → the standard INGEST workflow activates IMAGE READING WORKFLOW (operation 8) as a sub-step when `raw_sources/assets/` contains files referenced by the new source.
 </trigger_conditions>
 
@@ -58,15 +58,15 @@ When the user asks you to interact with the Second Brain, execute one of these s
 1b. BATCH INGEST (Processing multiple sources at once):
    - **CONTEXT SCAN:** Same as INGEST step 1 — read `_INDEX.md` first.
    - List all new files in `raw_sources/` that lack a corresponding `summaries/<source-slug>.md`.
-   - Present the list to the user: *"Şu N kaynak henüz işlenmemiş: [list]. Hepsini sırayla mı işleyeyim, yoksa öncelik sıranız var mı?"*
+   - Present the list to the user: *"These {N} sources have not been processed yet: [list]. Should I process them all in order, or do you have a priority?"*
    - Process each source sequentially using the INGEST workflow above. Between sources, provide a brief progress update.
    - After ALL sources are processed, run a single lint pass to catch cross-source contradictions and missing cross-references.
 
 2. QUERY & COMPILE (Answering questions):
    - Read `_INDEX.md` to locate relevant wiki pages, then read those specific pages.
-   - **SESSION CONTEXT CHECK:** If the query references past conversations (e.g., "geçen hafta ne konuştuk?", "daha önce şunu tartışmıştık"), check `_SEARCH_INDEX.md` for `session-summary` type entries. Read matched session summaries to retrieve conversational context.
+   - **SESSION CONTEXT CHECK:** If the query references past conversations (e.g., "what did we discuss last week?", "geçen hafta ne konuştuk?", "we discussed this before", "daha önce şunu tartışmıştık"), check `_SEARCH_INDEX.md` for `session-summary` type entries. Read matched session summaries to retrieve conversational context.
    - Synthesize the answer using strict citations from the wiki.
-   - QUERY WRITE-BACK (USER APPROVAL REQUIRED): If your synthesized answer combines **3+ wiki pages** OR exceeds **~200 words of analysis**, you MUST ASK the user: *"Bu analizi `wiki/insights/YYYY-MM-DD-<konu>.md` altına insight olarak kaydedeyim mi?"* — If approved: create the insight page using `_SCHEMA.md` insight template, update `_INDEX.md`, update `_SEARCH_INDEX.md` with the new insight row, append `query` entry to `_LOG.md`. **NEVER auto-save without explicit user approval.**
+   - QUERY WRITE-BACK (USER APPROVAL REQUIRED): If your synthesized answer combines **3+ wiki pages** OR exceeds **~200 words of analysis**, you MUST ASK the user: *"Should I save this analysis as an insight page at `wiki/insights/YYYY-MM-DD-<topic>.md`?"* — If approved: create the insight page using `_SCHEMA.md` insight template, update `_INDEX.md`, update `_SEARCH_INDEX.md` with the new insight row, append `query` entry to `_LOG.md`. **NEVER auto-save without explicit user approval.**
 
 3. LINT (Health Check & Maintenance):
    - Triggered when the user asks to "lint" or "clean" the wiki (or via threshold trigger — see `<trigger_conditions>`).
@@ -94,7 +94,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
 5. DECISION CAPTURE (Persisting ad-hoc architectural decisions):
    - Triggered when the user makes or confirms a significant **project-level** architectural/technology decision during a conversation that is NOT part of a code-commit flow.
    - **BOUNDARY with `self-improvement-curator`:** This workflow captures decisions about **the project** (which technology, which pattern, which endpoint design — things another developer without Claude would still follow). Decisions about **how the agent itself should work** (rule changes, skill updates, workflow preferences) are handled by `self-improvement-curator`'s `decision` signal → `_IMPROVEMENT_QUEUE.md`, NOT this workflow. Decision tree: *"If a new developer joined the team without Claude, would this decision still apply to them?"* → Yes = this workflow (wiki) / No = `self-improvement-curator` (queue). If both apply, split into two captures.
-   - ASK the user: *"Bu kararı wiki'ye kaydetmemi ister misiniz?"* — NEVER auto-capture without approval.
+   - ASK the user: *"Would you like me to save this decision to the wiki?"* — NEVER auto-capture without approval.
    - If approved:
      - Read `wiki/architecture-decisions.md` to find the latest AD-XX number.
      - Append a new AD entry using the `_SCHEMA.md` decision template (Karar → Bağlam → Alternatifler → Sonuç).
@@ -108,7 +108,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
    - Scan `docs/second-brain/raw_sources/` for all files (excluding `assets/` subdirectory).
    - For each file, check if a corresponding `wiki/summaries/<source-slug>.md` exists.
    - If **all sources have summaries**: stay silent, proceed normally.
-   - If **un-ingested sources are found**: report to the user: *"Şu N kaynak henüz wiki'ye ingest edilmemiş: [list]. İşlememi ister misiniz?"* — NEVER auto-ingest without approval.
+   - If **un-ingested sources are found**: report to the user: *"These {N} sources have not been ingested into the wiki yet: [list]. Would you like me to process them?"* — NEVER auto-ingest without approval.
    - Karpathy principle: *"Every source should be integrated into the wiki. Raw sources without summaries are dead weight."*
 
 7. WEB SOURCE CAPTURE (Saving external knowledge to raw_sources):
@@ -127,7 +127,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
      1. Read the source markdown text first (establish full textual context).
      2. Identify all image references in the text.
      3. View each referenced image separately via your native image-read capability.
-     4. Fuse text + image content in the `summaries/<source-slug>.md` page under a dedicated "Görseller / Images" heading.
+      4. Fuse text + image content in the `summaries/<source-slug>.md` page under a dedicated "Images" heading.
    - Storage: images live under `raw_sources/assets/` per `_SCHEMA.md` Section 12.
    - Never attempt to describe an image without viewing it; cite "(not viewed)" if viewing is blocked.
 </operations>
@@ -204,6 +204,6 @@ When finishing a coding task (via `finishing-a-development-branch`), treat it as
 - Update `wiki/active-project-context.md` with the new codebase state.
 - Append a `code-commit` entry to `_LOG.md` detailing the architectural changes or bug fixes.
 - **AUTOMATIC MEMORY SYNC:** Run `python .openskills/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py` after every code-commit or branch finish. This rebuilds the Graphify code graph, syncs insights to the wiki, and verifies Qdrant health with zero user intervention. NEVER ask the user for permission; only report errors if they occur.
-- **USER REPORT (MANDATORY):** After the script executes, read its stdout output (specifically the `MEMORY UPDATE REPORT` block) and present a brief Turkish summary to the user so they know the memory stack was maintained. Example:
-  > "Bellek bakımı tamamlandı. Graphify kod graph'ı güncellendi, wiki senkronizasyonu tamam, Qdrant ulaşılabilir durumda."
+- **USER REPORT (MANDATORY):** After the script executes, read its stdout output (specifically the `MEMORY UPDATE REPORT` block) and present a brief summary to the user in the project's configured language so they know the memory stack was maintained. Example:
+  > "Memory maintenance complete. Graphify code graph updated, wiki sync ok, Qdrant reachable."
 </development_context_hook>

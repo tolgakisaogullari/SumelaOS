@@ -26,7 +26,7 @@ Activate the handoff-assessment workflow when ANY of these conditions are true:
 2. **Task-count heuristic:** You have executed 8+ major tool call sequences (each task counts as one sequence) in the current session.
 3. **Volume heuristic:** The session has involved 3+ full reads of large files (>200 lines) AND 2+ code-review cycles.
 4. **Sprint milestone heuristic:** A sprint task is marked complete and the remaining task count suggests 2+ tasks still need to be done this session.
-5. **Explicit user trigger:** User says "context handoff", "handoff prompt hazırla", "yeni session'a geçelim", "context doldu mu?", "bırak yeni session'da devam edelim".
+5. **Explicit user trigger:** User says "context handoff", "prepare handoff", "new session", "handoff prompt hazırla", "yeni session'a geçelim", "context doldu mu?", "let's continue in a new session".
 
 **Rule:** Activate the assessment — do NOT interrupt the user mid-task. Always complete the current smallest meaningful unit first, THEN assess.
 </trigger_conditions>
@@ -67,9 +67,9 @@ Use when: The current task is fully finished and verified.
 
 **Step 2 — Evolve Check:**
 - Run `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count (PowerShell) or grep -c (bash)` — do NOT read the full file.
-- If count > 0, ask the user (Turkish):
-  > *"Handoff öncesinde {N} pending /evolve önerisi var. Şimdi hızlıca review etmek ister misin, yoksa handoff prompt'a not olarak ekleyeyim mi?"*
-- If user says **şimdi**: execute `/evolve` workflow (self-improvement-curator skill).
+- If count > 0, ask the user:
+  > *"There are {N} pending /evolve suggestions before handoff. Would you like to review them now, or add them as a note to the handoff prompt?"*
+- If user says **now**: execute `/evolve` workflow (self-improvement-curator skill).
 - If user says **sonra**: note the pending count in the handoff prompt.
 - **Timing constraint:** If /evolve review would consume too much remaining context, skip it and note it in handoff prompt. Never sacrifice handoff quality for evolve completeness.
 
@@ -77,7 +77,7 @@ Use when: The current task is fully finished and verified.
 - Create a session summary file following `<session_summary_protocol>` below.
 - This persists the session's conversational context as a searchable wiki page.
 - The handoff prompt will reference this summary file.
-- Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in Turkish**.
+   - Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in the project's configured language**.
 
 **Step 4 — Generate and present handoff prompt** using `<handoff_template>` below.
 </protocol_a>
@@ -120,7 +120,7 @@ Use when: You are mid-task and context is running low.
 
 **Step 5 — Session Summary (MANDATORY):**
 - Same as Protocol A Step 3. Create session summary following `<session_summary_protocol>` below.
-- Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in Turkish**.
+   - Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in the project's configured language**.
 
 **Step 6 — Generate and present handoff prompt** using `<handoff_template>` below.
 - The "Sıradaki Görev" section MUST include the full checkpoint detail so the next agent continues from exactly where you stopped.
@@ -165,55 +165,55 @@ Session summaries should be **concise** — 200-400 words max. They are a pointe
 <session_memory_ingestion>
 ## Session Memory Ingestion (v2.2) — ROUTED AUTOMATION + USER REPORT
 
-Context-handoff sırasında agent manuel karar yükünü kullanıcıya atmadan aşağıdaki uygun adımları çalıştırır ve **çıktıları kullanıcıya Türkçe özet olarak sunar**:
+During context-handoff, the agent runs the appropriate steps below without offloading manual decisions to the user, and **presents the output as a summary in the project's configured language**:
 
-1. **Session Özeti Oluştur**
-   - Session'ın ana konusunu, kararlarını, açık sorularını özetle
+1. **Create Session Summary**
+   - Summarize the session's main topic, decisions, and open questions
    - Format: `wiki/session-summaries/YYYY-MM-DD-topic.md`
 
-2. **Qdrant'a Otomatik Indexle**
+2. **Auto-Index to Qdrant**
    ```bash
    python .openskills/memory-plugins/qdrant-session-memory/scripts/session-ingest.py docs/second-brain/wiki/session-summaries/YYYY-MM-DD-topic.md
    ```
-   Bu script:
-   - Markdown'ı chunk'lar (512 token, 50 overlap)
-   - Ollama `qwen3-embedding:0.6b` ile embedding üretir
-   - Qdrant `chat_history`'e otomatik upsert eder
-   - Qdrant down ise sadece markdown summary kalır; retry gerekmez
-   - **Çıktısı:** `SESSION INGEST REPORT` bloğu basar
+   This script:
+   - Chunks the markdown (512 tokens, 50 overlap)
+   - Generates embeddings via Ollama `qwen3-embedding:0.6b`
+   - Auto-upserts to Qdrant `chat_history`
+   - If Qdrant is down, only the markdown summary remains; no retry needed
+   - **Output:** Prints a `SESSION INGEST REPORT` block
 
-   **Agent talimatı:** Script çalıştıktan sonra stdout'taki `SESSION INGEST REPORT` bloğunu oku ve kullanıcıya şu formatta Türkçe özet sun:
-   > "Session belleği işlendi. {chunk sayısı} parçaya bölünüp Qdrant'a {'kaydedildi' | 'kaydedilemedi (markdown yedek olarak kalıyor)'}."
+   **Agent instruction:** After the script runs, read the `SESSION INGEST REPORT` block from stdout and present a brief summary to the user in the project's configured language:
+   > "Session memory processed. Split into {chunk count} chunks and {'saved to Qdrant' | 'could not save (markdown backup remains)'}. "
 
-3. **Graphify + Qdrant Bakımı (Koşullu — Code/Memory Sync Sonu)**
+3. **Graphify + Qdrant Maintenance (Conditional — Code/Memory Sync End)**
    ```bash
    python .openskills/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py
    ```
-   **Ne zaman çalışır:**
+   **When it runs:**
    - Code changes landed, a branch finish/code-commit occurred, or Graphify call graph can be stale.
    - Wiki sync inputs changed in a way that `sync-graphify-to-obsidian.py` must reflect.
    - The user explicitly requests memory maintenance or Second Brain health repair.
 
-   **Ne zaman çalışmaz:**
+   **When it does NOT run:**
    - Pure handoff prompt generation.
    - Session-summary-only maintenance/audit work where `_SEARCH_INDEX.md` already records the durable context.
    - Cases where running it would create misleading `_LOG.md` churn without a real code/wiki sync operation.
 
-   Bu script:
-   - `graphify update .` çalıştırır (kod graph'ı günceller)
-   - `sync-graphify-to-obsidian.py` ile wiki'yi senkronize eder
-   - Qdrant health check yapar
-   - Gerektiğinde `_LOG.md`'ye gerçek bakım/sync sonucunu yazar
-   - **Çıktısı:** `MEMORY UPDATE REPORT` bloğu basar
+   This script:
+   - Runs `graphify update .` (updates code graph)
+   - Syncs to wiki via `sync-graphify-to-obsidian.py`
+   - Runs Qdrant health check
+   - Writes real maintenance/sync results to `_LOG.md` when applicable
+   - **Output:** Prints a `MEMORY UPDATE REPORT` block
 
-   **Agent talimatı:** Script çalıştıktan sonra stdout'taki `MEMORY UPDATE REPORT` bloğunu oku ve kullanıcıya şu formatta Türkçe özet sun:
-   > "Bellek bakımı tamamlandı. Graphify kod graph'ı {'güncellendi' | 'başarısız oldu'}, wiki senkronizasyonu {'tamam' | 'hatalı'}, Qdrant {'ulaşılabilir' | 'ulaşılamıyor'}."
-   Eğer koşullar oluşmadığı için script çalıştırılmadıysa, handoff'ta kısa ve açık yaz: "Graphify/wiki memory maintenance çalıştırılmadı; bu handoff yalnızca session summary + search index güncelledi."
+   **Agent instruction:** After the script runs, read the `MEMORY UPDATE REPORT` block from stdout and present a brief summary to the user in the project's configured language:
+   > "Memory maintenance complete. Graphify code graph {'updated' | 'failed'}, wiki sync {'ok' | 'error'}, Qdrant {'reachable' | 'unreachable'}."
+   If the script was skipped because conditions weren't met, write briefly and clearly in the handoff: "Graphify/wiki memory maintenance skipped; this handoff only updated session summary + search index."
 
 **Qdrant Query Tool — Session-to-Session Bridge:**
-Session summary'ler Qdrant'a indexlendikten sonra, bir sonraki session bu geçmişe `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<soru>" --limit 3` ile semantic search yaparak erişebilir. Bu, REASONING AID workflow'unun Tier 1'ini oluşturur.
+After session summaries are indexed to Qdrant, the next session can semantically search this history via `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --limit 3`. This forms Tier-1 of the REASONING AID workflow.
 
-**Kural:** Kullanıcıdan asla "Graphify/Qdrant güncelleyeyim mi?" diye sorulmaz. Session summary ingestion her handoff'ta çalışır. `auto-update-memory.py` ise yalnızca yukarıdaki koşullar oluştuğunda çalışır; gereksiz çalıştırılıp `_LOG.md` veya wiki yüzeylerinde sahte bakım izi üretmemelidir. Hata olursa kullanıcıya bildirilir; başarı veya bilinçli skip durumunda da agent kısa bir Türkçe özet rapor sunmalıdır.
+**Rule:** Never ask the user "should I update Graphify/Qdrant?". Session summary ingestion runs on every handoff. `auto-update-memory.py` only runs when the above conditions are met; it should not run unnecessarily to avoid creating misleading `_LOG.md` or wiki maintenance traces. If it fails, notify the user; if it succeeds or is intentionally skipped, the agent should present a brief summary report in the project's configured language.
 </session_memory_ingestion>
 
 <handoff_template>
@@ -231,17 +231,17 @@ Present the filled template inside a fenced code block so the user can copy-past
 - Worktree: `{worktree-path}` (veya "ana repo, worktree yok")
 - Plan / Artifact: [{plan-file-name}](docs/second-brain/artifacts/plans/{plan-file.md}) veya `{none - maintenance/session summary only}`
 
-### Sprint Özeti
-- Sprint: {sprint-id veya feature-adi}
-- Toplam task: {N}
-- Tamamlanan: {M} task ✅
-- Kalan: {N-M} task
+### Sprint Summary
+- Sprint: {sprint-id or feature-name}
+- Total tasks: {N}
+- Completed: {M} tasks ✅
+- Remaining: {N-M} tasks
 
 ### Tamamlanan Tasklar (Bu Session)
 {For each task completed in this session:}
 - ✅ T{N}: {task-adi} — {commit-hash veya "staged"}
 
-### 🔴 Devam Noktası
+### 🔴 Continue Point
 **T{N}: {task-adi}**
 
 {Full task description copied from the plan file — do NOT summarize, copy verbatim so the next agent has full intent context.}
@@ -250,16 +250,16 @@ Present the filled template inside a fenced code block so the user can copy-past
 > **[CHECKPOINT {DATE}]:** {What was done.}  
 > **Next step:** {Exactly where to continue.}
 
-### Bekleyen Kararlar / Blocker'lar
+### Pending Decisions / Blockers
 {List open decisions or blockers, or write "Yok."}
 
-### Second Brain Durumu
-- `active-project-context.md`: {Güncellendi ✅ | Değişmedi - aktif state değişmedi}
+### Second Brain Status
+- `active-project-context.md`: {Updated ✅ | Unchanged - active state unchanged}
 - Session summary: `{session-summary}`
-- `/evolve` pending: {N önerim var — session başında hatırlatılacak} veya {Temiz ✅}
+- `/evolve` pending: {N suggestions — will be reminded at session start} or {Clean ✅}
 
 ### Uncommitted / Staged Changes
-{Run `git status` summary here, or write "Yok — tüm değişiklikler committed."}
+{Run `git status` summary here, or write "None — all changes committed."}
 ````
 
 ### Template filling rules:
@@ -283,16 +283,16 @@ Present the filled template inside a fenced code block so the user can copy-past
 </safety_invariants>
 
 <user_communication>
-All user-facing text is in Turkish per project identity rules.
+All user-facing text should be in the project's configured interaction language.
 
 **When presenting the handoff:**
 
 *Protocol A:*
-> "Context dolmak üzere. Son task tamamlandı ✅. Second Brain güncellendi. Bir sonraki session için handoff prompt:"
+> "Context is getting full. Last task completed ✅. Second Brain updated. Handoff prompt for the next session:"
 
 *Protocol B:*
-> "Context dolmak üzere. T{N} task'ını güvenli bir noktada bıraktım — plan dosyasına checkpoint eklendi. Second Brain güncellendi. Bir sonraki session için handoff prompt:"
+> "Context is getting full. Task {N} left at a safe point — checkpoint added to plan file. Second Brain updated. Handoff prompt for the next session:"
 
 Then present the filled template in a code block, followed by:
-> "Bu prompt'u yeni bir session'da ilk mesaj olarak gönderebilirsin."
+> "You can send this prompt as the first message in a new session."
 </user_communication>
