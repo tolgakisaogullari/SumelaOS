@@ -19,17 +19,17 @@ powershell scripts/setup.ps1 # Windows
 Copy-paste this prompt into your AI coding assistant (Claude Code, Cursor, OpenCode, Cline, etc.) in any existing project:
 
 ```
-Bu projeye OpenSkills agent framework'ü kur. Adımlar:
+Set up the OpenSkills agent framework in this project. Steps:
 
-1. https://github.com/tolgakisaogullari/openskills reposunu geçici bir dizine klonla
-2. İçindeki .openskills/ klasörünü, scripts/ klasörünü ve template dosyalarını (AGENTS.md.template, CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/) bu projenin root'una kopyala
-3. docs/second-brain/template/ dizinini docs/second-brain/ olarak kopyala, boş dizinler için .gitkeep oluştur
-4. Klonladığın geçici dizini sil
-5. /initOpenSkills çalıştır — projenin stack'ini, mimarisini, convention'larını otomatik tespit et
-6. Dil tercihlerini sor: (a) Agent ile hangi dilde konuşulsun? (b) Kod isimleri hangi dilde olsun? (c) Kod açıklamaları hangi dilde olsun?
-7. Memory plugin'leri (Qdrant, Graphify) için kullanıcıya sor — istemezse kurma, istemezse de ilgili script'leri çalıştırma
+1. Clone https://github.com/tolgakisaogullari/openskills to a temporary directory
+2. Copy .openskills/, scripts/, and template files (AGENTS.md.template, CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/) to this project's root
+3. Copy docs/second-brain/template/ as docs/second-brain/, create .gitkeep for empty directories
+4. Delete the temporary clone
+5. Run /initOpenSkills — auto-detect the project's stack, architecture, and conventions
+6. Ask language preferences: (a) What language should the agent use to communicate? (b) What language for code names? (c) What language for code comments/docs?
+7. Ask about memory plugins (Qdrant, Graphify) — if the user declines, do not install or run their scripts
 
-Her şeyi otomatik yap, manuel adım bırakma.
+Do everything automatically, leave no manual steps.
 ```
 
 The agent will:
