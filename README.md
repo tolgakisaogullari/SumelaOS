@@ -4,31 +4,37 @@ A portable skill engine, rule framework, and second-brain wiki system for AI cod
 
 ## Quick Start
 
+### New Projects (Template)
+
 ```bash
-git clone https://github.com/your-org/openkills-template.git my-project
+git clone https://github.com/tolgakisaogullari/openskills.git my-project
 cd my-project
 bash scripts/setup.sh        # Linux/macOS
 # OR
 powershell scripts/setup.ps1 # Windows
 ```
 
-The setup script asks for your project name, tech stacks, and IDE — then generates `AGENTS.md`, rule files, IDE pointers, and wiki scaffolding. Total time: ~2 minutes.
+### Existing Projects (One-Command Bootstrap)
 
-### Existing Projects (Auto-Detection)
+Install OpenSkills into any existing project:
 
-If you have an existing project, use `/initOpenSkills` in your AI coding assistant:
+```bash
+# Linux/macOS
+curl -sSL https://raw.githubusercontent.com/tolgakisaogullari/openskills/master/scripts/bootstrap.sh | bash
+
+# Windows/PowerShell
+git clone --depth 1 https://github.com/tolgakisaogullari/openskills.git $env:TEMP\openskills
+Copy-Item -Path "$env:TEMP\openskills\.openskills" -Destination "." -Recurse -Force
+Copy-Item -Path "$env:TEMP\openskills\scripts" -Destination "." -Recurse -Force
+```
+
+Then in your AI coding assistant:
 
 ```
 /initOpenSkills
 ```
 
-The agent will:
-1. Scan your project for manifest files (package.json, *.csproj, go.mod, etc.)
-2. Detect the tech stack, architecture pattern, and code conventions
-3. Present the analysis for your confirmation
-4. Generate all configuration files automatically
-
-No manual template filling required.
+The agent auto-detects your tech stack, architecture, and conventions — then generates all configuration files automatically.
 
 ## Features
 
@@ -56,7 +62,7 @@ No manual template filling required.
 │  │         .openskills/             │            │
 │  │  SKILL_REGISTRY.md               │            │
 │  │  RULE_REGISTRY.md                │            │
-│  │  skills/        (20 skills)      │            │
+│  │  skills/        (27 skills)      │            │
 │  │  rules/         (7+ rules)       │            │
 │  │  memory-plugins/ (optional)      │            │
 │  └──────────────────────────────────┘            │
