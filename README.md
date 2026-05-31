@@ -1,7 +1,7 @@
 # SumelaOS — Project-Agnostic AI Agent Framework
 
 <p align="center">
-  <img src="sumela.jpeg" alt="Sumela Monastery, Trabzon, Turkey" width="600">
+  <img src="sumela.jpeg" alt="Sumela Monastery, Trabzon, Turkey" width="500" height="625">
 </p>
 
 A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 27 universal skills, structured rules, and a living knowledge base from the first session.
