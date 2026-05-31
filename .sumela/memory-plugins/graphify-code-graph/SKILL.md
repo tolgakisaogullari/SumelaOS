@@ -30,9 +30,9 @@ All query operations (`query-graph.py`, `graphify query`, `graphify path`, `grap
 ## Graph Maintenance
 - After code commits, run:
   ```
-  python .sumela/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py
+  python scripts/auto-update-memory.py
   ```
-- This updates the graph, syncs to wiki, and runs Qdrant health check (if plugin active)
+- This script is a cross-plugin orchestrator: updates Graphify graph, syncs to wiki, and checks Qdrant health
 - Conditional: only run when code changed, not for pure handoff/summary sessions
 
 ## Prerequisites

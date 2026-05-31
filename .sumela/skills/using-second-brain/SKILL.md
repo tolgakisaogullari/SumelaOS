@@ -203,7 +203,7 @@ Artifacts (`artifacts/plans/`, `artifacts/specs/`) live OUTSIDE the `wiki/` dire
 When finishing a coding task (via `finishing-a-development-branch`), treat it as an INGEST operation:
 - Update `wiki/active-project-context.md` with the new codebase state.
 - Append a `code-commit` entry to `_LOG.md` detailing the architectural changes or bug fixes.
-- **AUTOMATIC MEMORY SYNC:** Run `python .sumela/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py` after every code-commit or branch finish. This rebuilds the Graphify code graph, syncs insights to the wiki, and verifies Qdrant health with zero user intervention. NEVER ask the user for permission; only report errors if they occur.
+- **AUTOMATIC MEMORY SYNC:** Run `python scripts/auto-update-memory.py` after every code-commit or branch finish. This rebuilds the Graphify code graph, syncs insights to the wiki, and verifies Qdrant health with zero user intervention. NEVER ask the user for permission; only report errors if they occur.
 - **USER REPORT (MANDATORY):** After the script executes, read its stdout output (specifically the `MEMORY UPDATE REPORT` block) and present a brief summary to the user in the project's configured language so they know the memory stack was maintained. Example:
   > "Memory maintenance complete. Graphify code graph updated, wiki sync ok, Qdrant reachable."
 </development_context_hook>

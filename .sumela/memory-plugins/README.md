@@ -69,7 +69,9 @@ The agent follows this resolution chain:
     ├── SKILL.md                       # Skill registration (routing, commands)
     ├── requirements.txt               # Python dependencies
     └── scripts/
-        ├── auto-update-memory.py      # Graph rebuild + wiki sync
         ├── query-graph.py             # Call-graph queries
         └── sync-graphify-to-obsidian.py  # Graph → wiki sync
+
+scripts/
+└── auto-update-memory.py              # Cross-plugin orchestrator (Graphify + Wiki + Qdrant)
 ```

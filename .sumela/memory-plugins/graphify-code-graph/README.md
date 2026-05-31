@@ -88,9 +88,10 @@ python .sumela/memory-plugins/graphify-code-graph/scripts/sync-graphify-to-obsid
 
 | Script | Purpose |
 |---|---|
-| `auto-update-memory.py` | Rebuild graph, sync to wiki, health check |
 | `query-graph.py` | Query callers/callees/impact for a symbol |
 | `sync-graphify-to-obsidian.py` | Sync graph insights to wiki pages |
+
+> **Note:** `auto-update-memory.py` is a cross-plugin orchestrator located at `scripts/auto-update-memory.py` (root scripts directory). It updates the Graphify graph, syncs to wiki, and checks Qdrant health.
 
 ## Community Plugin Notice
 

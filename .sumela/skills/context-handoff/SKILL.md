@@ -187,7 +187,7 @@ During context-handoff, the agent runs the appropriate steps below without offlo
 
 3. **Graphify + Qdrant Maintenance (Conditional — Code/Memory Sync End)**
    ```bash
-   python .sumela/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py
+   python scripts/auto-update-memory.py
    ```
    **When it runs:**
    - Code changes landed, a branch finish/code-commit occurred, or Graphify call graph can be stale.
