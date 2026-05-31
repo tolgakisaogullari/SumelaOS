@@ -1,4 +1,4 @@
-# OpenSkills — Project-Agnostic AI Agent Framework
+# SumelaOS — Project-Agnostic AI Agent Framework
 
 A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 27 universal skills, structured rules, and a living knowledge base from the first session.
 
@@ -7,7 +7,7 @@ A portable skill engine, rule framework, and second-brain wiki system for AI cod
 ### New Projects (Template)
 
 ```bash
-git clone https://github.com/tolgakisaogullari/openskills.git my-project
+git clone https://github.com/tolgakisaogullari/SumelaOS.git my-project
 cd my-project
 bash scripts/setup.sh        # Linux/macOS
 # OR
@@ -19,13 +19,13 @@ powershell scripts/setup.ps1 # Windows
 Copy-paste this prompt into your AI coding assistant (Claude Code, Cursor, OpenCode, Cline, etc.) in any existing project:
 
 ```
-Set up the OpenSkills agent framework in this project. Steps:
+Set up the SumelaOS agent framework in this project. Steps:
 
-1. Clone https://github.com/tolgakisaogullari/openskills to a temporary directory
-2. Copy .openskills/, scripts/, and template files (AGENTS.md.template, CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/) to this project's root
+1. Clone https://github.com/tolgakisaogullari/SumelaOS to a temporary directory
+2. Copy .sumela/, scripts/, and template files (AGENTS.md.template, CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/) to this project's root
 3. Copy docs/second-brain/template/ as docs/second-brain/, create .gitkeep for empty directories
 4. Delete the temporary clone
-5. Run /initOpenSkills — auto-detect the project's stack, architecture, and conventions
+5. Run /initSumelaOS — auto-detect the project's stack, architecture, and conventions
 6. Ask language preferences: (a) What language should the agent use to communicate? (b) What language for code names? (c) What language for code comments/docs?
 7. Ask about memory plugins (Qdrant, Graphify) — if the user declines, do not install or run their scripts
 
@@ -33,7 +33,7 @@ Do everything automatically, leave no manual steps.
 ```
 
 The agent will:
-1. Clone the openskills repo and copy files to your project
+1. Clone the SumelaOS repo and copy files to your project
 2. Auto-detect your tech stack, architecture, and code conventions
 3. Ask about optional memory plugins (Qdrant session memory, Graphify code graph)
 4. Generate AGENTS.md, rules, wiki, and IDE pointers based on your project
@@ -42,15 +42,15 @@ The agent will:
 
 ```bash
 # Linux/macOS
-curl -sSL https://raw.githubusercontent.com/tolgakisaogullari/openskills/master/scripts/bootstrap.sh | bash
+curl -sSL https://raw.githubusercontent.com/tolgakisaogullari/SumelaOS/master/scripts/bootstrap.sh | bash
 
 # Windows/PowerShell
-git clone --depth 1 https://github.com/tolgakisaogullari/openskills.git $env:TEMP\openskills
-Copy-Item -Path "$env:TEMP\openskills\.openskills" -Destination "." -Recurse -Force
-Copy-Item -Path "$env:TEMP\openskills\scripts" -Destination "." -Recurse -Force
+git clone --depth 1 https://github.com/tolgakisaogullari/SumelaOS.git $env:TEMP\SumelaOS
+Copy-Item -Path "$env:TEMP\SumelaOS\.sumela" -Destination "." -Recurse -Force
+Copy-Item -Path "$env:TEMP\SumelaOS\scripts" -Destination "." -Recurse -Force
 ```
 
-Then run `/initOpenSkills` in your AI assistant.
+Then run `/initSumelaOS` in your AI assistant.
 
 ## Features
 
@@ -61,7 +61,7 @@ Then run `/initOpenSkills` in your AI assistant.
 - **IDE-agnostic** — one `AGENTS.md` serves all IDEs via thin pointer files
 - **Self-improvement loop** — `/evolve` command captures corrections and friction signals
 - **Setup automation** — `setup.sh` / `setup.ps1` with interactive and non-interactive modes
-- **Auto-detection** — `/initOpenSkills` scans your existing project and generates configuration automatically
+- **Auto-detection** — `/initSumelaOS` scans your existing project and generates configuration automatically
 
 ## Architecture
 
@@ -75,7 +75,7 @@ Then run `/initOpenSkills` in your AI assistant.
 │      │            .trae/rules/)                   │
 │      ▼                                           │
 │  ┌──────────────────────────────────┐            │
-│  │         .openskills/             │            │
+│  │         .sumela/             │            │
 │  │  SKILL_REGISTRY.md               │            │
 │  │  RULE_REGISTRY.md                │            │
 │  │  skills/        (27 skills)      │            │
@@ -126,7 +126,7 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 │   ├── setup.sh                    # Interactive setup (Bash)
 │   ├── setup.ps1                   # Interactive setup (PowerShell)
 │   └── validate-structure.sh       # Structure validation
-├── .openskills/
+├── .sumela/
 │   ├── SKILL_REGISTRY.md           # Skill catalog
 │   ├── RULE_REGISTRY.md.template   # Rule catalog template
 │   ├── skills/                     # 20 universal skills
@@ -146,9 +146,9 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 
 ## What Problems Does This Solve?
 
-AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructured by default. Each session starts from scratch — no memory of past decisions, no coding standards, no architectural guardrails. OpenSkills solves this:
+AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructured by default. Each session starts from scratch — no memory of past decisions, no coding standards, no architectural guardrails. SumelaOS solves this:
 
-| Problem | Without OpenSkills | With OpenSkills |
+| Problem | Without SumelaOS | With SumelaOS |
 |---|---|---|
 | **No workflow structure** | Agent improvises each task | 27 skills define structured workflows (brainstorm → plan → implement → review → ship) |
 | **No coding standards** | Agent uses its own defaults | Project-specific rules enforce your conventions |
@@ -160,7 +160,7 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 
 ## Credits & Foundations
 
-OpenSkills builds on the work of two exceptional open-source projects:
+SumelaOS builds on the work of two exceptional open-source projects:
 
 ### [obra/superpowers](https://github.com/obra/superpowers) — The Skill Engine
 
@@ -194,7 +194,7 @@ Superpowers (skills)     Graphify (code graph)     Qdrant (session memory)
      │                        │                          │
      ▼                        ▼                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    OpenSkills Framework                       │
+│                    SumelaOS Framework                       │
 │                                                               │
 │  Skills define WHAT to do (workflows)                        │
 │  Rules define HOW to do it (conventions)                     │

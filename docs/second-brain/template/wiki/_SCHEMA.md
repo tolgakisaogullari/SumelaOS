@@ -135,7 +135,7 @@ Obsidian wikilink'leri vault içinde dosya adına göre çözülür — yol bilm
 
 **Kullanım kuralı:**
 - Wiki içi referanslar → Obsidian wikilink (`[[...]]`)
-- Wiki dışı referanslar (artifacts, raw_sources, .openskills) → Standard markdown link (relatif yol)
+- Wiki dışı referanslar (artifacts, raw_sources, .sumela) → Standard markdown link (relatif yol)
 - Asla mutlak yol kullanma
 
 ---
@@ -555,7 +555,7 @@ Karpathy wiki pattern'i **bilgi** için çelişki toleransı sağlar; `_IMPROVEM
 | `detected` | `YYYY-MM-DD` | Sinyalin yakalandığı tarih |
 | `signal_type` | enum | `correction` \| `confirmation` \| `decision` \| `friction` \| `challenge` |
 | `scope` | enum | `rule` \| `skill` \| `wiki` \| `schema` \| `active-context` |
-| `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.openskills/learned-rules/<topic>.md` (portable, IDE-agnostic); kullanıcı manuel olarak kendi agent'ının native rule klasörüne kopyalar. |
+| `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.sumela/learned-rules/<topic>.md` (portable, IDE-agnostic); kullanıcı manuel olarak kendi agent'ının native rule klasörüne kopyalar. |
 | `proposed_change` | text | Ne yapılacak — insan-okunur özet + gerekirse diff |
 | `evidence` | text | Neden — somut session referansı, kullanıcı alıntısı, dosya/satır |
 | `provider_context` | string | Sinyali yakalayan model (`claude-opus-4-6`, `claude-sonnet-4-6`, vs.) |

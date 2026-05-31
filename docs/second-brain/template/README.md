@@ -44,7 +44,7 @@ docs/second-brain/
 This template covers `docs/second-brain/` only. For the full agent experience, you also need:
 
 - **`AGENTS.md`** (repo root) — Canonical agent bootstrap file
-- **`.openskills/`** — Portable skill engine (SKILL_REGISTRY.md + skills/)
+- **`.sumela/`** — Portable skill engine (SKILL_REGISTRY.md + skills/)
 - **IDE pointer files** — `.cursor/rules/00-agent.md`, `.clinerules`, `.kilocode/rules.md`, `.trae/rules/00-agent.md`
 
 See `ADOPTION_GUIDE.md` for complete setup instructions covering greenfield and brownfield projects.

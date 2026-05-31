@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# setup.sh — OpenSkills Template Interactive Setup
+# setup.sh — SumelaOS Template Interactive Setup
 # -----------------------------------------------------------------------------
 # Generates project-specific files from templates. Asks the user for
 # configuration, copies selected rule templates, generates IDE pointer files,
@@ -75,7 +75,7 @@ cd "$ROOT_DIR"
 
 REQUIRED_TEMPLATES=(
   "AGENTS.md.template"
-  ".openskills/RULE_REGISTRY.md.template"
+  ".sumela/RULE_REGISTRY.md.template"
   "CLAUDE.md.template"
   ".clinerules.template"
   ".cursor/rules/00-agent.md.template"
@@ -165,7 +165,7 @@ prompt_yn() {
 # 1. COLLECT CONFIGURATION
 # =============================================================================
 echo ""
-echo "${BOLD}=== OpenSkills Template Setup ===${RESET}"
+echo "${BOLD}=== SumelaOS Template Setup ===${RESET}"
 echo ""
 
 if [ "$NON_INTERACTIVE" = true ]; then
@@ -306,7 +306,7 @@ fi
 # Build project-specific security
 PROJECT_SECURITY=""
 if [[ " ${STACKS[*]} " =~ " backend" ]]; then
-  PROJECT_SECURITY=$'\n'"- Skill path: \`.openskills/rules/backend_standards.md\` — backend-specific security patterns."
+  PROJECT_SECURITY=$'\n'"- Skill path: \`.sumela/rules/backend_standards.md\` — backend-specific security patterns."
 fi
 
 # Build dependency flow
@@ -368,7 +368,7 @@ for stack in "${STACKS[@]}"; do
 <rule activation=\"stack-conditional\" applies_phases=\"planning,implementation,verification,code_review,debugging\" stack=\"backend\">
 <name>backend_standards</name>
 <description>Use when the task scope includes backend — architecture layers, naming conventions, data access, API design, error handling, testing, security.</description>
-<path>.openskills/rules/backend_standards.md</path>
+<path>.sumela/rules/backend_standards.md</path>
 </rule>
 "
       ;;
@@ -377,7 +377,7 @@ for stack in "${STACKS[@]}"; do
 <rule activation=\"stack-conditional\" applies_phases=\"planning,implementation,verification,code_review,debugging\" stack=\"frontend\">
 <name>frontend_standards</name>
 <description>Use when the task scope includes frontend — component architecture, state management, styling, accessibility, build tooling, testing.</description>
-<path>.openskills/rules/frontend_standards.md</path>
+<path>.sumela/rules/frontend_standards.md</path>
 </rule>
 "
       ;;
@@ -386,7 +386,7 @@ for stack in "${STACKS[@]}"; do
 <rule activation=\"stack-conditional\" applies_phases=\"planning,implementation,verification,code_review,debugging\" stack=\"mobile\">
 <name>mobile_standards</name>
 <description>Use when the task scope includes mobile — navigation, offline-first, push notifications, platform conventions, performance, testing.</description>
-<path>.openskills/rules/mobile_standards.md</path>
+<path>.sumela/rules/mobile_standards.md</path>
 </rule>
 "
       ;;
@@ -409,7 +409,7 @@ export TMPL_STACK_RULES="$STACK_RULES"
 export TMPL_PHASE_MATRIX_ROWS="$PHASE_MATRIX"
 export TMPL_EXAMPLE_OVERRIDE="backend"
 
-render_template .openskills/RULE_REGISTRY.md.template .openskills/RULE_REGISTRY.md
+render_template .sumela/RULE_REGISTRY.md.template .sumela/RULE_REGISTRY.md
 
 ok "RULE_REGISTRY.md generated"
 
@@ -430,8 +430,8 @@ for stack in "${STACKS[@]}"; do
   stack=$(echo "$stack" | tr -d ' ')
   if [[ -v STACK_RULE_MAP[$stack] ]]; then
     rule_name="${STACK_RULE_MAP[$stack]}"
-    src=".openskills/rules/templates/${rule_name}.md.${RULE_VARIANT}"
-    dst=".openskills/rules/${rule_name}.md"
+    src=".sumela/rules/templates/${rule_name}.md.${RULE_VARIANT}"
+    dst=".sumela/rules/${rule_name}.md"
     if [ -f "$src" ]; then
       export TMPL_DATE_CREATED="$DATE_CREATED"
       render_template "$src" "$dst"
@@ -445,8 +445,8 @@ for stack in "${STACKS[@]}"; do
 done
 
 # Copy operational_excellence_maintenance (always needed)
-OP_SRC=".openskills/rules/templates/operational_excellence_maintenance.md.${RULE_VARIANT}"
-OP_DST=".openskills/rules/operational_excellence_maintenance.md"
+OP_SRC=".sumela/rules/templates/operational_excellence_maintenance.md.${RULE_VARIANT}"
+OP_DST=".sumela/rules/operational_excellence_maintenance.md"
 if [ -f "$OP_SRC" ]; then
   export TMPL_DATE_CREATED="$DATE_CREATED"
   render_template "$OP_SRC" "$OP_DST"
@@ -528,17 +528,17 @@ if [ ${#PLUGINS[@]} -gt 0 ]; then
   PLUGIN_ENTRIES=""
   for plugin in "${PLUGINS[@]}"; do
     plugin=$(echo "$plugin" | tr -d ' ')
-    if [ -f ".openskills/memory-plugins/$plugin/SKILL.md" ]; then
+    if [ -f ".sumela/memory-plugins/$plugin/SKILL.md" ]; then
       PLUGIN_ENTRIES="${PLUGIN_ENTRIES}
 <skill activation=\"lazy\">
 <name>$plugin</name>
-<description>Memory plugin — see \`.openskills/memory-plugins/$plugin/SKILL.md\` for routing and prerequisites.</description>
-<path>.openskills/memory-plugins/$plugin/SKILL.md</path>
+<description>Memory plugin — see \`.sumela/memory-plugins/$plugin/SKILL.md\` for routing and prerequisites.</description>
+<path>.sumela/memory-plugins/$plugin/SKILL.md</path>
 </skill>
 "
       ok "Registered plugin: $plugin"
     else
-      warn "Plugin SKILL.md not found: .openskills/memory-plugins/$plugin/SKILL.md"
+      warn "Plugin SKILL.md not found: .sumela/memory-plugins/$plugin/SKILL.md"
     fi
   done
 
@@ -548,8 +548,8 @@ if [ ${#PLUGINS[@]} -gt 0 ]; then
     awk -v entries="$PLUGIN_ENTRIES" '
       /<\/available_skills>/ { print entries }
       { print }
-    ' .openskills/SKILL_REGISTRY.md > .openskills/SKILL_REGISTRY.md.tmp
-    mv .openskills/SKILL_REGISTRY.md.tmp .openskills/SKILL_REGISTRY.md
+    ' .sumela/SKILL_REGISTRY.md > .sumela/SKILL_REGISTRY.md.tmp
+    mv .sumela/SKILL_REGISTRY.md.tmp .sumela/SKILL_REGISTRY.md
     ok "Plugins appended to SKILL_REGISTRY.md"
   fi
 fi
@@ -584,16 +584,16 @@ echo "  IDEs:       ${IDES[*]:-none}"
 echo ""
 echo "  Files generated:"
 echo "    - AGENTS.md"
-echo "    - .openskills/RULE_REGISTRY.md"
-echo "    - .openskills/rules/ (stack-specific rules)"
+echo "    - .sumela/RULE_REGISTRY.md"
+echo "    - .sumela/rules/ (stack-specific rules)"
 echo "    - docs/second-brain/wiki/ (6 wiki pages)"
 [ ${#IDES[@]} -gt 0 ] && echo "    - IDE pointer files"
 [ ${#PLUGINS[@]} -gt 0 ] && echo "    - SKILL_REGISTRY.md (plugins appended)"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit AGENTS.md — fill in project-specific commands and conventions"
-echo "    2. Edit .openskills/rules/*.md — customize stack standards"
+echo "    2. Edit .sumela/rules/*.md — customize stack standards"
 echo "    3. Edit docs/second-brain/wiki/active-project-context.md — add current sprint"
-echo "    4. Review .openskills/RULE_REGISTRY.md — adjust stack scopes if needed"
-[ ${#PLUGINS[@]} -gt 0 ] && echo "    5. Install plugin dependencies: pip install -r .openskills/memory-plugins/*/requirements.txt"
+echo "    4. Review .sumela/RULE_REGISTRY.md — adjust stack scopes if needed"
+[ ${#PLUGINS[@]} -gt 0 ] && echo "    5. Install plugin dependencies: pip install -r .sumela/memory-plugins/*/requirements.txt"
 echo ""

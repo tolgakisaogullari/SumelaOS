@@ -1,4 +1,4 @@
-# Contributing to OpenSkills
+# Contributing to SumelaOS
 
 Guidelines for adding skills, rules, memory plugins, and improving the framework.
 
@@ -6,10 +6,10 @@ Guidelines for adding skills, rules, memory plugins, and improving the framework
 
 1. **Create the skill directory:**
    ```bash
-   mkdir -p .openskills/skills/<skill-name>
+   mkdir -p .sumela/skills/<skill-name>
    ```
 
-2. **Write `SKILL.md`** following the format defined in the `writing-skills` skill (`.openskills/skills/writing-skills/SKILL.md`). Required sections:
+2. **Write `SKILL.md`** following the format defined in the `writing-skills` skill (`.sumela/skills/writing-skills/SKILL.md`). Required sections:
    - `<skill_header>` — name, description, triggers
    - `<prerequisites>` — what must be true before loading
    - `<execution_workflow>` — step-by-step procedure
@@ -21,7 +21,7 @@ Guidelines for adding skills, rules, memory plugins, and improving the framework
    <skill activation="lazy">
    <name>your-skill-name</name>
    <description>One-line description matching user intent patterns.</description>
-   <path>.openskills/skills/your-skill-name/SKILL.md</path>
+   <path>.sumela/skills/your-skill-name/SKILL.md</path>
    </skill>
    ```
    Use `activation="eager"` only for session-start skills (rare — most skills are `lazy`).
@@ -36,14 +36,14 @@ Guidelines for adding skills, rules, memory plugins, and improving the framework
 1. **Create the rule file:**
    ```bash
    # For universal rules:
-   touch .openskills/rules/your-rule-name.md
+   touch .sumela/rules/your-rule-name.md
 
    # For stack-specific rules:
-   touch .openskills/rules/templates/your-rule-name.md.best-practice
-   touch .openskills/rules/templates/your-rule-name.md.empty
+   touch .sumela/rules/templates/your-rule-name.md.best-practice
+   touch .sumela/rules/templates/your-rule-name.md.empty
    ```
 
-2. **Follow the rule format** — see existing rules in `.openskills/rules/` for structure. Include:
+2. **Follow the rule format** — see existing rules in `.sumela/rules/` for structure. Include:
    - Rule name and scope
    - Concrete directives (not guidelines — rules are enforceable)
    - Examples of correct and incorrect patterns
@@ -53,7 +53,7 @@ Guidelines for adding skills, rules, memory plugins, and improving the framework
    <rule activation="universal" applies_phases="all">
    <name>your-rule-name</name>
    <description>When to load this rule and what it enforces.</description>
-   <path>.openskills/rules/your-rule-name.md</path>
+   <path>.sumela/rules/your-rule-name.md</path>
    </rule>
    ```
 
@@ -68,7 +68,7 @@ Guidelines for adding skills, rules, memory plugins, and improving the framework
 
 1. **Create the plugin directory:**
    ```bash
-   mkdir -p .openskills/memory-plugins/<plugin-name>/scripts
+   mkdir -p .sumela/memory-plugins/<plugin-name>/scripts
    ```
 
 2. **Write required files:**
@@ -81,8 +81,8 @@ Guidelines for adding skills, rules, memory plugins, and improving the framework
    ```xml
    <skill activation="lazy">
    <name>your-plugin-name</name>
-   <description>Memory plugin — see `.openskills/memory-plugins/your-plugin-name/SKILL.md` for routing and prerequisites.</description>
-   <path>.openskills/memory-plugins/your-plugin-name/SKILL.md</path>
+   <description>Memory plugin — see `.sumela/memory-plugins/your-plugin-name/SKILL.md` for routing and prerequisites.</description>
+   <path>.sumela/memory-plugins/your-plugin-name/SKILL.md</path>
    </skill>
    ```
 

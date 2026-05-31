@@ -18,7 +18,7 @@ The template includes 5 wiki special files (`_INDEX.md`, `_LOG.md`, `_SCHEMA.md`
 
 Companion components (not included in this template but required for full functionality):
 - `AGENTS.md` — Canonical agent bootstrap file at repo root
-- `.openskills/` — Portable skill engine with `SKILL_REGISTRY.md`
+- `.sumela/` — Portable skill engine with `SKILL_REGISTRY.md`
 - IDE pointer files — Thin redirects so each IDE discovers `AGENTS.md`
 
 ---
@@ -65,12 +65,12 @@ Write a canonical agent bootstrap file. Include:
 1. **Project identity** — project name, one-line purpose.
 2. **Language protocol** — which language for user interaction vs. code/comments (configurable per project).
 3. **Eager-load directives** — instruct agent to read on session start:
-   - `.openskills/SKILL_REGISTRY.md`
+   - `.sumela/SKILL_REGISTRY.md`
    - `docs/second-brain/wiki/_INDEX.md`
    - `docs/second-brain/wiki/_SCHEMA.md`
    - `docs/second-brain/wiki/active-project-context.md`
    - `docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md` (check pending count)
-4. **Skill resolution protocol** — reference `.openskills/SKILL_REGISTRY.md`.
+4. **Skill resolution protocol** — reference `.sumela/SKILL_REGISTRY.md`.
 5. **Security mandate** — reference `secure-coding-standard` skill.
 6. **Signal capture** — enable `self-improvement-curator` skill.
 
@@ -86,7 +86,7 @@ Create thin pointer files for each IDE you use. Each file should be ≤15 lines 
 
 **Directives:**
 1. Read `AGENTS.md` — it is the single source of truth.
-2. Follow `.openskills/SKILL_REGISTRY.md` for skill resolution.
+2. Follow `.sumela/SKILL_REGISTRY.md` for skill resolution.
 3. Do not duplicate instructions across IDE-specific files.
 ```
 
@@ -104,9 +104,9 @@ Replace all placeholder values:
 - `YYYY-MM-DD` → today's date
 - Add initial project state under "Aktif Çalışma"
 
-### A.5. Copy `.openskills/` skill engine
+### A.5. Copy `.sumela/` skill engine
 
-Copy the entire `.openskills/` directory from the source project. This includes:
+Copy the entire `.sumela/` directory from the source project. This includes:
 - `SKILL_REGISTRY.md` — skill catalog
 - `skills/` — all skill definitions
 - `rules/` — portable rule files (customize per project)
@@ -123,7 +123,7 @@ powershell -File scripts/setup.ps1   # Windows
 ### A.7. First commit
 
 ```bash
-git add docs/second-brain/ .openskills/ AGENTS.md CLAUDE.md .cursor/ .clinerules .kilocode/ .trae/
+git add docs/second-brain/ .sumela/ AGENTS.md CLAUDE.md .cursor/ .clinerules .kilocode/ .trae/
 git commit -m "feat(meta): initialize second brain + skill engine"
 ```
 
@@ -205,14 +205,14 @@ Create `tech-debt-and-known-issues.md` with prioritized items (High / Medium / L
 
 ## 5. Mode C: Team Onboarding
 
-Use this mode when a **new team member** joins a project that already has OpenSkills set up. No template copying or configuration needed — the newcomer reads existing files and starts contributing.
+Use this mode when a **new team member** joins a project that already has SumelaOS set up. No template copying or configuration needed — the newcomer reads existing files and starts contributing.
 
 ### C.1. Read the Core Files
 
 The agent (or human) reads these files in order on the first session:
 
 1. **`AGENTS.md`** (repo root) — project identity, language protocol, developer commands, architecture conventions.
-2. **`.openskills/SKILL_REGISTRY.md`** — discover all available skills (eager and lazy).
+2. **`.sumela/SKILL_REGISTRY.md`** — discover all available skills (eager and lazy).
 3. **`docs/second-brain/wiki/active-project-context.md`** — current sprint state, active work, recent decisions.
 4. **`docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md`** — check pending count. If > 0, review with `/evolve`.
 
@@ -233,7 +233,7 @@ The agent will automatically:
 
 | Action | Method |
 |---|---|
-| Add a new skill | Follow the `writing-skills` skill — create `SKILL.md` under `.openskills/skills/<name>/`, register in `SKILL_REGISTRY.md` |
+| Add a new skill | Follow the `writing-skills` skill — create `SKILL.md` under `.sumela/skills/<name>/`, register in `SKILL_REGISTRY.md` |
 | Add a new rule | Use `/evolve` — the agent creates the rule file, registers it in `RULE_REGISTRY.md`, and updates the phase-to-rule matrix |
 | Report friction or a correction | Use `/evolve` — the agent captures the signal in `_IMPROVEMENT_QUEUE.md` for review |
 | Ingest a new source document | Place in `docs/second-brain/raw_sources/`, then trigger ingest via the `using-second-brain` skill |
@@ -276,7 +276,7 @@ After copying the template, customize these project-specific values:
 - Fill in current sprint/project state
 - Add relevant reference links
 
-### In `.openskills/rules/`:
+### In `.sumela/rules/`:
 - Review each rule file — remove project-specific rules that don't apply
 - Keep generic rules (architecture patterns, security, git workflow)
 - Add new rules specific to your project's conventions
@@ -349,21 +349,21 @@ To activate Tier 2 (Graphify structural search):
 
 ## 11. Plugin Activation
 
-Memory plugins are optional add-ons that enhance agent recall. Each plugin is a self-contained package under `.openskills/memory-plugins/<name>/` with its own `SKILL.md`, scripts, and dependencies.
+Memory plugins are optional add-ons that enhance agent recall. Each plugin is a self-contained package under `.sumela/memory-plugins/<name>/` with its own `SKILL.md`, scripts, and dependencies.
 
 ### Enabling a Plugin After Initial Setup
 
 1. **Install dependencies:**
    ```bash
-   pip install -r .openskills/memory-plugins/<plugin-name>/requirements.txt
+   pip install -r .sumela/memory-plugins/<plugin-name>/requirements.txt
    ```
 
 2. **Register in `SKILL_REGISTRY.md`** — add a `<skill>` entry before the closing `</available_skills>` tag:
    ```xml
    <skill activation="lazy">
    <name><plugin-name></name>
-   <description>Memory plugin — see `.openskills/memory-plugins/<plugin-name>/SKILL.md` for routing and prerequisites.</description>
-   <path>.openskills/memory-plugins/<plugin-name>/SKILL.md</path>
+   <description>Memory plugin — see `.sumela/memory-plugins/<plugin-name>/SKILL.md` for routing and prerequisites.</description>
+   <path>.sumela/memory-plugins/<plugin-name>/SKILL.md</path>
    </skill>
    ```
 
@@ -371,23 +371,23 @@ Memory plugins are optional add-ons that enhance agent recall. Each plugin is a 
 
 4. **Run the plugin's setup script** (if available):
    ```bash
-   python .openskills/memory-plugins/<plugin-name>/scripts/setup-qdrant.py
+   python .sumela/memory-plugins/<plugin-name>/scripts/setup-qdrant.py
    ```
 
 The `setup.sh` / `setup.ps1` script automates steps 1-2 for all selected plugins during initial setup.
 
 ### Disabling a Plugin
 
-1. Remove the plugin's `<skill>` entry from `.openskills/SKILL_REGISTRY.md`.
-2. Optionally remove the plugin directory from `.openskills/memory-plugins/`.
+1. Remove the plugin's `<skill>` entry from `.sumela/SKILL_REGISTRY.md`.
+2. Optionally remove the plugin directory from `.sumela/memory-plugins/`.
 3. The agent degrades gracefully — queries fall through to the next tier.
 
 ### Plugin Health Check
 
 | Plugin | Verify Command | Expected Output |
 |---|---|---|
-| `qdrant-session-memory` | `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "test" --limit 1` | JSON results (may be empty if no sessions ingested yet) |
-| `graphify-code-graph` | `python .openskills/memory-plugins/graphify-code-graph/scripts/query-graph.py "main" --depth 1` | Callers/callees list or "No matches" |
+| `qdrant-session-memory` | `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "test" --limit 1` | JSON results (may be empty if no sessions ingested yet) |
+| `graphify-code-graph` | `python .sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py "main" --depth 1` | Callers/callees list or "No matches" |
 
 If either command fails with a connection error, check that the external service (Qdrant on `localhost:6333`, graphify CLI on PATH) is running.
 

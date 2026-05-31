@@ -4,6 +4,6 @@
 
 **Directives:**
 1. Read `AGENTS.md` — it is the single source of truth for agent behavior.
-2. Follow `.openskills/SKILL_REGISTRY.md` for skill resolution.
-3. Follow `.openskills/RULE_REGISTRY.md` for project rule discovery.
+2. Follow `.sumela/SKILL_REGISTRY.md` for skill resolution.
+3. Follow `.sumela/RULE_REGISTRY.md` for project rule discovery.
 4. Do not duplicate instructions across IDE-specific files.

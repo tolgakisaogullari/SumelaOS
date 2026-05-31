@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    OpenSkills Template Interactive Setup (PowerShell).
+    SumelaOS Template Interactive Setup (PowerShell).
 
 .DESCRIPTION
     Generates project-specific files from templates. Asks the user for
@@ -72,7 +72,7 @@ try {
 # --- Template existence preflight ---
 $RequiredTemplates = @(
     "AGENTS.md.template",
-    ".openskills/RULE_REGISTRY.md.template",
+    ".sumela/RULE_REGISTRY.md.template",
     "CLAUDE.md.template",
     ".clinerules.template",
     ".cursor/rules/00-agent.md.template",
@@ -139,7 +139,7 @@ function Read-YesNo {
 # 1. COLLECT CONFIGURATION
 # =============================================================================
 Write-Host ""
-Write-Host "=== OpenSkills Template Setup ===" -ForegroundColor White
+Write-Host "=== SumelaOS Template Setup ===" -ForegroundColor White
 Write-Host ""
 
 if ($NonInteractive) {
@@ -269,7 +269,7 @@ if ($StackArray -notcontains "backend") {
 # Project-specific security
 $ProjectSecurity = ""
 if ($StackArray -contains "backend") {
-    $ProjectSecurity = "`n- Skill path: ``.openskills/rules/backend_standards.md`` — backend-specific security patterns."
+    $ProjectSecurity = "`n- Skill path: ``.sumela/rules/backend_standards.md`` — backend-specific security patterns."
 }
 
 # Perform replacements
@@ -322,7 +322,7 @@ foreach ($stack in $StackArray) {
 <rule activation="stack-conditional" applies_phases="planning,implementation,verification,code_review,debugging" stack="$stack">
 <name>$ruleName</name>
 <description>Use when the task scope includes $stack — $ruleDesc.</description>
-<path>.openskills/rules/$ruleName.md</path>
+<path>.sumela/rules/$ruleName.md</path>
 </rule>
 "@
     }
@@ -341,12 +341,12 @@ $PhaseMatrix = @"
 | ``debugging`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |
 "@
 
-$content = Get-Content ".openskills/RULE_REGISTRY.md.template" -Raw
+$content = Get-Content ".sumela/RULE_REGISTRY.md.template" -Raw
 $content = $content -replace '\{\{stack_scopes\}\}', $StackScopesStr
 $content = $content -replace '\{\{stack_rules\}\}', $StackRules
 $content = $content -replace '\{\{phase_matrix_rows\}\}', $PhaseMatrix
 $content = $content -replace '\{\{example_override\}\}', "backend"
-$content | Set-Content ".openskills/RULE_REGISTRY.md" -NoNewline
+$content | Set-Content ".sumela/RULE_REGISTRY.md" -NoNewline
 
 Write-Ok "RULE_REGISTRY.md generated"
 
@@ -365,8 +365,8 @@ foreach ($stack in $StackArray) {
     $stack = $stack.Trim()
     if ($StackRuleFileMap.ContainsKey($stack)) {
         $ruleName = $StackRuleFileMap[$stack]
-        $src = ".openskills/rules/templates/$ruleName.md.$RuleVariant"
-        $dst = ".openskills/rules/$ruleName.md"
+        $src = ".sumela/rules/templates/$ruleName.md.$RuleVariant"
+        $dst = ".sumela/rules/$ruleName.md"
         if (Test-Path $src) {
             $content = Get-Content $src -Raw
             $content = $content -replace '\{\{date_created\}\}', $DateCreated
@@ -383,8 +383,8 @@ foreach ($stack in $StackArray) {
 }
 
 # Copy operational_excellence_maintenance (always needed)
-$OpSrc = ".openskills/rules/templates/operational_excellence_maintenance.md.$RuleVariant"
-$OpDst = ".openskills/rules/operational_excellence_maintenance.md"
+$OpSrc = ".sumela/rules/templates/operational_excellence_maintenance.md.$RuleVariant"
+$OpDst = ".sumela/rules/operational_excellence_maintenance.md"
 if (Test-Path $OpSrc) {
     $content = Get-Content $OpSrc -Raw
     $content = $content -replace '\{\{date_created\}\}', $DateCreated
@@ -483,14 +483,14 @@ if ($PluginArray.Count -gt 0) {
     $PluginEntries = ""
     foreach ($plugin in $PluginArray) {
         $plugin = $plugin.Trim()
-        $skillPath = ".openskills/memory-plugins/$plugin/SKILL.md"
+        $skillPath = ".sumela/memory-plugins/$plugin/SKILL.md"
         if (Test-Path $skillPath) {
             $PluginEntries += @"
 
 <skill activation="lazy">
 <name>$plugin</name>
-<description>Memory plugin — see ``.openskills/memory-plugins/$plugin/SKILL.md`` for routing and prerequisites.</description>
-<path>.openskills/memory-plugins/$plugin/SKILL.md</path>
+<description>Memory plugin — see ``.sumela/memory-plugins/$plugin/SKILL.md`` for routing and prerequisites.</description>
+<path>.sumela/memory-plugins/$plugin/SKILL.md</path>
 </skill>
 "@
             Write-Ok "Registered plugin: $plugin"
@@ -501,9 +501,9 @@ if ($PluginArray.Count -gt 0) {
     }
 
     if ($PluginEntries) {
-        $content = Get-Content ".openskills/SKILL_REGISTRY.md" -Raw
+        $content = Get-Content ".sumela/SKILL_REGISTRY.md" -Raw
         $content = $content -replace '(</available_skills>)', "$PluginEntries`n`$1"
-        $content | Set-Content ".openskills/SKILL_REGISTRY.md" -NoNewline
+        $content | Set-Content ".sumela/SKILL_REGISTRY.md" -NoNewline
         Write-Ok "Plugins appended to SKILL_REGISTRY.md"
     }
 }
@@ -554,16 +554,16 @@ Write-Host "  IDEs:       $(if ($IDEArray.Count) { $IDEArray -join ', ' } else {
 Write-Host ""
 Write-Host "  Files generated:"
 Write-Host "    - AGENTS.md"
-Write-Host "    - .openskills/RULE_REGISTRY.md"
-Write-Host "    - .openskills/rules/ (stack-specific rules)"
+Write-Host "    - .sumela/RULE_REGISTRY.md"
+Write-Host "    - .sumela/rules/ (stack-specific rules)"
 Write-Host "    - docs/second-brain/wiki/ (6 wiki pages)"
 if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
 Write-Host ""
 Write-Host "  Next steps:"
 Write-Host "    1. Edit AGENTS.md — fill in project-specific commands and conventions"
-Write-Host "    2. Edit .openskills/rules/*.md — customize stack standards"
+Write-Host "    2. Edit .sumela/rules/*.md — customize stack standards"
 Write-Host "    3. Edit docs/second-brain/wiki/active-project-context.md — add current sprint"
-Write-Host "    4. Review .openskills/RULE_REGISTRY.md — adjust stack scopes if needed"
-if ($PluginArray.Count) { Write-Host "    5. Install plugin dependencies: pip install -r .openskills/memory-plugins/*/requirements.txt" }
+Write-Host "    4. Review .sumela/RULE_REGISTRY.md — adjust stack scopes if needed"
+if ($PluginArray.Count) { Write-Host "    5. Install plugin dependencies: pip install -r .sumela/memory-plugins/*/requirements.txt" }
 Write-Host ""

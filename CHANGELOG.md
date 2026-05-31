@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.2.0] - 2026-05-22
 
 ### Added
-- `init-openskills` skill: `/initOpenSkills` command for automatic brownfield adoption
+- `init-SumelaOS` skill: `/initSumelaOS` command for automatic brownfield adoption
   - Auto-detects tech stack from manifest files (csproj, package.json, go.mod, Cargo.toml, etc.)
   - Identifies architecture pattern from directory structure (Clean Arch, MVC, microservices, monorepo, etc.)
   - Detects code conventions from existing source files (naming, error handling, validation, testing)

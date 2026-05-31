@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
-# validate-structure.sh — OpenSkills Template Structure Validator
+# validate-structure.sh — SumelaOS Template Structure Validator
 # -----------------------------------------------------------------------------
 # Validates that all required skill directories, rule files, wiki templates,
 # rule templates, and memory plugin structures exist. Optionally checks for
@@ -53,7 +53,7 @@ EXPECTED_SKILLS=(
   "dispatching-parallel-agents"
   "executing-plans"
   "finishing-a-development-branch"
-  "init-openskills"
+  "init-SumelaOS"
   "performance-optimization"
   "receiving-code-review"
   "requesting-code-review"
@@ -74,10 +74,10 @@ EXPECTED_SKILLS=(
 SKILL_FOUND=0
 SKILL_MISSING=""
 for skill in "${EXPECTED_SKILLS[@]}"; do
-  if [ -d ".openskills/skills/$skill" ]; then
+  if [ -d ".sumela/skills/$skill" ]; then
     SKILL_FOUND=$((SKILL_FOUND + 1))
   else
-    SKILL_MISSING="$SKILL_MISSING .openskills/skills/$skill"
+    SKILL_MISSING="$SKILL_MISSING .sumela/skills/$skill"
   fi
 done
 
@@ -90,7 +90,7 @@ fi
 # -----------------------------------------------------------------------------
 # 2. SKILL_REGISTRY.md path validity
 # -----------------------------------------------------------------------------
-if [ -f ".openskills/SKILL_REGISTRY.md" ]; then
+if [ -f ".sumela/SKILL_REGISTRY.md" ]; then
   MISSING_PATHS=""
   PATH_COUNT=0
   FOUND_PATHS=0
@@ -105,7 +105,7 @@ if [ -f ".openskills/SKILL_REGISTRY.md" ]; then
         MISSING_PATHS="$MISSING_PATHS $skill_path"
       fi
     fi
-  done < ".openskills/SKILL_REGISTRY.md"
+  done < ".sumela/SKILL_REGISTRY.md"
 
   if [ -z "$MISSING_PATHS" ]; then
     pass "SKILL_REGISTRY.md paths valid ($FOUND_PATHS/$PATH_COUNT)"
@@ -133,7 +133,7 @@ REQUIRED_RULES=(
 RULES_FOUND=0
 RULES_MISSING=""
 for rule in "${REQUIRED_RULES[@]}"; do
-  if [ -f ".openskills/rules/$rule" ]; then
+  if [ -f ".sumela/rules/$rule" ]; then
     RULES_FOUND=$((RULES_FOUND + 1))
   else
     RULES_MISSING="$RULES_MISSING $rule"
@@ -167,7 +167,7 @@ check_placeholders() {
 
 if [ "$CHECK_PLACEHOLDERS" = true ]; then
   check_placeholders "AGENTS.md" "AGENTS.md"
-  check_placeholders ".openskills/RULE_REGISTRY.md" "RULE_REGISTRY.md"
+  check_placeholders ".sumela/RULE_REGISTRY.md" "RULE_REGISTRY.md"
 fi
 
 # -----------------------------------------------------------------------------
@@ -215,7 +215,7 @@ EXPECTED_RULE_TEMPLATES=(
 RTMPL_FOUND=0
 RTMPL_MISSING=""
 for tmpl in "${EXPECTED_RULE_TEMPLATES[@]}"; do
-  if [ -f ".openskills/rules/templates/$tmpl" ]; then
+  if [ -f ".sumela/rules/templates/$tmpl" ]; then
     RTMPL_FOUND=$((RTMPL_FOUND + 1))
   else
     RTMPL_MISSING="$RTMPL_MISSING $tmpl"
@@ -231,17 +231,17 @@ fi
 # -----------------------------------------------------------------------------
 # 7. Memory plugins README
 # -----------------------------------------------------------------------------
-if [ -f ".openskills/memory-plugins/README.md" ]; then
+if [ -f ".sumela/memory-plugins/README.md" ]; then
   pass "Memory plugins README"
 else
-  fail "Memory plugins README — .openskills/memory-plugins/README.md not found"
+  fail "Memory plugins README — .sumela/memory-plugins/README.md not found"
 fi
 
 # -----------------------------------------------------------------------------
 # 8. Plugin SKILL.md files
 # -----------------------------------------------------------------------------
 for plugin in qdrant-session-memory graphify-code-graph; do
-  if [ -f ".openskills/memory-plugins/$plugin/SKILL.md" ]; then
+  if [ -f ".sumela/memory-plugins/$plugin/SKILL.md" ]; then
     pass "Plugin skill: $plugin"
   else
     fail "Plugin skill: $plugin — SKILL.md not found"
