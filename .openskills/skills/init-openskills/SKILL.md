@@ -131,6 +131,58 @@ Is this correct? Anything that needs fixing?
 
 **WAIT for user confirmation.** If user says "2", ask which part to correct and re-analyze. If user says "3", abort.
 
+## PHASE 2a — Language Configuration (MANDATORY)
+
+After the user confirms the analysis, MUST ask about language preferences. NEVER skip this step — these settings control how the agent communicates, names code, and writes documentation.
+
+```
+## 🌐 Language Configuration
+
+The agent needs to know your language preferences for three different contexts:
+
+### 1. Interaction Language
+What language should the agent use when talking to you?
+(Explanations, questions, status reports, error messages, handoff prompts)
+
+Examples: English, Turkish, German, Spanish, Japanese, Chinese, French, Portuguese
+
+Your choice: ___
+
+### 2. Code Naming Language
+What language should code names be in?
+(Service names, method names, function names, class names, variable names, file names)
+
+Most teams use English for code names regardless of their interaction language.
+Examples: English, Turkish, German
+
+Your choice: ___
+
+### 3. Code Documentation Language
+What language should code comments and documentation be in?
+(Docstrings, inline comments, XML doc comments, property descriptions, README sections within code)
+
+Examples: English, Turkish, German, Spanish, Japanese
+
+Your choice: ___
+```
+
+**Store the answers as:**
+- `INTERACTION_LANGUAGE` → e.g., "English", "Turkish", "German"
+- `NAMING_LANGUAGE` → e.g., "English", "Turkish"
+- `DOCUMENTATION_LANGUAGE` → e.g., "English", "Turkish", "German"
+
+**Common configurations:**
+
+| Scenario | Interaction | Naming | Documentation |
+|---|---|---|---|
+| International team | English | English | English |
+| Turkish team, English code | Turkish | English | English |
+| Turkish team, Turkish code | Turkish | Turkish | Turkish |
+| German team, English code | German | English | German |
+| Japanese team, English code | Japanese | English | Japanese |
+
+**Default suggestion:** If the user seems unsure, suggest "English" for all three — it's the most portable choice.
+
 ## PHASE 2b — Memory Plugin Selection (MANDATORY)
 
 After the user confirms the analysis, MUST ask about optional memory plugins. NEVER skip this step.
