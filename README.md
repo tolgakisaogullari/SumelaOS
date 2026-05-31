@@ -26,7 +26,8 @@ Bu projeye OpenSkills agent framework'ü kur. Adımlar:
 3. docs/second-brain/template/ dizinini docs/second-brain/ olarak kopyala, boş dizinler için .gitkeep oluştur
 4. Klonladığın geçici dizini sil
 5. /initOpenSkills çalıştır — projenin stack'ini, mimarisini, convention'larını otomatik tespit et
-6. Memory plugin'leri (Qdrant, Graphify) için kullanıcıya sor — istemezse kurma, istemezse de ilgili script'leri çalıştırma
+6. Dil tercihlerini sor: (a) Agent ile hangi dilde konuşulsun? (b) Kod isimleri hangi dilde olsun? (c) Kod açıklamaları hangi dilde olsun?
+7. Memory plugin'leri (Qdrant, Graphify) için kullanıcıya sor — istemezse kurma, istemezse de ilgili script'leri çalıştırma
 
 Her şeyi otomatik yap, manuel adım bırakma.
 ```
