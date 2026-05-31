@@ -48,9 +48,13 @@ python .openskills/memory-plugins/qdrant-session-memory/scripts/session-ingest.p
 | `setup-qdrant.py` | Create Qdrant collections (idempotent) |
 | `session-ingest.py` | Ingest a session summary markdown into Qdrant |
 | `query-qdrant.py` | Semantic search over session history |
+| `ingest-code-to-qdrant.py` | Ingest source code files into `code_chunks` collection |
+| `ingest-wiki-to-qdrant.py` | Ingest wiki pages into `wiki_pages` collection |
+| `lib/memory_ingest.py` | Shared helpers (chunking, embedding, deterministic IDs) |
 
 ## Graceful Degradation
 
 If Qdrant is unavailable:
 - `session-ingest.py` prints a warning and exits 0 (markdown summary is preserved)
 - `query-qdrant.py` prints a failure report and exits 1 (agent falls back to Tier-3)
+- `ingest-code-to-qdrant.py` and `ingest-wiki-to-qdrant.py` print failure reports and exit 1

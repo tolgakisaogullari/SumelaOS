@@ -66,6 +66,37 @@ These triggers require an explicit user query:
 - Requires: Ollama (qwen3-embedding:0.6b), Qdrant on localhost:6333
 - If Qdrant unavailable: session summary remains as markdown only (no data loss)
 
+## Code Ingestion (Background)
+- Run periodically or after significant code changes:
+  ```
+  python .openskills/memory-plugins/qdrant-session-memory/scripts/ingest-code-to-qdrant.py
+  ```
+- Walks `src/` for code files (`.cs`, `.ts`, `.tsx`, `.py`, `.go`, `.rs`, `.java`, `.js`, `.jsx`)
+- Excludes build artifacts, dependencies, generated files, and secrets
+- Upserts into Qdrant `code_chunks` collection
+- Configurable via env vars: `SRC_DIR`, `CODE_PATTERNS`, `CODE_CHUNKS_COLLECTION`
+
+## Wiki Ingestion (Background)
+- Run periodically or after wiki updates:
+  ```
+  python .openskills/memory-plugins/qdrant-session-memory/scripts/ingest-wiki-to-qdrant.py
+  ```
+- Walks `docs/second-brain/wiki/` for `.md` files (excluding special files like `_INDEX.md`, `_LOG.md`)
+- Parses YAML frontmatter for metadata
+- Upserts into Qdrant `wiki_pages` collection
+- Configurable via env vars: `WIKI_DIR`, `WIKI_PAGES_COLLECTION`
+
+## Scripts Reference
+
+| Script | Purpose | When to Run |
+|---|---|---|
+| `setup-qdrant.py` | Create Qdrant collections | Once during setup |
+| `session-ingest.py` | Ingest session summary | After each context-handoff |
+| `query-qdrant.py` | Semantic search over sessions | On-demand (proactive + reactive) |
+| `ingest-code-to-qdrant.py` | Ingest source code files | After significant code changes |
+| `ingest-wiki-to-qdrant.py` | Ingest wiki pages | After wiki updates |
+| `lib/memory_ingest.py` | Shared helpers (chunk, embed, ID) | Used by other scripts |
+
 ## Prerequisites
 - Python 3.10+
 - `pip install -r .openskills/memory-plugins/qdrant-session-memory/requirements.txt`
