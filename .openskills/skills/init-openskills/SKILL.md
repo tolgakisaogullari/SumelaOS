@@ -131,6 +131,40 @@ Bu doğru mu? Düzeltilmesi gereken bir şey var mı?
 
 **WAIT for user confirmation.** If user says "2", ask which part to correct and re-analyze. If user says "3", abort.
 
+## PHASE 2b — Memory Plugin Selection (MANDATORY)
+
+After the user confirms the analysis, MUST ask about optional memory plugins. NEVER skip this step.
+
+```
+## 🧩 Opsiyonel Memory Plugin'leri
+
+OpenSkills framework'ü iki opsiyonel memory plugin'i ile gelir. Bunlar agent'ın
+geçmiş session'lardan ve kod yapısından öğrenmesini sağlar. Kurmak istediklerini seç:
+
+| Plugin | Ne Yapıyor | Gereksinimler |
+|---|---|---|
+| **Qdrant Session Memory** (Tier-1) | Geçmiş session'ları semantic search ile bulur. "Daha önce ne karar verdik?" sorularını yanıtlar. Kod ve wiki dosyalarını indexler. | Python 3.10+, Qdrant, Ollama (qwen3-embedding:0.6b) |
+| **Graphify Code Graph** (Tier-2) | Kod çağrı grafiğini analiz eder. "X nerede kullanılıyor?" ve "X'i değiştirsem ne etkilenir?" sorularını yanıtlar. | Python 3.10+, graphify CLI (uv tool install graphifyy) |
+
+Bu plugin'ler olmadan da framework çalışır — Tier-3 (wiki search) ve Tier-4 (grep fallback) her zaman aktif.
+
+1. Her ikisini de kur (Qdrant + Graphify)
+2. Sadece Qdrant'ı kur
+3. Sadece Graphify'ı kur
+4. Hiçbirini kurma (sadece core framework)
+```
+
+**WAIT for user choice.** Store the selection as `PLUGIN_CHOICE`.
+
+**Conditional logic based on PLUGIN_CHOICE:**
+
+- If "1" (both): Copy both `.openskills/memory-plugins/qdrant-session-memory/` and `.openskills/memory-plugins/graphify-code-graph/` directories. Run `setup-qdrant.py` if Qdrant is available. Run `graphify .` if graphify is installed.
+- If "2" (qdrant only): Copy only `.openskills/memory-plugins/qdrant-session-memory/`. Run `setup-qdrant.py` if Qdrant is available. Do NOT copy graphify plugin.
+- If "3" (graphify only): Copy only `.openskills/memory-plugins/graphify-code-graph/`. Run `graphify .` if graphify is installed. Do NOT copy qdrant plugin.
+- If "4" (none): Do NOT copy `.openskills/memory-plugins/` directory at all. Remove memory-plugins references from SKILL_REGISTRY.md in the generated copy.
+
+**IMPORTANT:** If user declines a plugin, do NOT copy its scripts, do NOT register it in SKILL_REGISTRY.md, and do NOT run any of its scripts. The agent should not reference unavailable plugins in generated files.
+
 ## PHASE 3 — File Generation (after confirmation)
 
 Generate all configuration files. Present a checklist:
@@ -215,7 +249,7 @@ All checks must pass.
 1. Oluşturulan dosyaları incele ve gerekirse özelleştir
 2. İlk session'da agent автоматik olarak Context Manifest basacak
 3. `/evolve` ile self-improvement döngüsünü başlat
-4. (Opsiyonel) Memory plugin'leri aktive et
+4. (Opsiyonel) Memory plugin'leri aktive et — `/initOpenSkills` sırasında sormuş olmalı
 
 ### Git
 Tüm dosyalar staged. Commit etmek ister misin?
