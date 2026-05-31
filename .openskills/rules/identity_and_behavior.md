@@ -33,10 +33,10 @@ forbidden, even when budget is plentiful.
 
 ## Why
 
-Session 2026-04-17 karpathy-full-qmd-ide-agnostic execution hit rate-limit
-quotas twice mid-dispatch (at T1 and T7). The resulting 5-hour wait disrupted
-the user's timeline. A per-task pause-gate gives the user continuous control
-over spend velocity and creates clean resume points if a session does exhaust.
+Long-running agent sessions can exhaust rate-limit quotas mid-dispatch, causing
+disruptions. A per-task pause-gate gives the user continuous control over spend
+velocity and creates clean resume points if a session does exhaust. Without this
+gate, the user loses visibility into cost and cannot intervene before hitting limits.
 
 ## How to apply
 
@@ -45,24 +45,15 @@ After Stage-2 Quality Review returns "Ready to commit":
 1. Mark task complete in TodoWrite.
 2. Summarize what was done in 3-5 bullets.
 3. Describe the next task in 2-3 sentences.
-4. Present three options:
+4. Present four options:
    - (1) Continue — dispatch next implementer
-   - (2) Handoff prompt — offer a fresh-session continuation prompt
-   - (3) Something else — open-ended pause
+   - (2) Independent review — review completed work with a fresh subagent
+   - (3) Handoff prompt — offer a fresh-session continuation prompt
+   - (4) Something else — open-ended pause
 5. Wait for user's explicit yes/no. DO NOT auto-dispatch.
 
 ## Proactive handoff offering
 
 If remaining rate-limit budget is ambiguous or near exhaustion, the orchestrator
-SHOULD proactively offer option (2) even when the user has not asked. The goal
+SHOULD proactively offer option (3) even when the user has not asked. The goal
 is to prevent mid-task interruptions, which are the costliest failure mode.
-
-## Evidence
-
-Quote (user, 2026-04-17): "ask me before starting a new one after each task
-because I don't want to wait 5 hours if the limit runs out again; when a task
-is done, if I see we don't have enough limit, I'll ask you for an explanatory
-prompt so I can continue from where we left off with another agent."
-
-Captured as: IMP-006 (2026-04-17) — self-improvement-curator signal.
-Applied: 2026-04-17 via /evolve (double approval).

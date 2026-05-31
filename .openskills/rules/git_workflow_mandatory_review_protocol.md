@@ -24,8 +24,6 @@
 
 # Windows CMD Worktree Path Navigation
 
-> **Learned rule** — IMP-007 · Detected: 2026-04-17 · Confidence: high
-
 On Windows cmd.exe, when navigating to git worktree paths, use
 `cd e:\path\to\worktree` (without /d flag, without quotes) instead of
 `cd /d "e:\path\to\worktree"`. The `/d` flag combined with quoted paths
@@ -35,12 +33,10 @@ same line, use `&&` chaining: `cd e:\path && git add .`
 
 # Windows CMD: git commit with Special Characters
 
-> **Learned rule** — IMP-018 · Detected: 2026-04-19 · Confidence: high
-
 ## Rule (Agent CLI Workflow)
 
 `git commit -m` fails on Windows CMD when the message contains em-dashes (`—`),
-Turkish characters, or parentheses — the shell misparses them as file arguments,
+non-ASCII characters, or parentheses — the shell misparses them as file arguments,
 producing `pathspec '...' did not match any file(s)`.
 
 **Agent solution — temp file pattern:**
@@ -57,14 +53,10 @@ del .commit_msg.txt
 
 **Why not `git commit -m`?** CMD cannot reliably escape em-dashes or multi-line
 strings. The temp-file approach is the only safe path for agent CLI commits with
-rich messages.
-
-> IMP-003 (same root cause) was rejected for the human workflow in favor of VS Code
-> Source Control. This rule targets **agent CLI** commits exclusively.
+rich messages. This rule targets **agent CLI** commits exclusively — human
+developers can use IDE source control.
 
 # Stash Lifecycle Transparency
-
-> **Learned rule** — IMP-025 · Detected: 2026-04-26 · Confidence: medium
 
 When stashing dirty work during branch finish/merge flows:
 
