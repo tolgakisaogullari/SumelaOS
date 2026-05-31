@@ -36,7 +36,7 @@ After completing the current task unit, when trigger conditions are met:
 
 1. **Assess current state:**
    - Is there an active sprint plan? (Check `docs/second-brain/artifacts/plans/` if not in context.)
-     - **If the sprint plan or recent session context is missing from working memory, run the four-tier decision tree before proceeding:** `python scripts/query-qdrant.py "<topic>" --limit 3` for session summaries (Tier 1), then `_SEARCH_INDEX.md` for wiki pages (Tier 3). Do NOT rely solely on manual file reads for historical context.
+     - **If the sprint plan or recent session context is missing from working memory, run the four-tier decision tree before proceeding:** `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<topic>" --limit 3` for session summaries (Tier 1), then `_SEARCH_INDEX.md` for wiki pages (Tier 3). Do NOT rely solely on manual file reads for historical context.
    - Is the current task FULLY DONE or IN PROGRESS?
    - Did the active sprint/project state change? If yes, is `wiki/active-project-context.md` up to date? If no, the session summary + `_SEARCH_INDEX.md` update may be the correct persistent artifact.
    - Run `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count (PowerShell) or grep -c (bash)` to get the pending count — do NOT read the full file.
@@ -173,7 +173,7 @@ Context-handoff sırasında agent manuel karar yükünü kullanıcıya atmadan a
 
 2. **Qdrant'a Otomatik Indexle**
    ```bash
-   python scripts/session-ingest.py docs/second-brain/wiki/session-summaries/YYYY-MM-DD-topic.md
+   python .openskills/memory-plugins/qdrant-session-memory/scripts/session-ingest.py docs/second-brain/wiki/session-summaries/YYYY-MM-DD-topic.md
    ```
    Bu script:
    - Markdown'ı chunk'lar (512 token, 50 overlap)
@@ -187,7 +187,7 @@ Context-handoff sırasında agent manuel karar yükünü kullanıcıya atmadan a
 
 3. **Graphify + Qdrant Bakımı (Koşullu — Code/Memory Sync Sonu)**
    ```bash
-   python scripts/auto-update-memory.py
+   python .openskills/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py
    ```
    **Ne zaman çalışır:**
    - Code changes landed, a branch finish/code-commit occurred, or Graphify call graph can be stale.
@@ -211,7 +211,7 @@ Context-handoff sırasında agent manuel karar yükünü kullanıcıya atmadan a
    Eğer koşullar oluşmadığı için script çalıştırılmadıysa, handoff'ta kısa ve açık yaz: "Graphify/wiki memory maintenance çalıştırılmadı; bu handoff yalnızca session summary + search index güncelledi."
 
 **Qdrant Query Tool — Session-to-Session Bridge:**
-Session summary'ler Qdrant'a indexlendikten sonra, bir sonraki session bu geçmişe `python scripts/query-qdrant.py "<soru>" --limit 3` ile semantic search yaparak erişebilir. Bu, REASONING AID workflow'unun Tier 1'ini oluşturur.
+Session summary'ler Qdrant'a indexlendikten sonra, bir sonraki session bu geçmişe `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<soru>" --limit 3` ile semantic search yaparak erişebilir. Bu, REASONING AID workflow'unun Tier 1'ini oluşturur.
 
 **Kural:** Kullanıcıdan asla "Graphify/Qdrant güncelleyeyim mi?" diye sorulmaz. Session summary ingestion her handoff'ta çalışır. `auto-update-memory.py` ise yalnızca yukarıdaki koşullar oluştuğunda çalışır; gereksiz çalıştırılıp `_LOG.md` veya wiki yüzeylerinde sahte bakım izi üretmemelidir. Hata olursa kullanıcıya bildirilir; başarı veya bilinçli skip durumunda da agent kısa bir Türkçe özet rapor sunmalıdır.
 </session_memory_ingestion>

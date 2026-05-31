@@ -173,6 +173,18 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 <path>.openskills/skills/init-openskills/SKILL.md</path>
 </skill>
 
+<skill activation="lazy">
+<name>qdrant-session-memory</name>
+<description>Use when answering questions about past decisions, prior sessions, or 'why' questions — semantic search over Qdrant session history. Also use for code and wiki ingestion into Qdrant. Activates Tier-1 routing.</description>
+<path>.openskills/memory-plugins/qdrant-session-memory/SKILL.md</path>
+</skill>
+
+<skill activation="lazy">
+<name>graphify-code-graph</name>
+<description>Use when answering questions about function callers/callees, code dependencies, impact analysis, or 'who calls X' — structural search over Graphify code graph. Activates Tier-2 routing.</description>
+<path>.openskills/memory-plugins/graphify-code-graph/SKILL.md</path>
+</skill>
+
 <skill activation="eager">
 <name>context-handoff</name>
 <description>Use when context compaction warnings appear, after 8+ major tool sequences, after 3+ large file reads plus 2+ review cycles, when a sprint task closes mid-session with more work pending, or when the user asks for a handoff prompt, says 'context doldu mu', 'yeni session', 'handoff hazırla'.</description>

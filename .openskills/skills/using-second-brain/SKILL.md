@@ -154,10 +154,10 @@ There is NO separate "user query" vs "agent reasoning" branch. Same tiers, same 
 
 | Tier | System | Command | When |
 |---|---|---|---|
-| 1a | Qdrant `chat_history` | `python scripts/query-qdrant.py "<query>" --limit 3` | Past sessions, prior decisions, "geçen hafta", "daha önce" |
-| 1b | Qdrant `wiki_pages` | `python scripts/query-qdrant.py "<query>" --collection wiki_pages` | Curated knowledge — ADRs, entity defs, sprint plans (semantic) |
-| 1c | Qdrant `code_chunks` | `python scripts/query-qdrant.py "<query>" --collection code_chunks` | Source code semantic search (when Graphify lookup is too narrow) |
-| 2 | Graphify graph (read directly via `query-graph.py`) | `python scripts/query-graph.py "<symbol>"` (primary, surfaces ~1880 `calls` edges); `graphify query` / `explain` / `path` (secondary, cluster/community) | Function/class lookup, call graph, callers/callees, impact analysis |
+| 1a | Qdrant `chat_history` | `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --limit 3` | Past sessions, prior decisions, "geçen hafta", "daha önce" |
+| 1b | Qdrant `wiki_pages` | `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --collection wiki_pages` | Curated knowledge — ADRs, entity defs, sprint plans (semantic) |
+| 1c | Qdrant `code_chunks` | `python .openskills/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --collection code_chunks` | Source code semantic search (when Graphify lookup is too narrow) |
+| 2 | Graphify graph (read directly via `query-graph.py`) | `python .openskills/memory-plugins/graphify-code-graph/scripts/query-graph.py "<symbol>"` (primary, surfaces call edges); `graphify query` / `explain` / `path` (secondary, cluster/community) | Function/class lookup, call graph, callers/callees, impact analysis |
 | 3 | Obsidian `_SEARCH_INDEX.md` | Match keyword against Tags + Key Terms columns, then read matched pages | ADRs, sprint plans, entity definitions, documented patterns |
 | 4 | Grep / Read fallback | `grep` / `Select-String` / `Read` on known path | Exact string match when Tiers 1–3 return nothing |
 
@@ -203,7 +203,7 @@ Artifacts (`artifacts/plans/`, `artifacts/specs/`) live OUTSIDE the `wiki/` dire
 When finishing a coding task (via `finishing-a-development-branch`), treat it as an INGEST operation:
 - Update `wiki/active-project-context.md` with the new codebase state.
 - Append a `code-commit` entry to `_LOG.md` detailing the architectural changes or bug fixes.
-- **AUTOMATIC MEMORY SYNC:** Run `python scripts/auto-update-memory.py` after every code-commit or branch finish. This rebuilds the Graphify code graph, syncs insights to the wiki, and verifies Qdrant health with zero user intervention. NEVER ask the user for permission; only report errors if they occur.
+- **AUTOMATIC MEMORY SYNC:** Run `python .openskills/memory-plugins/graphify-code-graph/scripts/auto-update-memory.py` after every code-commit or branch finish. This rebuilds the Graphify code graph, syncs insights to the wiki, and verifies Qdrant health with zero user intervention. NEVER ask the user for permission; only report errors if they occur.
 - **USER REPORT (MANDATORY):** After the script executes, read its stdout output (specifically the `MEMORY UPDATE REPORT` block) and present a brief Turkish summary to the user so they know the memory stack was maintained. Example:
   > "Bellek bakımı tamamlandı. Graphify kod graph'ı güncellendi, wiki senkronizasyonu tamam, Qdrant ulaşılabilir durumda."
 </development_context_hook>
