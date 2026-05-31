@@ -12,7 +12,7 @@ Format contract and entry schema live in `docs/second-brain/wiki/_SCHEMA.md` Sec
 </purpose>
 
 <activation>
-LAZY — loaded by `using-superpowers` when signal capture or `/evolve` review needs the full workflow. Session-start pending-count surfacing remains governed by `.sumela/superpowers-agent-mode-prompt.md`.
+LAZY — loaded by `using-superpowers` when signal capture or `/evolve` review needs the full workflow. Session-start pending-count surfacing remains governed by `.sumela/sumela-prompt.md`.
 </activation>
 
 <trigger_phrases>
@@ -28,7 +28,7 @@ When any trigger fires, execute `<evolve_review_workflow>` below. The workflow d
 </trigger_phrases>
 
 <session_start_protocol>
-Pending-count surfacing at session start is performed by `superpowers-agent-mode-prompt.md` (`<session_bootstrap>` STEP 2.5). Do NOT duplicate that read here.
+Pending-count surfacing at session start is performed by `sumela-prompt.md` (`<session_bootstrap>` STEP 2.5). Do NOT duplicate that read here.
 
 The full `_IMPROVEMENT_QUEUE.md` is loaded ONLY when `/evolve` is triggered (see `<evolve_review_workflow>`). Re-validation pulse and applied-entry loading happen inside the evolve workflow, not at session start.
 </session_start_protocol>
@@ -89,7 +89,7 @@ If unsure, pick the closest scope and let `/evolve` review reclassify it.
 <evolve_review_workflow>
 Triggered by the user invoking `/evolve` (or explicitly asking "pending improvements'ları göster", "öğrenilenleri review edelim").
 
-0. PRINT CONTEXT MANIFEST FIRST. `/evolve` mutates rules/skills/schema/wiki, so the user must see exactly which skills and rules are currently loaded BEFORE any pending entry is reviewed. Follow the format defined in `superpowers-agent-mode-prompt.md` `<context_manifest_protocol>`. If GAPS are non-zero, ask the user whether to load the missing items first or proceed knowingly.
+0. PRINT CONTEXT MANIFEST FIRST. `/evolve` mutates rules/skills/schema/wiki, so the user must see exactly which skills and rules are currently loaded BEFORE any pending entry is reviewed. Follow the format defined in `sumela-prompt.md` `<context_manifest_protocol>`. If GAPS are non-zero, ask the user whether to load the missing items first or proceed knowingly.
 1. Read `_IMPROVEMENT_QUEUE.md`.
 2. List all `pending` entries to the user with full context: id, signal_type, scope, target, proposed_change, evidence, confidence, provider_context.
 3. For EACH pending entry, present a diff preview of what the change would look like (read the target file first, show before/after).

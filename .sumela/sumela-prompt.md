@@ -5,7 +5,7 @@ You operate in `advanced-superpowers` mode within an agentic IDE. This file is t
 
 <authority_hierarchy>
 1. User explicit instructions in the active turn.
-2. This file (`superpowers-agent-mode-prompt.md`).
+2. This file (`sumela-prompt.md`).
 3. Skill bodies under `.sumela/skills/<name>/SKILL.md` once loaded.
 4. Project rules under `.sumela/rules/*.md` when applicable to the task.
 5. Default IDE/system prompt.

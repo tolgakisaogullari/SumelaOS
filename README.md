@@ -2,6 +2,22 @@
 
 A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 27 universal skills, structured rules, and a living knowledge base from the first session.
 
+## Why SumelaOS?
+
+In 386 AD, two Athenian monks climbed a nearly vertical cliff in the Pontic Mountains of Trabzon, Turkey. At 1,200 meters elevation, they built a monastery that would endure for over 1,600 years.
+
+Sumela Monastery was not built on safe ground. It clings to a steep rock face, defying gravity. Despite facing destruction over the centuries, it was persistently rebuilt and restored, standing as a testament to resilience. 
+
+The name "Sumela" comes from the Greek "Sou Melá" — "of the black mountain," referring to the dark rock beneath it. 
+
+This project carries that spirit:
+- **Built on difficult terrain.** AI agents work in complex, messy codebases — not ideal conditions.
+- **Resilient through destruction.** Sessions end, context is lost, knowledge disappears. SumelaOS preserves it.
+- **Rebuilt, never abandoned.** Every session learns from the last. The `/evolve` command captures friction and applies corrections — the monastery is always being restored.
+- **Structured on the cliff.** Skills, rules, and knowledge layers are the architectural scaffolding that holds everything together.
+
+Like the monks who built Sumela on impossible ground, we build agent workflows on the unpredictable foundation of AI — and make them last.
+
 ## Quick Start
 
 ### New Projects (Template)
@@ -62,6 +78,19 @@ Then run `/initSumelaOS` in your AI assistant.
 - **Self-improvement loop** — `/evolve` command captures corrections and friction signals
 - **Setup automation** — `setup.sh` / `setup.ps1` with interactive and non-interactive modes
 - **Auto-detection** — `/initSumelaOS` scans your existing project and generates configuration automatically
+
+## The Sumela Prompt — Your Agent's Constitution
+
+The most important file in this framework is `.sumela/sumela-prompt.md`. It is the **runtime contract** — the single source of truth that governs how your agent behaves across every session and every IDE.
+
+This file defines:
+- **Session bootstrap** — what the agent reads when a session starts
+- **Skill and rule loading** — which workflows and constraints are active
+- **Information gap routing** — how the agent searches for context (Qdrant, Graphify, wiki, grep)
+- **Signal capture** — how the agent learns from corrections and friction
+- **Context manifest** — what the agent shows you at session start
+
+Every other file in `.sumela/` defers to this prompt when instructions conflict. **You don't need to edit it** — it works out of the box. But if you want to customize how your agent behaves at the deepest level, this is where you do it.
 
 ## Architecture
 

@@ -222,7 +222,7 @@ After session summaries are indexed to Qdrant, the next session can semantically
 Present the filled template inside a fenced code block so the user can copy-paste it directly into a new session.
 
 ````
-@.sumela/superpowers-agent-mode-prompt.md
+@.sumela/sumela-prompt.md
 
 ## Session Handoff — {DATE}
 

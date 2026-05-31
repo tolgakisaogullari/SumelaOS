@@ -220,7 +220,7 @@ The agent (or human) reads these files in order on the first session:
 
 The agent will automatically:
 
-1. **Run the full bootstrap sequence** (per `superpowers-agent-mode-prompt.md`):
+1. **Run the full bootstrap sequence** (per `sumela-prompt.md`):
    - Read `SKILL_REGISTRY.md` + `RULE_REGISTRY.md`
    - Read `_INDEX.md` + `active-project-context.md`
    - Check `_IMPROVEMENT_QUEUE.md` pending count
@@ -285,7 +285,7 @@ After copying the template, customize these project-specific values:
 
 ## 8. First Session Expectations
 
-When an agent loads the project for the first time after adoption, it runs the full bootstrap sequence (defined in `superpowers-agent-mode-prompt.md`):
+When an agent loads the project for the first time after adoption, it runs the full bootstrap sequence (defined in `sumela-prompt.md`):
 
 1. **Read discovery surfaces** — `SKILL_REGISTRY.md` + `RULE_REGISTRY.md`.
 2. **Second-brain init** — `_INDEX.md` → `active-project-context.md` → last 5 `_LOG.md` entries → pending count in `_IMPROVEMENT_QUEUE.md`.

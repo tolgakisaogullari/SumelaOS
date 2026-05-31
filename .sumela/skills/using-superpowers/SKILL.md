@@ -9,11 +9,11 @@ Run this dispatch loop BEFORE every response. Do NOT skip it for "simple" tasks.
 
 ## STEP 1 — Authority hierarchy (resolve conflicts)
 
-Order: user explicit instructions → `.sumela/superpowers-agent-mode-prompt.md` → loaded skill bodies → `.sumela/rules/*.md` → IDE default. User instructions ALWAYS override; the user is in control. If a skill body and the prompt file disagree on session bootstrap or signal capture, the prompt file wins. If a rule contradicts a loaded skill workflow, the skill wins for that workflow phase.
+Order: user explicit instructions → `.sumela/sumela-prompt.md` → loaded skill bodies → `.sumela/rules/*.md` → IDE default. User instructions ALWAYS override; the user is in control. If a skill body and the prompt file disagree on session bootstrap or signal capture, the prompt file wins. If a rule contradicts a loaded skill workflow, the skill wins for that workflow phase.
 
 ## STEP 2 — Signal capture from previous turn (silent)
 
-Apply `.sumela/superpowers-agent-mode-prompt.md` `<signal_capture>` exactly. High/medium-confidence `correction`, `confirmation`, `decision`, `friction`, or `challenge` signals load `self-improvement-curator` and create pending queue entries. Mutations still flow only through `/evolve`.
+Apply `.sumela/sumela-prompt.md` `<signal_capture>` exactly. High/medium-confidence `correction`, `confirmation`, `decision`, `friction`, or `challenge` signals load `self-improvement-curator` and create pending queue entries. Mutations still flow only through `/evolve`.
 
 ## STEP 3 — Information gap check (silent, BUT enforced via canonical contract)
 
@@ -84,7 +84,7 @@ GLOBAL SECURITY MANDATE — If the task involves planning, writing, or reviewing
 
 ## STEP 5b — Print Context Manifest (visibility checkpoint)
 
-Print the Context Manifest exactly when `.sumela/superpowers-agent-mode-prompt.md` `<context_manifest_protocol>` requires it: after bootstrap, phase transitions, high-stakes actions, `/evolve`, or explicit user request. The GAPS section is the lint layer; never skip a mandatory manifest.
+Print the Context Manifest exactly when `.sumela/sumela-prompt.md` `<context_manifest_protocol>` requires it: after bootstrap, phase transitions, high-stakes actions, `/evolve`, or explicit user request. The GAPS section is the lint layer; never skip a mandatory manifest.
 
 ## STEP 6 — Forbidden rationalizations
 

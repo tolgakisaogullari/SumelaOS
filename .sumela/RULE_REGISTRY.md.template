@@ -24,7 +24,7 @@ Selection logic:
 1. Determine the active PHASE from the active skill (see `<phase_definitions>`).
 2. Determine the active STACK SCOPE from file paths in the task / current worktree / sprint plan (see `<stack_scopes>`).
 3. Consult the `<phase_to_rule_matrix>` at the bottom of this file. Load every rule the matrix flags for the current phase + stack.
-4. Print a Context Manifest (per `superpowers-agent-mode-prompt.md` `<context_manifest_protocol>`) so the user can verify alignment.
+4. Print a Context Manifest (per `sumela-prompt.md` `<context_manifest_protocol>`) so the user can verify alignment.
 
 What is NOT in this registry:
 - The `self_improvement_protocol` rule file is a pointer to `self-improvement-curator/SKILL.md`. The full self-improvement contract lives in the skill, not the rule.
@@ -141,6 +141,6 @@ If `gaps` is non-empty after the agent settles into a phase, the Context Manifes
 Notes:
 - `infra` stack currently has no dedicated rule file. If infra-only work happens, fall back to `engineering_philosophy` + `operational_excellence_maintenance`.
 - A multi-stack task (e.g., a feature touching `backend` + `mobile`) loads BOTH stack rule files.
-- Phase transitions trigger a manifest reprint (per `superpowers-agent-mode-prompt.md` `<context_manifest_protocol>`).
+- Phase transitions trigger a manifest reprint (per `sumela-prompt.md` `<context_manifest_protocol>`).
 </phase_to_rule_matrix>
 </rules_system>

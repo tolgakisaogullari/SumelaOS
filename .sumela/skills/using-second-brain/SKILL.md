@@ -28,7 +28,7 @@ The `wiki/` directory has FIVE special files (frontmatter-free, governed by `_SC
 <trigger_conditions>
 Determine which workflow to execute based on these signals (highest specificity wins):
 
-- **Session start** → bootstrap reads + parity + queue count are governed by `.sumela/superpowers-agent-mode-prompt.md` (`<session_bootstrap>`). This skill is invoked LAZILY when an information gap appears or one of the triggers below fires.
+- **Session start** → bootstrap reads + parity + queue count are governed by `.sumela/sumela-prompt.md` (`<session_bootstrap>`). This skill is invoked LAZILY when an information gap appears or one of the triggers below fires.
 - **User says** "save", "add to wiki", "ingest", "note this", "remember this", "kaydet", "wiki'ye ekle" → INGEST workflow.
 - **User drops multiple sources** or says "batch ingest", "process all", "hepsini işle" → BATCH INGEST workflow.
 
@@ -138,7 +138,7 @@ All format rules — page types, YAML frontmatter schemas, naming conventions, p
 
 ## INFORMATION GAP RESOLUTION — Four-Tier Search (single canonical workflow)
 
-> **CANONICAL EAGER LAYER:** the trigger patterns, Hard Rule, concrete Tier-1 commands, score threshold (0.5), and Self-Check rule live in `.sumela/superpowers-agent-mode-prompt.md` `<information_gap_routing>` so that the routing fires BEFORE this lazy skill loads. This section provides the FULL OPERATIONAL DETAIL — multi-collection Qdrant routing (1a/1b/1c), Tier-2 Graphify commands, and the structural decision tree — when this skill is invoked for ingest / code-commit / lint workflows or when an information gap is deep enough to warrant the full tier walk.
+> **CANONICAL EAGER LAYER:** the trigger patterns, Hard Rule, concrete Tier-1 commands, score threshold (0.5), and Self-Check rule live in `.sumela/sumela-prompt.md` `<information_gap_routing>` so that the routing fires BEFORE this lazy skill loads. This section provides the FULL OPERATIONAL DETAIL — multi-collection Qdrant routing (1a/1b/1c), Tier-2 Graphify commands, and the structural decision tree — when this skill is invoked for ingest / code-commit / lint workflows or when an information gap is deep enough to warrant the full tier walk.
 >
 > If a contradiction appears between this section and the eager `<information_gap_routing>` block, the eager block wins (per `<authority_hierarchy>`).
 

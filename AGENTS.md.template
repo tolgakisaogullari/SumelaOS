@@ -78,7 +78,7 @@
 
 ## 6. Session Bootstrap
 
-The full bootstrap contract — eager-load order, `_LOG`/`_IMPROVEMENT_QUEUE` lightweight checks, un-ingested source parity, eager vs lazy skill list — lives in `.sumela/superpowers-agent-mode-prompt.md` (`<session_bootstrap>` section).
+The full bootstrap contract — eager-load order, `_LOG`/`_IMPROVEMENT_QUEUE` lightweight checks, un-ingested source parity, eager vs lazy skill list — lives in `.sumela/sumela-prompt.md` (`<session_bootstrap>` section).
 
 This file deliberately does NOT duplicate that content. Read the runtime contract there. If you ever see a discrepancy between this file and the runtime contract, the runtime contract wins.
 
@@ -90,14 +90,14 @@ This file deliberately does NOT duplicate that content. Read the runtime contrac
 - Canonical rule catalog lives in `.sumela/RULE_REGISTRY.md` — phase definitions, stack scopes, and the phase-to-rule matrix. Use it to decide which project rules to load for the current task.
 - If a required skill or rule is not in context, read its file via the `<path>` in the matching registry before executing.
 - Once loaded, the skill's `<execution_workflow>` is the absolute operating directive for that phase; rules are constraint layers applied across all subsequent actions.
-- Context Manifest is mandatory at session start, phase transitions, and before high-stakes actions. Spec lives in `superpowers-agent-mode-prompt.md` `<context_manifest_protocol>`.
-- Full runtime contract: `.sumela/superpowers-agent-mode-prompt.md`.
+- Context Manifest is mandatory at session start, phase transitions, and before high-stakes actions. Spec lives in `sumela-prompt.md` `<context_manifest_protocol>`.
+- Full runtime contract: `.sumela/sumela-prompt.md`.
 
 ---
 
 ## 8. Signal Capture (Self-Improvement Loop)
 
-Behavior contract lives in `.sumela/superpowers-agent-mode-prompt.md` (`<signal_capture>`) and `self-improvement-curator/SKILL.md`. Schema lives in `wiki/_SCHEMA.md` Section 15.
+Behavior contract lives in `.sumela/sumela-prompt.md` (`<signal_capture>`) and `self-improvement-curator/SKILL.md`. Schema lives in `wiki/_SCHEMA.md` Section 15.
 
 Review command: `/evolve`.
 
@@ -154,7 +154,7 @@ Prerequisites: Ollama (with `qwen3-embedding:0.6b`), Qdrant on `localhost:6333`,
 The agent control surface is split into two layers:
 
 **A. Project-agnostic core (copy verbatim — ZERO edits when adopting):**
-- `.sumela/superpowers-agent-mode-prompt.md` — runtime contract (single source of truth).
+- `.sumela/sumela-prompt.md` — runtime contract (single source of truth).
 - `.sumela/SKILL_REGISTRY.md` — skill catalog.
 - `.sumela/RULE_REGISTRY.md` — rule catalog + phase definitions + stack scopes + phase-to-rule matrix. Stack scope path-prefixes are project-specific so the new project edits the `<stack_scopes>` block; the rest of the file's structure is universal.
 - `.sumela/skills/*` — universal skill workflows.
@@ -163,7 +163,7 @@ The agent control surface is split into two layers:
 - `scripts/auto-update-memory.py`, `query-qdrant.py`, `query-graph.py`, `session-ingest.py`, `sync-graphify-to-obsidian.py`, `setup-qdrant.py`.
 
 **A.1. IDE subagent mirrors (kept in lockstep with the runtime contract):**
-- `.claude/agents/superpowers-agent-mode.md` (Claude Code) and `.opencode/agents/supermemo.md` (OpenCode) MIRROR the body of `.sumela/superpowers-agent-mode-prompt.md` verbatim. They were originally thin loaders ("read the canonical file first") but cross-LLM testing showed weaker models (e.g., Kimi K2.6) skip such directives, breaking the contract. The mirrored content guarantees the rules reach every model regardless of compliance variance.
+- `.claude/agents/superpowers-agent-mode.md` (Claude Code) and `.opencode/agents/supermemo.md` (OpenCode) MIRROR the body of `.sumela/sumela-prompt.md` verbatim. They were originally thin loaders ("read the canonical file first") but cross-LLM testing showed weaker models (e.g., Kimi K2.6) skip such directives, breaking the contract. The mirrored content guarantees the rules reach every model regardless of compliance variance.
 - **Maintenance contract:** when the canonical prompt changes, you MUST update both mirrors in the same commit. Each mirror carries an HTML comment at the top reminding the editor of this. A future improvement could automate the sync via a pre-commit hook; for now it is manual.
 - Other IDE pointer files (`.cursor/rules/00-agent.md`, `.trae/rules/00-agent.md`, `.kilocode/rules.md`, `.clinerules`, `CLAUDE.md`) remain thin pointers because their IDEs reliably follow the "read AGENTS.md" directive — no mirroring needed there.
 
