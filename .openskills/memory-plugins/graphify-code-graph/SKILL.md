@@ -5,6 +5,11 @@ description: "Use when answering questions about function callers/callees, code 
 
 # Tier-2: Graphify Code Graph
 
+## ⚠️ Installation (Correct Info — Do Not Use npm)
+
+The correct installation is `uv tool install graphifyy` (PyPI: `graphifyy`, double-y).
+**DO NOT** use `npm install -g @anthropic/graphify` (outdated) or `pip install graphify-code-graph` (non-existent).
+
 ## Important: No API Key Required for Queries
 
 All query operations (`query-graph.py`, `graphify query`, `graphify path`, `graphify explain`) read from the local `graphify-out/graph.json` file. They are **purely local** — no network calls, no API keys, no cost. API keys are only needed for initial graph BUILD from docs/PDFs/images (not for querying an existing graph).
