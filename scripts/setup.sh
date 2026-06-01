@@ -599,6 +599,27 @@ else:
 fi
 
 # =============================================================================
+# 7c. INSTALL GIT HOOKS (team memory sync — only when Qdrant plugin is enabled)
+# =============================================================================
+if [[ " ${PLUGINS[*]:-} " =~ " qdrant-session-memory" ]] && [ -d ".sumela/git-hooks" ]; then
+  info "Wiring git hooks for team memory sync..."
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    EXISTING_HOOKS_PATH="$(git config --local --get core.hooksPath 2>/dev/null || true)"
+    if [ -n "$EXISTING_HOOKS_PATH" ] && [ "$EXISTING_HOOKS_PATH" != ".sumela/git-hooks" ]; then
+      warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' — not overriding."
+      warn "To enable memory-sync, copy .sumela/git-hooks/post-* into '$EXISTING_HOOKS_PATH' or merge hook paths manually."
+    else
+      git config core.hooksPath .sumela/git-hooks
+      chmod +x .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
+      ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks)"
+    fi
+  else
+    warn "Not a git repository — skipping git hook setup."
+    warn "After 'git init', run: git config core.hooksPath .sumela/git-hooks"
+  fi
+fi
+
+# =============================================================================
 # 8. RUN VALIDATION
 # =============================================================================
 echo ""
@@ -633,6 +654,7 @@ echo "    - .sumela/rules/ (stack-specific rules)"
 echo "    - docs/second-brain/wiki/ (6 wiki pages)"
 [ ${#IDES[@]} -gt 0 ] && echo "    - IDE pointer files"
 [ ${#PLUGINS[@]} -gt 0 ] && echo "    - SKILL_REGISTRY.md (plugins appended)"
+[[ " ${PLUGINS[*]:-} " =~ " qdrant-session-memory" ]] && echo "    - git hooks wired (core.hooksPath = .sumela/git-hooks)"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit AGENTS.md — fill in project-specific commands and conventions"

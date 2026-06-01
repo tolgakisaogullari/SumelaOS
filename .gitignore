@@ -24,3 +24,5 @@ AGENTS.md
 RULE_REGISTRY.md
 docs/second-brain/wiki/
 .claude/
+# Memory-sync hook local log (per-developer)
+.sumela/.memory-sync.log

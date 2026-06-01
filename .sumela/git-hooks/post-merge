@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# post-merge — fires after `git merge` and after the merge step of `git pull`.
+# Re-ingests session summaries that arrived in this merge into the local Qdrant.
+#
+# NOTE: `git pull --rebase` does NOT trigger post-merge. Rebase-pull users get
+# coverage from post-checkout (HEAD moves) or can re-ingest manually; the
+# session bootstrap also surfaces summaries not yet in local memory.
+
+. "$(dirname "$0")/_lib.sh"
+
+# ORIG_HEAD = the pre-merge HEAD that git records before a merge.
+from="$(git rev-parse --verify --quiet ORIG_HEAD 2>/dev/null)"
+[ -n "$from" ] || from="HEAD^"
+
+sumela_memory_sync "$from" "HEAD"
+exit 0

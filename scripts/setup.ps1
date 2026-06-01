@@ -526,6 +526,32 @@ if ($PluginArray.Count -gt 0) {
 }
 
 # =============================================================================
+# 7c. INSTALL GIT HOOKS (team memory sync — only when Qdrant plugin is enabled)
+# =============================================================================
+if (($PluginArray -contains "qdrant-session-memory") -and (Test-Path ".sumela/git-hooks")) {
+    Write-Info "Wiring git hooks for team memory sync..."
+    $isGitRepo = $false
+    try { $null = & git rev-parse --is-inside-work-tree 2>$null; if ($LASTEXITCODE -eq 0) { $isGitRepo = $true } } catch { $isGitRepo = $false }
+    if ($isGitRepo) {
+        # .Trim() because `& git` keeps the trailing newline that bash $(...) strips;
+        # without it the idempotent re-run case would mis-fire the override warning.
+        $existingHooksPath = (& git config --local --get core.hooksPath 2>$null | Out-String).Trim()
+        if ($existingHooksPath -and $existingHooksPath -ne ".sumela/git-hooks") {
+            Write-Warn "core.hooksPath already set to '$existingHooksPath' — not overriding."
+            Write-Warn "To enable memory-sync, merge .sumela/git-hooks/post-* into '$existingHooksPath' manually."
+        }
+        else {
+            & git config core.hooksPath .sumela/git-hooks
+            Write-Ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks)"
+        }
+    }
+    else {
+        Write-Warn "Not a git repository — skipping git hook setup."
+        Write-Warn "After 'git init', run: git config core.hooksPath .sumela/git-hooks"
+    }
+}
+
+# =============================================================================
 # 8. RUN VALIDATION
 # =============================================================================
 Write-Host ""
@@ -576,6 +602,7 @@ Write-Host "    - .sumela/rules/ (stack-specific rules)"
 Write-Host "    - docs/second-brain/wiki/ (6 wiki pages)"
 if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
+if ($PluginArray -contains "qdrant-session-memory") { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks)" }
 Write-Host ""
 Write-Host "  Next steps:"
 Write-Host "    1. Edit AGENTS.md — fill in project-specific commands and conventions"

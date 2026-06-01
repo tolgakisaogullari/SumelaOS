@@ -210,8 +210,8 @@ The framework works without these plugins — Tier-3 (wiki search) and Tier-4 (g
 
 **Conditional logic based on PLUGIN_CHOICE:**
 
-- If "1" (both): Copy both `.sumela/memory-plugins/qdrant-session-memory/` and `.sumela/memory-plugins/graphify-code-graph/` directories. Run `setup-qdrant.py` if Qdrant is available. Run `graphify .` if graphify is installed.
-- If "2" (qdrant only): Copy only `.sumela/memory-plugins/qdrant-session-memory/`. Run `setup-qdrant.py` if Qdrant is available. Do NOT copy graphify plugin.
+- If "1" (both): Copy both `.sumela/memory-plugins/qdrant-session-memory/` and `.sumela/memory-plugins/graphify-code-graph/` directories. Run `setup-qdrant.py` if Qdrant is available. Run `graphify .` if graphify is installed. Wire git hooks (see Step 3.7).
+- If "2" (qdrant only): Copy only `.sumela/memory-plugins/qdrant-session-memory/`. Run `setup-qdrant.py` if Qdrant is available. Do NOT copy graphify plugin. Wire git hooks (see Step 3.7).
 - If "3" (graphify only): Copy only `.sumela/memory-plugins/graphify-code-graph/`. Run `graphify .` if graphify is installed. Do NOT copy qdrant plugin.
 - If "4" (none): Do NOT copy `.sumela/memory-plugins/` directory at all. Remove memory-plugins references from SKILL_REGISTRY.md in the generated copy.
 
@@ -269,6 +269,23 @@ Ask user which IDEs they use. Generate pointer files for selected IDEs.
 ### Step 3.6: Copy Second Brain Template
 
 Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
+
+### Step 3.7: Wire Git Hooks (only if the Qdrant plugin was enabled)
+
+The team memory-sync hooks (`post-merge`, `post-checkout`) re-ingest session
+summaries committed by teammates into each developer's local Qdrant on `git pull`.
+They are inert without the Qdrant plugin, so wire them ONLY when the Qdrant plugin
+was selected in PHASE 2b (choice 1 or 2):
+
+1. Confirm the project is a git repo: `git rev-parse --is-inside-work-tree`.
+2. Check for an existing hooks path: `git config --local --get core.hooksPath`.
+   - If it is set to something OTHER than `.sumela/git-hooks`, do NOT override —
+     warn the user that hook installation must be merged manually.
+   - Otherwise run: `git config core.hooksPath .sumela/git-hooks`
+3. Ensure the hooks are executable: `chmod +x .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout`
+4. Tell the user each teammate must run the `git config core.hooksPath` command
+   once per clone (hooks are not shared by git automatically), and that `setup.sh`
+   / `setup.ps1` do this step for them.
 
 ## PHASE 4 — Validation & Summary
 

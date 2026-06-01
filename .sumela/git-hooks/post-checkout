@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# post-checkout — fires after `git checkout`/`git switch` and after `git clone`.
+# Args: $1 = previous HEAD, $2 = new HEAD, $3 = 1 for a branch checkout (0 = file).
+# Covers branch switches and initial clone; complements post-merge.
+
+. "$(dirname "$0")/_lib.sh"
+
+prev="$1"
+new="$2"
+flag="$3"
+
+# Only branch checkouts (flag=1); ignore per-file checkouts.
+[ "$flag" = "1" ] || exit 0
+# No-op if HEAD did not actually move.
+[ "$prev" != "$new" ] || exit 0
+
+# On a fresh clone, prev is all-zeros. Diff the new HEAD against the empty tree
+# so every existing summary is treated as added (initial local population).
+case "$prev" in
+  *[!0]*) : ;;                 # contains a non-zero char -> a real previous HEAD
+  *)      prev="$SUMELA_EMPTY_TREE" ;;
+esac
+
+sumela_memory_sync "$prev" "$new"
+exit 0

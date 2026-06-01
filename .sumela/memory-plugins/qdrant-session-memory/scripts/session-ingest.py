@@ -11,7 +11,8 @@ What it does:
     2. Extracts structured metadata: session_date, topics, decisions, affected_files.
     3. Chunks the body (512 tokens, 50 overlap).
     4. Generates embeddings via Ollama (qwen3-embedding:0.6b).
-    5. Upserts chunks into Qdrant 'chat_history' collection with enriched payload.
+    5. Deletes any prior points for this session, then upserts the fresh chunks
+       into Qdrant 'chat_history' with enriched payload (idempotent re-ingest).
     6. Prints a structured status report for the agent to relay to the user.
 
 Payload schema per chunk:
@@ -34,6 +35,7 @@ import sys
 import os
 import re
 import uuid
+import hashlib
 import argparse
 from datetime import datetime
 from typing import List
@@ -79,7 +81,7 @@ except ImportError:
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import PointStruct
+    from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
 except ImportError:
     report_failure("Dependency", "qdrant-client not installed. Run: pip install qdrant-client")
     sys.exit(1)
@@ -99,6 +101,18 @@ DECISION_HEADERS = (
     re.compile(r"^##\s+Decisions?\s+Made\s*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^##\s+Decisions?\s*$", re.IGNORECASE | re.MULTILINE),
 )
+
+
+def deterministic_id(key: str, chunk_index: int) -> str:
+    """Process-independent point ID derived from (key, chunk_index).
+
+    Re-ingesting the same summary upserts (overwrites) the same points instead
+    of creating duplicates — this is what makes the post-merge ingest hook safe
+    to run on every pull. `key` is the session_id (summary filename without
+    extension), so summary filenames MUST be unique across the project.
+    """
+    hex_str = hashlib.sha256(f"{key}_{chunk_index}".encode("utf-8")).hexdigest()[:32]
+    return str(uuid.UUID(hex=hex_str))
 
 
 def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = OVERLAP) -> List[str]:
@@ -188,7 +202,8 @@ def main():
         if "session_topics" in fm
         else []
     )
-    session_id = os.path.basename(summary_path).replace(".md", "")
+    # splitext (not .replace) so filenames containing ".md" mid-name aren't mangled.
+    session_id = os.path.splitext(os.path.basename(summary_path))[0]
 
     decisions = extract_decisions(text)
     affected_files = extract_affected_files(text)
@@ -207,7 +222,7 @@ def main():
             chunk_files = extract_affected_files(chunk) or affected_files
             points.append(
                 PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=deterministic_id(session_id, i),
                     vector=embedding,
                     payload={
                         "text": chunk,
@@ -221,9 +236,22 @@ def main():
                     },
                 )
             )
+        # Delete any prior points for this session BEFORE upserting fresh ones.
+        # Deterministic IDs make re-ingest overwrite indices 0..N-1, but if an
+        # edited summary now yields FEWER chunks, the old higher-index points
+        # would be orphaned. Delete-by-session_id then upsert guarantees the
+        # collection exactly mirrors the current summary — which is what the
+        # post-merge ingest hook relies on. Embeddings are computed above, so by
+        # the time we delete we are committed to a successful re-insert.
+        client.delete(
+            collection_name=args.collection,
+            points_selector=Filter(
+                must=[FieldCondition(key="session_id", match=MatchValue(value=session_id))]
+            ),
+        )
         client.upsert(collection_name=args.collection, points=points)
         qdrant_ok = True
-        print(f"[session-ingest] Upserted {len(points)} chunks to Qdrant '{args.collection}'.")
+        print(f"[session-ingest] Replaced session '{session_id}' with {len(points)} chunks in Qdrant '{args.collection}'.")
     except Exception as e:
         print(f"[session-ingest] WARNING: Qdrant upsert failed: {e}")
         print("[session-ingest] Fallback: markdown summary already exists; will retry on next run.")
