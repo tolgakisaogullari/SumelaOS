@@ -44,6 +44,9 @@
     Governance mode: solo (apply /evolve changes directly) or team (PR-gate the
     agent-control surface). Default: solo.
 
+.PARAMETER NoCi
+    Skip creating the GitHub Actions validation workflow.
+
 .EXAMPLE
     pwsh -File scripts/setup.ps1
 
@@ -63,7 +66,8 @@ param(
     [string]$RuleVariant = "best-practice",
     [string]$Plugins = "",
     [string]$IDEs = "",
-    [string]$Governance = "solo"
+    [string]$Governance = "solo",
+    [switch]$NoCi
 )
 
 $ErrorActionPreference = "Stop"
@@ -558,10 +562,13 @@ if ($PluginArray.Count -gt 0) {
 }
 
 # =============================================================================
-# 7c. INSTALL GIT HOOKS (team memory sync — only when Qdrant plugin is enabled)
+# 7c. INSTALL GIT HOOKS (core.hooksPath — pre-commit validation + memory sync)
 # =============================================================================
-if (($PluginArray -contains "qdrant-session-memory") -and (Test-Path ".sumela/git-hooks")) {
-    Write-Info "Wiring git hooks for team memory sync..."
+# Wired whenever the project is a git repo: pre-commit validation is useful for
+# everyone, and the memory hooks self-gate (no-op without Qdrant + summaries).
+$HooksWired = $false
+if (Test-Path ".sumela/git-hooks") {
+    Write-Info "Wiring git hooks (pre-commit validation + memory sync)..."
     $isGitRepo = $false
     try { $null = & git rev-parse --is-inside-work-tree 2>$null; if ($LASTEXITCODE -eq 0) { $isGitRepo = $true } } catch { $isGitRepo = $false }
     if ($isGitRepo) {
@@ -570,11 +577,12 @@ if (($PluginArray -contains "qdrant-session-memory") -and (Test-Path ".sumela/gi
         $existingHooksPath = (& git config --local --get core.hooksPath 2>$null | Out-String).Trim()
         if ($existingHooksPath -and $existingHooksPath -ne ".sumela/git-hooks") {
             Write-Warn "core.hooksPath already set to '$existingHooksPath' — not overriding."
-            Write-Warn "To enable memory-sync, merge .sumela/git-hooks/post-* into '$existingHooksPath' manually."
+            Write-Warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$existingHooksPath' manually."
         }
         else {
             & git config core.hooksPath .sumela/git-hooks
-            Write-Ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks)"
+            $HooksWired = $true
+            Write-Ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks) — pre-commit validation active (bypass: git commit --no-verify)"
         }
     }
     else {
@@ -606,6 +614,53 @@ if ($Governance -eq "team") {
         Add-Content $codeownersFile "/.sumela/git-hooks/                 @OWNER"
         Add-Content $codeownersFile "/docs/second-brain/wiki/_SCHEMA.md  @OWNER"
         Write-Ok "CODEOWNERS updated ($codeownersFile) — replace @OWNER with your handle"
+    }
+}
+
+# =============================================================================
+# 7e. CI WORKFLOW — run validate-structure on push/PR (skip with -NoCi)
+# =============================================================================
+if (-not $NoCi) {
+    $ciFile = ".github/workflows/sumela-validate.yml"
+    if (Test-Path $ciFile) {
+        Write-Ok "CI workflow already present ($ciFile)"
+    }
+    else {
+        Write-Info "Adding CI validation workflow ($ciFile)..."
+        if (-not (Test-Path ".github/workflows")) { New-Item -ItemType Directory -Path ".github/workflows" -Force | Out-Null }
+        $ciContent = @'
+name: SumelaOS Validate
+
+# Enforces the SumelaOS structure contract on every push / PR. Mirrors
+# scripts/validate-structure.sh — the same check the pre-commit hook runs locally.
+# Not on GitHub? See docs/second-brain/ADOPTION_GUIDE.md for a GitLab / Azure equivalent.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SumelaOS structure (+ unfilled placeholders)
+        run: bash scripts/validate-structure.sh --check-placeholders
+      - name: Shell script syntax check
+        run: |
+          set -e
+          for f in scripts/*.sh; do [ -f "$f" ] && bash -n "$f"; done
+          for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
+                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
+            [ -f "$h" ] && bash -n "$h"
+          done
+'@
+        Set-Content -Path $ciFile -Value $ciContent
+        Write-Ok "CI workflow added — GitHub Actions; delete it if you use other CI (GitLab/Azure: see ADOPTION_GUIDE)"
     }
 }
 
@@ -661,8 +716,9 @@ Write-Host "    - .sumela/rules/ (stack-specific rules)"
 Write-Host "    - docs/second-brain/wiki/ (6 wiki pages)"
 if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
-if ($PluginArray -contains "qdrant-session-memory") { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks)" }
+if ($HooksWired) { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks; pre-commit validation)" }
 if ($Governance -eq "team") { Write-Host "    - .github/CODEOWNERS (agent-control surface — replace @OWNER)" }
+if (-not $NoCi) { Write-Host "    - .github/workflows/sumela-validate.yml (CI structure check)" }
 Write-Host ""
 Write-Host "  Next steps:"
 Write-Host "    1. Edit AGENTS.md — fill in project-specific commands and conventions"

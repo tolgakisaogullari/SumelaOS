@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# pre-commit — run the SumelaOS structure validation before committing changes that
+# touch the agent-control surface or the second-brain. Same check CI runs, locally.
+#
+# Best-effort + scoped: only validates when relevant files are staged, so unrelated
+# commits are never slowed. Bypass a single commit with `git commit --no-verify`,
+# or disable entirely with `export SUMELA_DISABLE_PRECOMMIT=1`.
+
+[ -n "${SUMELA_DISABLE_PRECOMMIT:-}" ] && exit 0
+
+repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -n "$repo" ] || exit 0
+
+validator="$repo/scripts/validate-structure.sh"
+[ -f "$validator" ] || exit 0   # not a SumelaOS project / validator absent → do nothing
+
+# Only run when staged (Added/Copied/Modified) files touch the agent-control surface,
+# the second-brain, or the generated AGENTS.md. Otherwise pass instantly.
+staged="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)"
+case "$staged" in
+  *.sumela/*|*docs/second-brain/*|*AGENTS.md*|*RULE_REGISTRY.md*) : ;;
+  *) exit 0 ;;
+esac
+
+echo "sumela: validating structure (pre-commit; bypass with 'git commit --no-verify')…"
+cd "$repo" || exit 0
+if bash scripts/validate-structure.sh --check-placeholders; then
+  exit 0
+else
+  echo "sumela: structure validation FAILED — fix the issues above, or re-run with 'git commit --no-verify' to bypass." >&2
+  exit 1
+fi

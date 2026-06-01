@@ -1,0 +1,38 @@
+name: SumelaOS Validate
+
+# Enforces the SumelaOS structure contract on every push / PR so the framework
+# (skills, rules, registries, wiki templates, generated AGENTS.md / RULE_REGISTRY)
+# cannot silently drift. Mirrors `scripts/validate-structure.sh` — the same check
+# the pre-commit hook runs locally.
+#
+# Not on GitHub? See docs/second-brain/template/ADOPTION_GUIDE.md for a GitLab CI
+# / Azure Pipelines equivalent (both just run the same script).
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SumelaOS structure (+ unfilled placeholders)
+        run: bash scripts/validate-structure.sh --check-placeholders
+
+      - name: Shell script syntax check
+        run: |
+          set -e
+          for f in scripts/*.sh; do
+            [ -f "$f" ] && bash -n "$f"
+          done
+          # Git hooks have no .sh extension; lint them explicitly if present.
+          for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
+                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
+            [ -f "$h" ] && bash -n "$h"
+          done

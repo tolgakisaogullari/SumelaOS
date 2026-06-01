@@ -291,22 +291,24 @@ Ask user which IDEs they use. Generate pointer files for selected IDEs.
 
 Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
 
-### Step 3.7: Wire Git Hooks (only if the Qdrant plugin was enabled)
+### Step 3.7: Wire Git Hooks (whenever the project is a git repo)
 
-The team memory-sync hooks (`post-merge`, `post-checkout`) re-ingest session
-summaries committed by teammates into each developer's local Qdrant on `git pull`.
-They are inert without the Qdrant plugin, so wire them ONLY when the Qdrant plugin
-was selected in PHASE 2b (choice 1 or 2):
+`core.hooksPath = .sumela/git-hooks` enables two things: the `pre-commit`
+validation hook (runs `validate-structure.sh` before a commit touches the
+agent-control surface — useful for everyone) and the `post-merge`/`post-checkout`
+memory-sync hooks (which self-gate: inert unless the Qdrant plugin + session
+summaries + a reachable Qdrant all exist). Wire it regardless of plugin choice:
 
 1. Confirm the project is a git repo: `git rev-parse --is-inside-work-tree`.
 2. Check for an existing hooks path: `git config --local --get core.hooksPath`.
    - If it is set to something OTHER than `.sumela/git-hooks`, do NOT override —
      warn the user that hook installation must be merged manually.
    - Otherwise run: `git config core.hooksPath .sumela/git-hooks`
-3. Ensure the hooks are executable: `chmod +x .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout`
+3. Ensure the hooks are executable: `chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout`
 4. Tell the user each teammate must run the `git config core.hooksPath` command
-   once per clone (hooks are not shared by git automatically), and that `setup.sh`
-   / `setup.ps1` do this step for them.
+   once per clone (hooks are not shared by git automatically), that `setup.sh`
+   / `setup.ps1` do this step for them, and that a single commit can bypass the
+   pre-commit check with `git commit --no-verify`.
 
 ### Step 3.8: CODEOWNERS for the agent-control surface (only if `GOVERNANCE_MODE` is `team`)
 
@@ -329,6 +331,14 @@ ensures those PRs require a code owner's review. Skip entirely in `solo` mode.
    ```
 2. Ask the user for their owner handle and replace `@OWNER`; if unknown, leave the
    placeholder and tell them to set it before enabling branch protection.
+
+### Step 3.9: CI validation workflow (default on)
+
+Create `.github/workflows/sumela-validate.yml` so the structure contract is enforced
+on every push/PR (same check as the pre-commit hook). Use the content shipped by
+`setup.sh` section 7e. Skip only if the user explicitly opts out or does not use
+GitHub — for GitLab/Azure, point them to the snippet in `ADOPTION_GUIDE.md`
+(Section 9, "CI & Pre-Commit Enforcement"). Do not overwrite an existing workflow file.
 
 ## PHASE 4 — Validation & Summary
 

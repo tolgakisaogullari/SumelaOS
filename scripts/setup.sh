@@ -20,6 +20,7 @@
 #     --plugins "qdrant-session-memory,graphify-code-graph" \
 #     --ides "claude,cursor,cline,kilo-code,trae" \
 #     --governance "solo"                   # or "team" (PR-gated /evolve)
+#     --no-ci                               # skip creating the GitHub Actions workflow
 # -----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -49,6 +50,8 @@ NI_RULE_VARIANT="best-practice"
 NI_PLUGINS=""
 NI_IDES=""
 NI_GOVERNANCE="solo"
+WITH_CI=true
+HOOKS_WIRED=false
 
 # --- Parse CLI args ---
 while [[ $# -gt 0 ]]; do
@@ -65,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --plugins)         NI_PLUGINS="$2"; shift 2 ;;
     --ides)            NI_IDES="$2"; shift 2 ;;
     --governance)      NI_GOVERNANCE="$2"; shift 2 ;;
+    --no-ci)           WITH_CI=false; shift ;;
     *) err "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -643,19 +647,23 @@ else:
 fi
 
 # =============================================================================
-# 7c. INSTALL GIT HOOKS (team memory sync — only when Qdrant plugin is enabled)
+# 7c. INSTALL GIT HOOKS (core.hooksPath — pre-commit validation + memory sync)
 # =============================================================================
-if [[ " ${PLUGINS[*]:-} " =~ " qdrant-session-memory" ]] && [ -d ".sumela/git-hooks" ]; then
-  info "Wiring git hooks for team memory sync..."
+# Wired whenever the project is a git repo: the pre-commit validation hook is
+# useful for everyone, and the post-merge/post-checkout memory hooks self-gate
+# (they no-op unless the Qdrant plugin + summaries + a reachable Qdrant exist).
+if [ -d ".sumela/git-hooks" ]; then
+  info "Wiring git hooks (pre-commit validation + memory sync)..."
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     EXISTING_HOOKS_PATH="$(git config --local --get core.hooksPath 2>/dev/null || true)"
     if [ -n "$EXISTING_HOOKS_PATH" ] && [ "$EXISTING_HOOKS_PATH" != ".sumela/git-hooks" ]; then
       warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' — not overriding."
-      warn "To enable memory-sync, copy .sumela/git-hooks/post-* into '$EXISTING_HOOKS_PATH' or merge hook paths manually."
+      warn "To enable SumelaOS hooks, copy .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$EXISTING_HOOKS_PATH' or merge hook paths manually."
     else
       git config core.hooksPath .sumela/git-hooks
-      chmod +x .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
-      ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks)"
+      chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
+      HOOKS_WIRED=true
+      ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks) — pre-commit validation active (bypass: git commit --no-verify)"
     fi
   else
     warn "Not a git repository — skipping git hook setup."
@@ -687,6 +695,51 @@ if [ "$GOVERNANCE" = "team" ]; then
       echo "/docs/second-brain/wiki/_SCHEMA.md  @OWNER"
     } >> "$CODEOWNERS_FILE"
     ok "CODEOWNERS updated ($CODEOWNERS_FILE) — replace @OWNER with your handle"
+  fi
+fi
+
+# =============================================================================
+# 7e. CI WORKFLOW — run validate-structure on push/PR (skip with --no-ci)
+# =============================================================================
+if [ "$WITH_CI" = true ]; then
+  CI_FILE=".github/workflows/sumela-validate.yml"
+  if [ -f "$CI_FILE" ]; then
+    ok "CI workflow already present ($CI_FILE)"
+  else
+    info "Adding CI validation workflow ($CI_FILE)..."
+    mkdir -p .github/workflows
+    cat > "$CI_FILE" <<'YAML'
+name: SumelaOS Validate
+
+# Enforces the SumelaOS structure contract on every push / PR. Mirrors
+# scripts/validate-structure.sh — the same check the pre-commit hook runs locally.
+# Not on GitHub? See docs/second-brain/ADOPTION_GUIDE.md for a GitLab / Azure equivalent.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SumelaOS structure (+ unfilled placeholders)
+        run: bash scripts/validate-structure.sh --check-placeholders
+      - name: Shell script syntax check
+        run: |
+          set -e
+          for f in scripts/*.sh; do [ -f "$f" ] && bash -n "$f"; done
+          for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
+                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
+            [ -f "$h" ] && bash -n "$h"
+          done
+YAML
+    ok "CI workflow added — GitHub Actions; delete it if you use other CI (GitLab/Azure: see ADOPTION_GUIDE)"
   fi
 fi
 
@@ -726,8 +779,9 @@ echo "    - .sumela/rules/ (stack-specific rules)"
 echo "    - docs/second-brain/wiki/ (6 wiki pages)"
 [ ${#IDES[@]} -gt 0 ] && echo "    - IDE pointer files"
 [ ${#PLUGINS[@]} -gt 0 ] && echo "    - SKILL_REGISTRY.md (plugins appended)"
-[[ " ${PLUGINS[*]:-} " =~ " qdrant-session-memory" ]] && echo "    - git hooks wired (core.hooksPath = .sumela/git-hooks)"
+[ "$HOOKS_WIRED" = true ] && echo "    - git hooks wired (core.hooksPath = .sumela/git-hooks; pre-commit validation)"
 [ "$GOVERNANCE" = "team" ] && echo "    - .github/CODEOWNERS (agent-control surface — replace @OWNER)"
+[ "$WITH_CI" = true ] && echo "    - .github/workflows/sumela-validate.yml (CI structure check)"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit AGENTS.md — fill in project-specific commands and conventions"

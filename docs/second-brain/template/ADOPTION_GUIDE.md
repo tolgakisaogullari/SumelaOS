@@ -311,6 +311,29 @@ If any expected file is missing, the agent flags the gap and offers to create it
 | Lint wiki (check parity, orphans) | Monthly or when prompted | Manual or lint trigger in `using-second-brain` |
 | Archive old `_LOG.md` entries | When entry count > 50 | During lint (see `_SCHEMA.md` Section 11) |
 
+### CI & Pre-Commit Enforcement
+
+The structure contract is enforced automatically, not just by convention:
+
+- **CI:** `setup.sh` / `setup.ps1` add `.github/workflows/sumela-validate.yml`, which runs `bash scripts/validate-structure.sh --check-placeholders` (+ shell syntax) on every push/PR. Pass `--no-ci` / `-NoCi` to skip.
+- **Pre-commit:** when `core.hooksPath` is wired (setup does this), `.sumela/git-hooks/pre-commit` runs the same validation locally before a commit that touches the agent-control surface. Bypass an individual commit with `git commit --no-verify`.
+
+**Not on GitHub Actions?** The check is just one script — wire it into your CI:
+
+```yaml
+# GitLab CI (.gitlab-ci.yml)
+sumela-validate:
+  image: ubuntu:latest
+  before_script: [ "apt-get update -qq && apt-get install -y -qq git" ]
+  script: [ "bash scripts/validate-structure.sh --check-placeholders" ]
+```
+
+```yaml
+# Azure Pipelines
+- script: bash scripts/validate-structure.sh --check-placeholders
+  displayName: SumelaOS Validate
+```
+
 ### Wiki Hygiene Rules
 
 - **Never delete pages** — archive them (`wiki/archive/`).
