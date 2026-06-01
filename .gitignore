@@ -15,6 +15,10 @@ __pycache__/
 graphify-out/
 qdrant-storage/
 
+# Brainstorming skill runtime artifacts (local server state)
+.superpowers/
+**/scripts/.superpowers/
+
 # Generated files (created by setup.sh)
 AGENTS.md
 RULE_REGISTRY.md

@@ -20,7 +20,13 @@
     Language for user interaction (default: English).
 
 .PARAMETER CodeLanguage
-    Language for code/technical output (default: English).
+    Fallback language for code naming + documentation (default: English).
+
+.PARAMETER NamingLanguage
+    Language for code names (services, methods, classes, files). Defaults to CodeLanguage.
+
+.PARAMETER DocumentationLanguage
+    Language for code comments and docstrings. Defaults to CodeLanguage.
 
 .PARAMETER Stacks
     Comma-separated list of tech stacks: backend, frontend, mobile, ai, infra.
@@ -47,6 +53,8 @@ param(
     [string]$ProjectPurpose = "A software project",
     [string]$InteractionLanguage = "English",
     [string]$CodeLanguage = "English",
+    [string]$NamingLanguage = "",
+    [string]$DocumentationLanguage = "",
     [string]$Stacks = "",
     [string]$RuleVariant = "best-practice",
     [string]$Plugins = "",
@@ -159,8 +167,11 @@ else {
     }
 
     $ProjectPurpose = Read-WithDefault "Project purpose" "A software project"
-    $InteractionLanguage = Read-WithDefault "Interaction language (for chat/explanations)" "English"
-    $CodeLanguage = Read-WithDefault "Code language (for comments/commits)" "English"
+    $InteractionLanguage = Read-WithDefault "Interaction language (agent chat/explanations)" "English"
+    $NamingLanguage = Read-WithDefault "Code naming language (services, methods, classes, files)" "English"
+    $DocumentationLanguage = Read-WithDefault "Code documentation language (comments, docstrings)" "English"
+    # CodeLanguage retained for backward-compat consumers; mirrors the naming language.
+    $CodeLanguage = $NamingLanguage
 
     Write-Host ""
     # AI and infra stacks coming soon — not yet available
@@ -177,6 +188,10 @@ else {
     Write-Host ""
     $IDEArray = Read-MultiSelect "IDEs to generate pointer files for:" @("claude", "cursor", "cline", "kilo-code", "trae")
 }
+
+# Default naming/documentation languages to CodeLanguage when not supplied (non-interactive parity).
+if ([string]::IsNullOrWhiteSpace($NamingLanguage)) { $NamingLanguage = $CodeLanguage }
+if ([string]::IsNullOrWhiteSpace($DocumentationLanguage)) { $DocumentationLanguage = $CodeLanguage }
 
 $DateCreated = Get-Date -Format "yyyy-MM-dd"
 
@@ -279,6 +294,8 @@ $content = $content -replace '\{\{project_purpose\}\}', $ProjectPurpose
 $content = $content -replace '\{\{tech_stack_summary\}\}', $TechSummaryStr
 $content = $content -replace '\{\{interaction_language\}\}', $InteractionLanguage
 $content = $content -replace '\{\{code_language\}\}', $CodeLanguage
+$content = $content -replace '\{\{naming_language\}\}', $NamingLanguage
+$content = $content -replace '\{\{documentation_language\}\}', $DocumentationLanguage
 $content = $content -replace '\{\{backend_commands\}\}', $BackendCmds
 $content = $content -replace '\{\{frontend_commands\}\}', $FrontendCmds
 $content = $content -replace '\{\{mobile_commands\}\}', $MobileCmds

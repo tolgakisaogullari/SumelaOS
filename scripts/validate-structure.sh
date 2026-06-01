@@ -53,7 +53,7 @@ EXPECTED_SKILLS=(
   "dispatching-parallel-agents"
   "executing-plans"
   "finishing-a-development-branch"
-  "init-SumelaOS"
+  "init-sumela"
   "performance-optimization"
   "receiving-code-review"
   "requesting-code-review"

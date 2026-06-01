@@ -4,7 +4,7 @@
   <img src="sumela.jpeg" alt="Sumela Monastery, Trabzon, Turkey" width="500" height="625">
 </p>
 
-A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 27 universal skills, structured rules, and a living knowledge base from the first session.
+A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 26 universal skills, structured rules, and a living knowledge base from the first session.
 
 ## Why SumelaOS?
 
@@ -45,7 +45,7 @@ Set up the SumelaOS agent framework in this project. Steps:
 2. Copy .sumela/, scripts/, and template files (AGENTS.md.template, CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/) to this project's root
 3. Copy docs/second-brain/template/ as docs/second-brain/, create .gitkeep for empty directories
 4. Delete the temporary clone
-5. Run /initSumelaOS — auto-detect the project's stack, architecture, and conventions
+5. Run /initSumela — auto-detect the project's stack, architecture, and conventions
 6. Ask language preferences: (a) What language should the agent use to communicate? (b) What language for code names? (c) What language for code comments/docs?
 7. Ask about memory plugins (Qdrant, Graphify) — if the user declines, do not install or run their scripts
 
@@ -70,18 +70,18 @@ Copy-Item -Path "$env:TEMP\SumelaOS\.sumela" -Destination "." -Recurse -Force
 Copy-Item -Path "$env:TEMP\SumelaOS\scripts" -Destination "." -Recurse -Force
 ```
 
-Then run `/initSumelaOS` in your AI assistant.
+Then run `/initSumela` in your AI assistant.
 
 ## Features
 
-- **27 universal agent skills** — brainstorming, planning, TDD, debugging, code review, shipping, and more
+- **26 universal agent skills** — brainstorming, planning, TDD, debugging, code review, shipping, and more
 - **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile)
 - **Second-brain wiki** — Karpathy LLM Wiki pattern with structured knowledge capture
 - **Memory plugins** — optional Qdrant session memory (Tier-1) and Graphify code graph (Tier-2)
 - **IDE-agnostic** — one `AGENTS.md` serves all IDEs via thin pointer files
 - **Self-improvement loop** — `/evolve` command captures corrections and friction signals
 - **Setup automation** — `setup.sh` / `setup.ps1` with interactive and non-interactive modes
-- **Auto-detection** — `/initSumelaOS` scans your existing project and generates configuration automatically
+- **Auto-detection** — `/initSumela` scans your existing project and generates configuration automatically
 
 ## The Sumela Prompt — Your Agent's Constitution
 
@@ -111,7 +111,7 @@ Every other file in `.sumela/` defers to this prompt when instructions conflict.
 │  │         .sumela/             │            │
 │  │  SKILL_REGISTRY.md               │            │
 │  │  RULE_REGISTRY.md                │            │
-│  │  skills/        (27 skills)      │            │
+│  │  skills/        (26 skills)      │            │
 │  │  rules/         (7+ rules)       │            │
 │  │  memory-plugins/ (optional)      │            │
 │  └──────────────────────────────────┘            │
@@ -162,7 +162,7 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 ├── .sumela/
 │   ├── SKILL_REGISTRY.md           # Skill catalog
 │   ├── RULE_REGISTRY.md.template   # Rule catalog template
-│   ├── skills/                     # 20 universal skills
+│   ├── skills/                     # 26 skills (across 21 dirs)
 │   ├── rules/                      # Universal + stack-specific rules
 │   └── memory-plugins/             # Optional memory stack
 │       ├── qdrant-session-memory/
@@ -183,7 +183,7 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 
 | Problem | Without SumelaOS | With SumelaOS |
 |---|---|---|
-| **No workflow structure** | Agent improvises each task | 27 skills define structured workflows (brainstorm → plan → implement → review → ship) |
+| **No workflow structure** | Agent improvises each task | 26 skills define structured workflows (brainstorm → plan → implement → review → ship) |
 | **No coding standards** | Agent uses its own defaults | Project-specific rules enforce your conventions |
 | **No session memory** | Every session starts from zero | Qdrant plugin remembers past decisions and context |
 | **No code structure awareness** | Agent greps blindly | Graphify plugin understands call graphs and dependencies |
@@ -197,7 +197,7 @@ SumelaOS builds on the work of two exceptional open-source projects:
 
 ### [obra/superpowers](https://github.com/obra/superpowers) — The Skill Engine
 
-The core skill architecture — 25 universal skills covering brainstorming, planning, TDD, debugging, code review, shipping, and more — is based on [Superpowers](https://github.com/obra/superpowers) by [obra](https://github.com/obra). Superpowers introduced the concept of structured agent workflows: instead of letting the agent improvise, skills define step-by-step procedures that enforce quality gates, security checks, and user approval points.
+The core skill architecture — the universal skills covering brainstorming, planning, TDD, debugging, code review, shipping, and more — is based on [Superpowers](https://github.com/obra/superpowers) by [obra](https://github.com/obra). Superpowers introduced the concept of structured agent workflows: instead of letting the agent improvise, skills define step-by-step procedures that enforce quality gates, security checks, and user approval points.
 
 **What we added on top:**
 - **Rule framework** with phase-to-rule matrix (universal + stack-specific rules)

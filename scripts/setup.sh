@@ -12,7 +12,9 @@
 #     --project-name "MyApp" \
 #     --project-purpose "My app purpose" \
 #     --interaction-language "English" \
-#     --code-language "English" \
+#     --code-language "English" \           # fallback for naming + documentation
+#     --naming-language "English" \         # optional; defaults to --code-language
+#     --documentation-language "English" \  # optional; defaults to --code-language
 #     --stacks "backend,frontend" \
 #     --rule-variant "best-practice" \
 #     --plugins "qdrant-session-memory,graphify-code-graph" \
@@ -39,6 +41,8 @@ NI_PROJECT_NAME=""
 NI_PROJECT_PURPOSE=""
 NI_INTERACTION_LANG="English"
 NI_CODE_LANG="English"
+NI_NAMING_LANG=""
+NI_DOC_LANG=""
 NI_STACKS=""
 NI_RULE_VARIANT="best-practice"
 NI_PLUGINS=""
@@ -52,6 +56,8 @@ while [[ $# -gt 0 ]]; do
     --project-purpose) NI_PROJECT_PURPOSE="$2"; shift 2 ;;
     --interaction-language) NI_INTERACTION_LANG="$2"; shift 2 ;;
     --code-language)   NI_CODE_LANG="$2"; shift 2 ;;
+    --naming-language) NI_NAMING_LANG="$2"; shift 2 ;;
+    --documentation-language) NI_DOC_LANG="$2"; shift 2 ;;
     --stacks)          NI_STACKS="$2"; shift 2 ;;
     --rule-variant)    NI_RULE_VARIANT="$2"; shift 2 ;;
     --plugins)         NI_PLUGINS="$2"; shift 2 ;;
@@ -135,20 +141,26 @@ prompt_multiselect() {
   local prompt="$1"
   shift
   local options=("$@")
-  echo "$prompt"
+  # Menu UI goes to stderr so command substitution captures ONLY the result line.
+  echo "$prompt" >&2
+  local i
   for i in "${!options[@]}"; do
-    echo "  $((i+1)). ${options[$i]}"
+    echo "  $((i+1)). ${options[$i]}" >&2
   done
+  local selection
   read -rp "Enter numbers separated by commas (e.g. 1,3): " selection
   local result=()
+  local nums
   IFS=',' read -ra nums <<< "$selection"
-  for num in "${nums[@]}"; do
+  local num
+  # ${nums[@]+...} guard: empty-array-safe under `set -u` on bash 3.2 (macOS default).
+  for num in ${nums[@]+"${nums[@]}"}; do
     num=$(echo "$num" | tr -d ' ')
     if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 1 ] && [ "$num" -le ${#options[@]} ]; then
       result+=("${options[$((num-1))]}")
     fi
   done
-  echo "${result[@]}"
+  echo "${result[@]+${result[@]}}"
 }
 
 # --- Helper: yes/no prompt ---
@@ -173,6 +185,8 @@ if [ "$NON_INTERACTIVE" = true ]; then
   PROJECT_PURPOSE="$NI_PROJECT_PURPOSE"
   INTERACTION_LANG="$NI_INTERACTION_LANG"
   CODE_LANG="$NI_CODE_LANG"
+  NAMING_LANG="${NI_NAMING_LANG:-$NI_CODE_LANG}"
+  DOC_LANG="${NI_DOC_LANG:-$NI_CODE_LANG}"
   IFS=',' read -ra STACKS <<< "$NI_STACKS"
   RULE_VARIANT="$NI_RULE_VARIANT"
   IFS=',' read -ra PLUGINS <<< "$NI_PLUGINS"
@@ -190,13 +204,18 @@ else
   fi
 
   PROJECT_PURPOSE=$(prompt_default "Project purpose" "A software project")
-  INTERACTION_LANG=$(prompt_default "Interaction language (for chat/explanations)" "English")
-  CODE_LANG=$(prompt_default "Code language (for comments/commits)" "English")
+  INTERACTION_LANG=$(prompt_default "Interaction language (agent chat/explanations)" "English")
+  NAMING_LANG=$(prompt_default "Code naming language (services, methods, classes, files)" "English")
+  DOC_LANG=$(prompt_default "Code documentation language (comments, docstrings)" "English")
+  # CODE_LANG retained for backward-compat consumers; mirrors the naming language.
+  CODE_LANG="$NAMING_LANG"
 
   echo ""
   echo "Select tech stacks (comma-separated numbers):"
   # AI and infra stacks coming soon — not yet available
-  mapfile -t STACKS < <(prompt_multiselect "Tech stacks:" "backend" "frontend" "mobile")
+  # read -ra instead of mapfile (mapfile is bash 4+; macOS ships bash 3.2).
+  STACKS=()
+  read -ra STACKS <<< "$(prompt_multiselect "Tech stacks:" "backend" "frontend" "mobile")"
 
   echo ""
   RULE_VARIANT=$(prompt_default "Rule variant for selected stacks (empty/best-practice)" "best-practice")
@@ -211,7 +230,8 @@ else
   fi
 
   echo ""
-  mapfile -t IDES < <(prompt_multiselect "IDEs to generate pointer files for:" "claude" "cursor" "cline" "kilo-code" "trae")
+  IDES=()
+  read -ra IDES <<< "$(prompt_multiselect "IDEs to generate pointer files for:" "claude" "cursor" "cline" "kilo-code" "trae")"
 fi
 
 # --- Validate inputs ---
@@ -236,12 +256,12 @@ info "Generating AGENTS.md from template..."
 
 # Build tech stack summary
 TECH_SUMMARY=""
-if [[ " ${STACKS[*]} " =~ " backend" ]]; then TECH_SUMMARY="Backend"; fi
-if [[ " ${STACKS[*]} " =~ " frontend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " backend" ]]; then TECH_SUMMARY="Backend"; fi
+if [[ " ${STACKS[*]:-} " =~ " frontend" ]]; then
   [ -n "$TECH_SUMMARY" ] && TECH_SUMMARY="$TECH_SUMMARY + "
   TECH_SUMMARY="${TECH_SUMMARY}Frontend"
 fi
-if [[ " ${STACKS[*]} " =~ " mobile" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " mobile" ]]; then
   [ -n "$TECH_SUMMARY" ] && TECH_SUMMARY="$TECH_SUMMARY + "
   TECH_SUMMARY="${TECH_SUMMARY}Mobile"
 fi
@@ -249,14 +269,14 @@ fi
 
 # Build package boundaries table rows
 PKG_BOUNDARIES=""
-if [[ " ${STACKS[*]} " =~ " backend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " backend" ]]; then
   PKG_BOUNDARIES="| \`src/\` | Backend | \`main\` |"
 fi
-if [[ " ${STACKS[*]} " =~ " frontend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " frontend" ]]; then
   [ -n "$PKG_BOUNDARIES" ] && PKG_BOUNDARIES="$PKG_BOUNDARIES"$'\n'
   PKG_BOUNDARIES="${PKG_BOUNDARIES}| \`web/\` | Frontend | \`npm run dev\` |"
 fi
-if [[ " ${STACKS[*]} " =~ " mobile" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " mobile" ]]; then
   [ -n "$PKG_BOUNDARIES" ] && PKG_BOUNDARIES="$PKG_BOUNDARIES"$'\n'
   PKG_BOUNDARIES="${PKG_BOUNDARIES}| \`mobile/\` | Mobile | \`npx expo start\` |"
 fi
@@ -268,7 +288,7 @@ FRONTEND_CMDS="# Add your frontend build/run/test commands here"
 MOBILE_CMDS="# Add your mobile build/run/test commands here"
 INFRA_CMDS="# Add your Docker infrastructure commands here"
 
-if [[ " ${STACKS[*]} " =~ " backend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " backend" ]]; then
   BACKEND_CMDS='```bash
 # Build
 ./gradlew build   # or: dotnet build / mvn package / go build
@@ -278,7 +298,7 @@ if [[ " ${STACKS[*]} " =~ " backend" ]]; then
 ./gradlew test    # or: dotnet test / mvn test / go test ./...
 ```'
 fi
-if [[ " ${STACKS[*]} " =~ " frontend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " frontend" ]]; then
   FRONTEND_CMDS='```bash
 # Install dependencies
 npm install       # or: yarn / pnpm install
@@ -290,7 +310,7 @@ npm run build
 npm run test
 ```'
 fi
-if [[ " ${STACKS[*]} " =~ " mobile" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " mobile" ]]; then
   MOBILE_CMDS='```bash
 # Install dependencies
 npx expo install
@@ -305,7 +325,7 @@ fi
 
 # Build project-specific security
 PROJECT_SECURITY=""
-if [[ " ${STACKS[*]} " =~ " backend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " backend" ]]; then
   PROJECT_SECURITY=$'\n'"- Skill path: \`.sumela/rules/backend_standards.md\` — backend-specific security patterns."
 fi
 
@@ -314,7 +334,7 @@ DEP_FLOW='```'"$PROJECT_NAME"' → Application → Domain
          ↑
    Infrastructure
 ```'
-if [[ ! " ${STACKS[*]} " =~ " backend" ]]; then
+if [[ ! " ${STACKS[*]:-} " =~ " backend" ]]; then
   DEP_FLOW="# Define your project dependency flow here"
 fi
 
@@ -324,6 +344,8 @@ export TMPL_PROJECT_PURPOSE="$PROJECT_PURPOSE"
 export TMPL_TECH_STACK_SUMMARY="$TECH_SUMMARY"
 export TMPL_INTERACTION_LANGUAGE="$INTERACTION_LANG"
 export TMPL_CODE_LANGUAGE="$CODE_LANG"
+export TMPL_NAMING_LANGUAGE="$NAMING_LANG"
+export TMPL_DOCUMENTATION_LANGUAGE="$DOC_LANG"
 export TMPL_BACKEND_COMMANDS="$BACKEND_CMDS"
 export TMPL_FRONTEND_COMMANDS="$FRONTEND_CMDS"
 export TMPL_MOBILE_COMMANDS="$MOBILE_CMDS"
@@ -345,14 +367,14 @@ info "Generating RULE_REGISTRY.md from template..."
 
 # Build stack scopes
 STACK_SCOPES=""
-if [[ " ${STACKS[*]} " =~ " backend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " backend" ]]; then
   STACK_SCOPES="| \`backend\` | \`src/\`, \`*.cs\`, \`*.java\`, \`*.go\`, \`*.py\`, \`api/\`, \`server/\` |"
 fi
-if [[ " ${STACKS[*]} " =~ " frontend" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " frontend" ]]; then
     [ -n "$STACK_SCOPES" ] && STACK_SCOPES="$STACK_SCOPES"$'\n'
     STACK_SCOPES="${STACK_SCOPES}| \`frontend\` | \`web/\`, \`*.tsx\`, \`*.jsx\`, \`*.vue\`, \`*.svelte\` |"
 fi
-if [[ " ${STACKS[*]} " =~ " mobile" ]]; then
+if [[ " ${STACKS[*]:-} " =~ " mobile" ]]; then
     [ -n "$STACK_SCOPES" ] && STACK_SCOPES="$STACK_SCOPES"$'\n'
     STACK_SCOPES="${STACK_SCOPES}| \`mobile\` | \`mobile/\`, \`*.swift\`, \`*.kt\`, \`app/\` |"
 fi
@@ -360,7 +382,7 @@ fi
 
 # Build stack rules entries
 STACK_RULES=""
-for stack in "${STACKS[@]}"; do
+for stack in ${STACKS[@]+"${STACKS[@]}"}; do
   stack=$(echo "$stack" | tr -d ' ')
   case "$stack" in
     backend)
@@ -418,18 +440,21 @@ ok "RULE_REGISTRY.md generated"
 # =============================================================================
 info "Copying rule templates (variant: $RULE_VARIANT)..."
 
-# Map stack names to template file names
-declare -A STACK_RULE_MAP=(
-  ["backend"]="backend_standards"
-  ["frontend"]="frontend_standards"
-  ["mobile"]="mobile_standards"
-)
+# Map stack name -> template file name (case fn instead of associative array; bash 3.2 compat).
+stack_rule_name() {
+  case "$1" in
+    backend)  echo "backend_standards" ;;
+    frontend) echo "frontend_standards" ;;
+    mobile)   echo "mobile_standards" ;;
+    *)        echo "" ;;
+  esac
+}
 
 # Copy stack-specific rule templates
-for stack in "${STACKS[@]}"; do
+for stack in ${STACKS[@]+"${STACKS[@]}"}; do
   stack=$(echo "$stack" | tr -d ' ')
-  if [[ -v STACK_RULE_MAP[$stack] ]]; then
-    rule_name="${STACK_RULE_MAP[$stack]}"
+  rule_name="$(stack_rule_name "$stack")"
+  if [ -n "$rule_name" ]; then
     src=".sumela/rules/templates/${rule_name}.md.${RULE_VARIANT}"
     dst=".sumela/rules/${rule_name}.md"
     if [ -f "$src" ]; then
@@ -460,18 +485,23 @@ fi
 # =============================================================================
 info "Generating IDE pointer files..."
 
-declare -A IDE_FILE_MAP=(
-  ["claude"]="CLAUDE.md:CLAUDE.md.template"
-  ["cursor"]=".cursor/rules/00-agent.md:.cursor/rules/00-agent.md.template"
-  ["cline"]=".clinerules:.clinerules.template"
-  ["kilo-code"]=".kilocode/rules.md:.kilocode/rules.md.template"
-  ["trae"]=".trae/rules/00-agent.md:.trae/rules/00-agent.md.template"
-)
+# Map IDE name -> "dst:template" (case fn instead of associative array; bash 3.2 compat).
+ide_file_map() {
+  case "$1" in
+    claude)    echo "CLAUDE.md:CLAUDE.md.template" ;;
+    cursor)    echo ".cursor/rules/00-agent.md:.cursor/rules/00-agent.md.template" ;;
+    cline)     echo ".clinerules:.clinerules.template" ;;
+    kilo-code) echo ".kilocode/rules.md:.kilocode/rules.md.template" ;;
+    trae)      echo ".trae/rules/00-agent.md:.trae/rules/00-agent.md.template" ;;
+    *)         echo "" ;;
+  esac
+}
 
-for ide in "${IDES[@]}"; do
+for ide in ${IDES[@]+"${IDES[@]}"}; do
   ide=$(echo "$ide" | tr -d ' ')
-  if [[ -v IDE_FILE_MAP[$ide] ]]; then
-    IFS=':' read -r dst tmpl <<< "${IDE_FILE_MAP[$ide]}"
+  ide_mapping="$(ide_file_map "$ide")"
+  if [ -n "$ide_mapping" ]; then
+    IFS=':' read -r dst tmpl <<< "$ide_mapping"
     if [ -f "$tmpl" ]; then
       # Ensure parent directory exists
       mkdir -p "$(dirname "$dst")"
@@ -526,9 +556,14 @@ if [ ${#PLUGINS[@]} -gt 0 ]; then
   info "Registering memory plugins in SKILL_REGISTRY.md..."
 
   PLUGIN_ENTRIES=""
-  for plugin in "${PLUGINS[@]}"; do
+  for plugin in ${PLUGINS[@]+"${PLUGINS[@]}"}; do
     plugin=$(echo "$plugin" | tr -d ' ')
-    if [ -f ".sumela/memory-plugins/$plugin/SKILL.md" ]; then
+    if [ ! -f ".sumela/memory-plugins/$plugin/SKILL.md" ]; then
+      warn "Plugin SKILL.md not found: .sumela/memory-plugins/$plugin/SKILL.md"
+    elif grep -q "<name>$plugin</name>" .sumela/SKILL_REGISTRY.md; then
+      # Idempotent: the shipped registry may already list this plugin.
+      info "Plugin already registered: $plugin — skipping"
+    else
       PLUGIN_ENTRIES="${PLUGIN_ENTRIES}
 <skill activation=\"lazy\">
 <name>$plugin</name>
@@ -537,19 +572,28 @@ if [ ${#PLUGINS[@]} -gt 0 ]; then
 </skill>
 "
       ok "Registered plugin: $plugin"
-    else
-      warn "Plugin SKILL.md not found: .sumela/memory-plugins/$plugin/SKILL.md"
     fi
   done
 
-  # Append plugin entries before closing </available_skills> tag
+  # Insert plugin entries before the closing </available_skills> tag.
+  # Done via python3 (already required by render_template) — BSD awk on macOS
+  # rejects multi-line `-v` variables ("awk: newline in string").
   if [ -n "$PLUGIN_ENTRIES" ]; then
-    # Use awk to insert before closing tag
-    awk -v entries="$PLUGIN_ENTRIES" '
-      /<\/available_skills>/ { print entries }
-      { print }
-    ' .sumela/SKILL_REGISTRY.md > .sumela/SKILL_REGISTRY.md.tmp
-    mv .sumela/SKILL_REGISTRY.md.tmp .sumela/SKILL_REGISTRY.md
+    export TMPL_PLUGIN_ENTRIES="$PLUGIN_ENTRIES"
+    python3 -c "
+import os, sys
+path = '.sumela/SKILL_REGISTRY.md'
+entries = os.environ['TMPL_PLUGIN_ENTRIES']
+with open(path, 'r') as f:
+    content = f.read()
+tag = '</available_skills>'
+if tag in content:
+    content = content.replace(tag, entries + '\n' + tag, 1)
+    with open(path, 'w') as f:
+        f.write(content)
+else:
+    sys.stderr.write('WARN: </available_skills> tag not found; plugins not appended\n')
+"
     ok "Plugins appended to SKILL_REGISTRY.md"
   fi
 fi

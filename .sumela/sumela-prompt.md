@@ -94,9 +94,9 @@ STEP 1B — Tier-2 query (Graphify code graph, MANDATORY for FAMILY B):
       `python .sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py "<symbol>" --confidence EXTRACTED`       # only direct (high-confidence) edges
       `python .sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py "<symbol>" --json`                       # machine-readable for further processing
 
-    Why this is the primary tool: `graphify-out/graph.json` carries ~1880 `calls` edges (465 EXTRACTED + 1417 INFERRED) that the `graphify` CLI BFS/explain modes do not surface in agent-readable form. `query-graph.py` reads graph.json directly and prints structured callers/callees with `source_file:line` citations the agent can paste verbatim into its answer.
+    Why this is the primary tool: `graphify-out/graph.json` carries the project's `calls` edges (both EXTRACTED direct calls and INFERRED ones) that the `graphify` CLI BFS/explain modes do not surface in agent-readable form. `query-graph.py` reads graph.json directly and prints structured callers/callees with `source_file:line` citations the agent can paste verbatim into its answer.
 
-    Symbol matching: case-insensitive substring on label OR id. Pass a bare class/method name (e.g., `AuthService`, `RegisterAsync`, `Comment`). For methods that exist on both interface and implementation, the script returns BOTH matches and lets you cite each separately.
+    Symbol matching: case-insensitive substring on label OR id. Pass a bare class/method/function name (e.g., `<ServiceClass>`, `<methodName>`, `<EntityName>`). For methods that exist on both interface and implementation, the script returns BOTH matches and lets you cite each separately.
 
   SECONDARY TOOLS — cluster / community / shortest-path / plain-language summary (use ONLY when `query-graph.py` will not help, or to corroborate):
     `graphify query "<symbol>" --budget 2000`     # BFS neighborhood walk — surfaces cluster/community siblings
@@ -107,7 +107,7 @@ STEP 1B — Tier-2 query (Graphify code graph, MANDATORY for FAMILY B):
 
 STEP 2 — Evaluate result(s):
   - Tier-1 hit (top score ≥ 0.5): read the matching `wiki/session-summaries/<file>.md` referenced by `session_id`. Cite explicitly: *"Kaynak: session 2026-XX-XX (Qdrant score 0.XX)"*.
-  - Tier-2 hit (subgraph returned with relevant nodes): cite file/line refs from the subgraph (e.g., *"Graphify graph: src/<project>/Services/AuthService.cs:L17"*). Read the cited file ONLY if the graph alone does not answer.
+  - Tier-2 hit (subgraph returned with relevant nodes): cite file/line refs from the subgraph (e.g., *"Graphify graph: <source_file>:L<line>"*). Read the cited file ONLY if the graph alone does not answer.
   - Hybrid hit (both tiers returned useful content): synthesize the answer using both, citing each tier separately.
   - All tiers low / empty: continue to STEP 3.
 
@@ -124,7 +124,7 @@ SELF-CHECK BEFORE READ — before issuing ANY `Read`, `grep`, or `git log` tool 
   *"Did I run Tier-1 (Qdrant via `query-qdrant.py`) for past-decision questions? Did I run Tier-2 (`query-graph.py` primary; `graphify` CLI secondary) for structural/call-graph questions? For hybrid, did I run both?"*
   If the answer is no for any applicable family, run the missing tier immediately. Do not rationalize ("grep will be faster", "the file is small", "I remember this", "the script might not exist") — `bash: allow` is enabled in this agent's frontmatter; both `python .sumela/scripts/auto-update-memory.py` after every commit).
 
-WHY THIS MATTERS: this project (a) ingests every session summary into Qdrant via `session-ingest.py`, and (b) maintains a fresh code graph (3462 nodes, 4828 edges incl. 1882 `calls` edges) via `auto-update-memory.py`. Tier-1 answers "why we did X" instantly with citation, where `git log` would take a multi-step search. Tier-2 answers "who calls X" with full callers + callees + transitive impact closure — `grep` cannot provide this because it only matches the literal token, not the call relationship. `query-graph.py` reads the graph directly because the upstream `graphify` CLI hides call edges in BFS/explain modes; the script is a thin, fast view onto edges that already exist on disk. The agent that bypasses these tiers re-derives knowledge slowly and incompletely from less reliable sources.
+WHY THIS MATTERS: when the memory plugins are active, this project (a) ingests every session summary into Qdrant via `session-ingest.py`, and (b) maintains a fresh code graph (nodes + edges, including a large set of `calls` edges) via `auto-update-memory.py`. Tier-1 answers "why we did X" instantly with citation, where `git log` would take a multi-step search. Tier-2 answers "who calls X" with full callers + callees + transitive impact closure — `grep` cannot provide this because it only matches the literal token, not the call relationship. `query-graph.py` reads the graph directly because the upstream `graphify` CLI hides call edges in BFS/explain modes; the script is a thin, fast view onto edges that already exist on disk. The agent that bypasses these tiers re-derives knowledge slowly and incompletely from less reliable sources.
 </information_gap_routing>
 
 <skill_resolution>

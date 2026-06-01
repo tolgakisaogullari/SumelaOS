@@ -10,4 +10,4 @@ Copy-Item -Path "$TEMP_DIR\scripts" -Destination "." -Recurse -Force -ErrorActio
 Copy-Item -Path "$TEMP_DIR\AGENTS.md.template" -Destination "." -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "$TEMP_DIR\CLAUDE.md.template" -Destination "." -Force -ErrorAction SilentlyContinue
 Remove-Item -Path $TEMP_DIR -Recurse -Force -ErrorAction SilentlyContinue
-Write-Host "Done! Run /initSumelaOS in your AI assistant." -ForegroundColor Green
+Write-Host "Done! Run /initSumela in your AI assistant." -ForegroundColor Green
