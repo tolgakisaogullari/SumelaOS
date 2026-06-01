@@ -10,23 +10,28 @@
 
 repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 [ -n "$repo" ] || exit 0
+cd "$repo" || exit 0
+[ -f scripts/validate-structure.sh ] || exit 0   # not a SumelaOS project → do nothing
 
-validator="$repo/scripts/validate-structure.sh"
-[ -f "$validator" ] || exit 0   # not a SumelaOS project / validator absent → do nothing
-
-# Only run when staged (Added/Copied/Modified) files touch the agent-control surface,
-# the second-brain, or the generated AGENTS.md. Otherwise pass instantly.
 staged="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)"
+rc=0
+
+# IDE mirror drift — checked ALWAYS (cheap; a no-op unless .sumela/mirrors.conf lists
+# mirrors). Run unconditionally because mirror files (e.g. .claude/agents/*) don't
+# match the agent-surface scope below, so scoping would miss a mirror-only commit.
+if [ -f scripts/sync-mirrors.sh ]; then
+  bash scripts/sync-mirrors.sh --check || { echo "sumela: IDE mirror(s) drifted from sumela-prompt.md — run 'bash scripts/sync-mirrors.sh'." >&2; rc=1; }
+fi
+
+# Structure validation — only when staged files touch the agent-control surface /
+# second-brain / generated config (heavier check; pass instantly otherwise).
 case "$staged" in
-  *.sumela/*|*docs/second-brain/*|*AGENTS.md*|*RULE_REGISTRY.md*) : ;;
-  *) exit 0 ;;
+  *.sumela/*|*docs/second-brain/*|*AGENTS.md*|*RULE_REGISTRY.md*)
+    echo "sumela: validating structure (pre-commit; bypass with 'git commit --no-verify')…"
+    bash scripts/validate-structure.sh --check-placeholders || rc=1 ;;
 esac
 
-echo "sumela: validating structure (pre-commit; bypass with 'git commit --no-verify')…"
-cd "$repo" || exit 0
-if bash scripts/validate-structure.sh --check-placeholders; then
-  exit 0
-else
-  echo "sumela: structure validation FAILED — fix the issues above, or re-run with 'git commit --no-verify' to bypass." >&2
-  exit 1
+if [ "$rc" -ne 0 ]; then
+  echo "sumela: pre-commit checks FAILED — fix the issues above, or re-run with 'git commit --no-verify' to bypass." >&2
 fi
+exit "$rc"

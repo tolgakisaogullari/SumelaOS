@@ -761,6 +761,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate SumelaOS structure (+ unfilled placeholders)
         run: bash scripts/validate-structure.sh --check-placeholders
+      - name: IDE mirror drift check (no-op unless .sumela/mirrors.conf lists mirrors)
+        run: bash scripts/sync-mirrors.sh --check
       - name: Shell script syntax check
         run: |
           set -e

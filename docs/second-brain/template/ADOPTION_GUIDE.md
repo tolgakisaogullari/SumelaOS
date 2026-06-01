@@ -316,7 +316,7 @@ If any expected file is missing, the agent flags the gap and offers to create it
 The structure contract is enforced automatically, not just by convention:
 
 - **CI (opt-in):** `setup.sh --ci` / `setup.ps1 -Ci` (or answering `y` at the setup prompt) adds `.github/workflows/sumela-validate.yml`, which runs `bash scripts/validate-structure.sh --check-placeholders` (+ shell syntax) on every push/PR. It is **not** created by default — enable it only if you want GitHub Actions enforcement (the pre-commit hook below works regardless).
-- **Pre-commit:** when `core.hooksPath` is wired (setup does this), `.sumela/git-hooks/pre-commit` runs the same validation locally before a commit that touches the agent-control surface. Bypass an individual commit with `git commit --no-verify`.
+- **Pre-commit:** when `core.hooksPath` is wired (setup does this), `.sumela/git-hooks/pre-commit` runs the same validation locally before a commit that touches the agent-control surface — plus an **IDE-mirror drift check** (`sync-mirrors.sh --check`, a no-op unless you maintain mirrors). Bypass an individual commit with `git commit --no-verify`.
 
 **Not on GitHub Actions?** The check is just one script — wire it into your CI:
 
@@ -324,15 +324,47 @@ The structure contract is enforced automatically, not just by convention:
 # GitLab CI (.gitlab-ci.yml)
 sumela-validate:
   image: ubuntu:latest
-  before_script: [ "apt-get update -qq && apt-get install -y -qq git" ]
-  script: [ "bash scripts/validate-structure.sh --check-placeholders" ]
+  before_script: [ "apt-get update -qq && apt-get install -y -qq git python3" ]
+  script:
+    - bash scripts/validate-structure.sh --check-placeholders
+    - bash scripts/sync-mirrors.sh --check
 ```
 
 ```yaml
 # Azure Pipelines
 - script: bash scripts/validate-structure.sh --check-placeholders
   displayName: SumelaOS Validate
+- script: bash scripts/sync-mirrors.sh --check
+  displayName: SumelaOS Mirror Drift Check
 ```
+
+### Upgrading SumelaOS (core vs overlay)
+
+The framework evolves. To pull CORE improvements without clobbering your project's
+OVERLAY, run the updater (it never touches your AGENTS.md, stack rules, wiki,
+registries, governance/CI choices, or `.sumela/local.md`):
+
+```bash
+bash scripts/update.sh --dry-run    # preview what would change
+bash scripts/update.sh              # apply (diff + consent for any locally-changed core file)
+bash scripts/update.ps1             # Windows
+```
+
+- **CORE** (refreshed): `sumela-prompt.md`, `skills/`, `git-hooks/`, the seven
+  universal rules, `scripts/*`, `docs/second-brain/template/`, and installed
+  memory-plugins. Version-gated on `.sumela/VERSION`.
+- **OVERLAY** (never touched): `AGENTS.md`, `RULE_REGISTRY.md`, `SKILL_REGISTRY.md`,
+  your stack rules (`backend_standards.md`, …, `operational_excellence_maintenance.md`),
+  `docs/second-brain/wiki/*`, `.sumela/local.md`, `.gitignore`/`.gitattributes`,
+  IDE pointers, CODEOWNERS, CI workflow.
+- After an update that added/removed skills or rules, reconcile the registries by hand
+  (or re-run `/initSumela`'s registry step). If `_SCHEMA.md` changed, diff/copy
+  `docs/second-brain/template/wiki/_SCHEMA.md` → `docs/second-brain/wiki/_SCHEMA.md`.
+
+**IDE mirrors:** if some IDE entrypoints carry the prompt body verbatim, list them in
+`.sumela/mirrors.conf` (copy `.sumela/mirrors.conf.example`) and run
+`scripts/sync-mirrors.sh` to regenerate them from `sumela-prompt.md` (`--init` scaffolds
+a missing one). Pre-commit and CI run `sync-mirrors.sh --check` to fail on drift.
 
 ### Wiki Hygiene Rules
 

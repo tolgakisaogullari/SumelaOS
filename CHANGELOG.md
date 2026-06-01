@@ -3,6 +3,38 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/update.sh`).
+
+## [0.3.0] - 2026-06-01
+
+### Added — team enablement
+
+- **Shared session memory** — `session-ingest.py` is idempotent (deterministic point
+  IDs, delete-by-session); `post-merge`/`post-checkout` git hooks re-ingest teammates'
+  committed session summaries into each developer's local Qdrant on pull.
+- **Team-safe wiki** — `_LOG.md` uses git `union` merge; the self-improvement queue is
+  a directory (`_improvement-queue/`, one `IMP-YYYYMMDD-<short>.md` per signal, no
+  shared counter); `active-project-context.md` per-developer "Active Work" convention.
+- **`/evolve` governance** — `governance: solo|team` (AGENTS.md §8). In team mode,
+  rule/skill/schema changes route through a PR (`proposed` status + reconcile) and a
+  `.github/CODEOWNERS` block guards the agent-control surface.
+- **Enforcement** — `validate-structure.sh` runs via a `.sumela/git-hooks/pre-commit`
+  hook (scoped, bypassable) and an opt-in GitHub Actions workflow (`setup.sh --ci`).
+- **Per-developer config** — gitignored `.sumela/local.md` overrides only
+  `interaction_language`; code naming/documentation stay team-wide.
+- **Upgrade path** — `.sumela/VERSION` + `scripts/update.sh` / `update.ps1` refresh the
+  framework CORE (prompt, skills, scripts, hooks, universal rules, schema, templates)
+  without touching the project OVERLAY (AGENTS.md, stack rules, wiki, registries,
+  governance/CI choices), with per-file diff + consent.
+- **IDE mirror sync** — `scripts/sync-mirrors.sh` regenerates verbatim IDE mirrors
+  from `sumela-prompt.md`; drift is checked by pre-commit + CI.
+
+### Changed
+
+- `core.hooksPath` is wired for every git repo (memory hooks self-gate); the CI
+  workflow is opt-in (not auto-imposed).
+- Reconciled the language protocol: project code follows the configured
+  naming/documentation languages; only framework artifacts + commit messages stay English.
 
 ## [0.2.0] - 2026-05-22
 

@@ -1,0 +1,27 @@
+# SumelaOS mirror targets (COMMITTED — team-wide).
+#
+# Most IDEs read AGENTS.md (or a thin pointer to it) and need NO mirror. But some
+# weaker models skip "read the canonical file" directives, so a few IDE entrypoints
+# must carry the body of `.sumela/sumela-prompt.md` VERBATIM. Rather than maintain
+# that by hand, list those mirror files here (one path per line, relative to repo
+# root) and run `scripts/sync-mirrors.sh` to keep them in sync. Pre-commit + CI run
+# `sync-mirrors.sh --check` to fail on drift.
+#
+# Each listed file must contain a marker block; `sync-mirrors.sh` only rewrites the
+# content BETWEEN the markers (your IDE-specific frontmatter/wrapper outside is kept):
+#
+#   <!-- SUMELA-MIRROR:BEGIN -->
+#   <!-- SUMELA-MIRROR:END -->
+#
+# `scripts/sync-mirrors.sh --init` scaffolds a listed file (with markers) if missing.
+# (Do not put the literal text SUMELA-MIRROR:BEGIN/END inside sumela-prompt.md itself —
+#  it would collide with the mirror markers.)
+#
+# IMPORTANT: a mirror is shared, so it MUST be committable — make sure its path is not
+# gitignored. If you blanket-ignore `.claude/` (common for local Claude settings), either
+# un-ignore the agents subdir (`!.claude/agents/`) or put the mirror elsewhere.
+#
+# To activate: copy this file to `.sumela/mirrors.conf` and uncomment/add your paths.
+# Examples (uncomment the ones you actually use):
+# .claude/agents/sumela-agent.md
+# .opencode/agents/sumela.md

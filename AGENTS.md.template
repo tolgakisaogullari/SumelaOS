@@ -166,11 +166,15 @@ The agent control surface is split into two layers:
 - `.sumela/skills/*` — universal skill workflows.
 - `.sumela/rules/self_improvement_protocol.md` (pointer file).
 - `docs/second-brain/template/*` — second brain skeleton, schema, adoption guide.
-- `scripts/auto-update-memory.py`, `query-qdrant.py`, `query-graph.py`, `session-ingest.py`, `sync-graphify-to-obsidian.py`, `setup-qdrant.py`.
+- `.sumela/VERSION` — core framework version (consumed by `scripts/update.sh`).
+- `.sumela/git-hooks/*` — pre-commit validation + memory-sync hooks.
+- `scripts/*` — `setup.*`, `validate-structure.sh`, `update.*` (framework upgrade), `sync-mirrors.*` (IDE mirror sync), and the memory-plugin scripts (`auto-update-memory.py`, `query-qdrant.py`, `query-graph.py`, `session-ingest.py`, `sync-graphify-to-obsidian.py`, `setup-qdrant.py`).
+- **Upgrade:** run `scripts/update.sh` (or `update.ps1`) to refresh this CORE layer from upstream without touching the project OVERLAY (below). It version-gates on `.sumela/VERSION`, shows a diff + asks before overwriting any locally-changed core file, and never touches AGENTS.md / registries / stack rules / wiki / governance + CI choices.
 
 **A.1. IDE subagent mirrors (kept in lockstep with the runtime contract):**
-- `.claude/agents/superpowers-agent-mode.md` (Claude Code) and `.opencode/agents/supermemo.md` (OpenCode) MIRROR the body of `.sumela/sumela-prompt.md` verbatim. They were originally thin loaders ("read the canonical file first") but cross-LLM testing showed weaker models (e.g., Kimi K2.6) skip such directives, breaking the contract. The mirrored content guarantees the rules reach every model regardless of compliance variance.
-- **Maintenance contract:** when the canonical prompt changes, you MUST update both mirrors in the same commit. Each mirror carries an HTML comment at the top reminding the editor of this. A future improvement could automate the sync via a pre-commit hook; for now it is manual.
+- Some IDE entrypoints must carry the body of `.sumela/sumela-prompt.md` **verbatim** (cross-LLM testing showed weaker models skip "read the canonical file first" loaders, breaking the contract). Each such mirror file contains a marker block:
+  `<!-- SUMELA-MIRROR:BEGIN -->` … `<!-- SUMELA-MIRROR:END -->` — your IDE-specific frontmatter/wrapper lives OUTSIDE the markers; only the block between them is the mirrored prompt.
+- **Automated maintenance contract:** list each mirror file (repo-relative path) in `.sumela/mirrors.conf` (copy `.sumela/mirrors.conf.example`), then run `scripts/sync-mirrors.sh` to regenerate the marked blocks from `sumela-prompt.md` (`--init` scaffolds a missing mirror). **Drift is enforced automatically** — the `pre-commit` hook and the CI workflow run `sync-mirrors.sh --check` and fail if any mirror is out of sync. No more manual lockstep editing.
 - Other IDE pointer files (`.cursor/rules/00-agent.md`, `.trae/rules/00-agent.md`, `.kilocode/rules.md`, `.clinerules`, `CLAUDE.md`) remain thin pointers because their IDEs reliably follow the "read AGENTS.md" directive — no mirroring needed there.
 
 **B. Project overlay (edit per project):**
