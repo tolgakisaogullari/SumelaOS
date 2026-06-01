@@ -332,13 +332,17 @@ ensures those PRs require a code owner's review. Skip entirely in `solo` mode.
 2. Ask the user for their owner handle and replace `@OWNER`; if unknown, leave the
    placeholder and tell them to set it before enabling branch protection.
 
-### Step 3.9: CI validation workflow (default on)
+### Step 3.9: CI validation workflow (opt-in — ASK, default no)
 
-Create `.github/workflows/sumela-validate.yml` so the structure contract is enforced
-on every push/PR (same check as the pre-commit hook). Use the content shipped by
-`setup.sh` section 7e. Skip only if the user explicitly opts out or does not use
-GitHub — for GitLab/Azure, point them to the snippet in `ADOPTION_GUIDE.md`
-(Section 9, "CI & Pre-Commit Enforcement"). Do not overwrite an existing workflow file.
+The CI workflow is optional (not every team uses GitHub Actions). ASK the user:
+*"Add a GitHub Actions workflow that runs the structure validation on push/PR? (y/N)"*
+
+- If **yes**: create `.github/workflows/sumela-validate.yml` using the content shipped
+  by `setup.sh` section 7e (runs `validate-structure.sh --check-placeholders` + shell
+  syntax). Do not overwrite an existing workflow file.
+- If **no** (default): create nothing — the pre-commit hook (Step 3.7) still enforces
+  locally. For GitLab/Azure, point them to the snippet in `ADOPTION_GUIDE.md`
+  (Section 9, "CI & Pre-Commit Enforcement").
 
 ## PHASE 4 — Validation & Summary
 

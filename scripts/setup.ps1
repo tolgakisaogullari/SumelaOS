@@ -44,8 +44,8 @@
     Governance mode: solo (apply /evolve changes directly) or team (PR-gate the
     agent-control surface). Default: solo.
 
-.PARAMETER NoCi
-    Skip creating the GitHub Actions validation workflow.
+.PARAMETER Ci
+    Opt in to creating the GitHub Actions validation workflow (default: off).
 
 .EXAMPLE
     pwsh -File scripts/setup.ps1
@@ -67,7 +67,7 @@ param(
     [string]$Plugins = "",
     [string]$IDEs = "",
     [string]$Governance = "solo",
-    [switch]$NoCi
+    [switch]$Ci
 )
 
 $ErrorActionPreference = "Stop"
@@ -202,7 +202,15 @@ else {
     Write-Host "  solo — apply directly (one developer owns the config)"
     Write-Host "  team — route through a pull request so a code owner reviews before it becomes everyone's standard"
     $Governance = Read-WithDefault "Governance mode (solo/team)" "solo"
+
+    Write-Host ""
+    Write-Host "Optional: a GitHub Actions workflow that runs the structure validation on push/PR."
+    Write-Host "(Skip if you use GitLab/Azure/no CI — see ADOPTION_GUIDE for those.)"
+    if (Read-YesNo "Add the GitHub Actions CI workflow?" "n") { $Ci = $true }
 }
+
+# CI workflow is opt-in (-Ci switch, or 'y' at the interactive prompt).
+$WithCi = [bool]$Ci
 
 # Default naming/documentation languages to CodeLanguage when not supplied (non-interactive parity).
 if ([string]::IsNullOrWhiteSpace($NamingLanguage)) { $NamingLanguage = $CodeLanguage }
@@ -618,9 +626,9 @@ if ($Governance -eq "team") {
 }
 
 # =============================================================================
-# 7e. CI WORKFLOW — run validate-structure on push/PR (skip with -NoCi)
+# 7e. CI WORKFLOW — run validate-structure on push/PR (opt-in: -Ci / prompt)
 # =============================================================================
-if (-not $NoCi) {
+if ($WithCi) {
     $ciFile = ".github/workflows/sumela-validate.yml"
     if (Test-Path $ciFile) {
         Write-Ok "CI workflow already present ($ciFile)"
@@ -718,7 +726,7 @@ if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
 if ($HooksWired) { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks; pre-commit validation)" }
 if ($Governance -eq "team") { Write-Host "    - .github/CODEOWNERS (agent-control surface — replace @OWNER)" }
-if (-not $NoCi) { Write-Host "    - .github/workflows/sumela-validate.yml (CI structure check)" }
+if ($WithCi) { Write-Host "    - .github/workflows/sumela-validate.yml (CI structure check)" }
 Write-Host ""
 Write-Host "  Next steps:"
 Write-Host "    1. Edit AGENTS.md — fill in project-specific commands and conventions"

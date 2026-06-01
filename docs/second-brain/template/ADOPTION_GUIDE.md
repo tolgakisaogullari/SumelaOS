@@ -315,7 +315,7 @@ If any expected file is missing, the agent flags the gap and offers to create it
 
 The structure contract is enforced automatically, not just by convention:
 
-- **CI:** `setup.sh` / `setup.ps1` add `.github/workflows/sumela-validate.yml`, which runs `bash scripts/validate-structure.sh --check-placeholders` (+ shell syntax) on every push/PR. Pass `--no-ci` / `-NoCi` to skip.
+- **CI (opt-in):** `setup.sh --ci` / `setup.ps1 -Ci` (or answering `y` at the setup prompt) adds `.github/workflows/sumela-validate.yml`, which runs `bash scripts/validate-structure.sh --check-placeholders` (+ shell syntax) on every push/PR. It is **not** created by default — enable it only if you want GitHub Actions enforcement (the pre-commit hook below works regardless).
 - **Pre-commit:** when `core.hooksPath` is wired (setup does this), `.sumela/git-hooks/pre-commit` runs the same validation locally before a commit that touches the agent-control surface. Bypass an individual commit with `git commit --no-verify`.
 
 **Not on GitHub Actions?** The check is just one script — wire it into your CI:

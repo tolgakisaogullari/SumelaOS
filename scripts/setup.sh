@@ -20,7 +20,7 @@
 #     --plugins "qdrant-session-memory,graphify-code-graph" \
 #     --ides "claude,cursor,cline,kilo-code,trae" \
 #     --governance "solo"                   # or "team" (PR-gated /evolve)
-#     --no-ci                               # skip creating the GitHub Actions workflow
+#     --ci                                  # opt in to the GitHub Actions workflow (default: off)
 # -----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -50,7 +50,7 @@ NI_RULE_VARIANT="best-practice"
 NI_PLUGINS=""
 NI_IDES=""
 NI_GOVERNANCE="solo"
-WITH_CI=true
+WITH_CI=false   # CI workflow is opt-in (--ci, or 'y' at the interactive prompt)
 HOOKS_WIRED=false
 
 # --- Parse CLI args ---
@@ -68,7 +68,7 @@ while [[ $# -gt 0 ]]; do
     --plugins)         NI_PLUGINS="$2"; shift 2 ;;
     --ides)            NI_IDES="$2"; shift 2 ;;
     --governance)      NI_GOVERNANCE="$2"; shift 2 ;;
-    --no-ci)           WITH_CI=false; shift ;;
+    --ci)              WITH_CI=true; shift ;;
     *) err "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -246,6 +246,13 @@ else
   echo "  solo — apply directly (one developer owns the config)"
   echo "  team — route through a pull request so a code owner reviews before it becomes everyone's standard"
   GOVERNANCE=$(prompt_default "Governance mode (solo/team)" "solo")
+
+  echo ""
+  echo "Optional: a GitHub Actions workflow that runs the structure validation on push/PR."
+  echo "(Skip if you use GitLab/Azure/no CI — see ADOPTION_GUIDE for those.)"
+  if prompt_yn "Add the GitHub Actions CI workflow?" "n"; then
+    WITH_CI=true
+  fi
 fi
 
 # Normalize / validate governance value.
@@ -699,7 +706,7 @@ if [ "$GOVERNANCE" = "team" ]; then
 fi
 
 # =============================================================================
-# 7e. CI WORKFLOW — run validate-structure on push/PR (skip with --no-ci)
+# 7e. CI WORKFLOW — run validate-structure on push/PR (opt-in: --ci / prompt)
 # =============================================================================
 if [ "$WITH_CI" = true ]; then
   CI_FILE=".github/workflows/sumela-validate.yml"
