@@ -167,9 +167,9 @@ Your choice: ___
 ```
 
 **Store the answers as:**
-- `INTERACTION_LANGUAGE` → e.g., "English", "Turkish", "German"
-- `NAMING_LANGUAGE` → e.g., "English", "Turkish"
-- `DOCUMENTATION_LANGUAGE` → e.g., "English", "Turkish", "German"
+- `INTERACTION_LANGUAGE` → e.g., "English", "Turkish", "German" — the team-wide **default**; each developer can override their own interaction language via `.sumela/local.md` (gitignored; copy `.sumela/local.md.example`). Mention this to the user.
+- `NAMING_LANGUAGE` → e.g., "English", "Turkish" — team-wide, not locally overridable.
+- `DOCUMENTATION_LANGUAGE` → e.g., "English", "Turkish", "German" — team-wide, not locally overridable.
 
 **Common configurations:**
 

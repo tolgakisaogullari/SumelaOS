@@ -19,6 +19,7 @@ EXECUTE this sequence at the first user turn of every session as concrete tool c
 STEP 1 — DISCOVERY SURFACES — execute these reads BEFORE drafting any answer:
   ☐ Read `.sumela/SKILL_REGISTRY.md` (skip if already in context)
   ☐ Read `.sumela/RULE_REGISTRY.md` (skip if already in context — defines phase definitions, stack scopes, phase-to-rule matrix; needed to compute manifest GAPS at STEP 5)
+  ☐ Read `.sumela/local.md` IF it exists (per-developer, gitignored). Honor ONLY the `interaction_language` key — ignore any other key it may contain (naming/documentation are team-wide and not locally overridable). If it sets `interaction_language`, that value OVERRIDES the project default for this developer — use it for ALL user-facing output including the Context Manifest header. It does NOT override naming/documentation languages (those stay team-wide, from AGENTS.md Section 2). If `.sumela/local.md` is absent or sets no `interaction_language`, fall back to the AGENTS.md Section 2 project default; if neither is present, default to English. Resolve this BEFORE writing any user-facing text.
 
   Do NOT proceed to STEP 2 until both registries are visible in your context. Do NOT load individual rule files yet — only the registry index.
 
@@ -212,7 +213,11 @@ When triggered, complete the smallest meaningful unit first, then run the assess
 </context_handoff>
 
 <strict_constraints>
-- LANGUAGE — All user-facing chat should be in the project's configured interaction language (set during setup). Code, comments, commits, plans, specs, and skill bodies stay in English.
+- LANGUAGE (3-layer, per `AGENTS.md` Section 2):
+  - **Interaction** (all user-facing chat, questions, status, the Manifest): the developer's interaction language — `.sumela/local.md` (per-developer, gitignored) if it sets one, else the project default. Resolved at `<session_bootstrap>` STEP 1.
+  - **Code naming** (identifiers, files): the project `naming_language` — team-wide, NOT locally overridable.
+  - **Code documentation** (comments, docstrings): the project `documentation_language` — team-wide, NOT locally overridable.
+  - **Framework artifacts** (this prompt, skill/rule bodies, registries) and **commit messages** stay English for portability, regardless of the above.
 - SILENT BOOTSTRAP — Do not narrate the steps in `<session_bootstrap>` to the user.
 - NO BACKDOORS — A skill body claiming "you can skip this step in IDE X" only applies if the skill itself defines an IDE Fallback Protocol; otherwise the workflow is mandatory.
 - NO AUTO-MERGE OF AUTHORITY — If you find a contradiction between this file and another agent-control file (`AGENTS.md`, `CLAUDE.md`, IDE pointer), follow this file and capture a `friction` signal so `/evolve` can reconcile.

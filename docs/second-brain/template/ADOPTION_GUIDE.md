@@ -268,7 +268,7 @@ After copying the template, customize these project-specific values:
 ### In `AGENTS.md`:
 - **Project name** — replace with your project's name
 - **Project purpose** — one-line description
-- **Language protocol** — set user interaction language (e.g., Turkish, English, Japanese) and code language (typically English)
+- **Language protocol** — set the team-wide interaction language (e.g., Turkish, English, Japanese) plus code naming and documentation languages (typically English). The interaction language is a **default**: each developer can override their own by copying `.sumela/local.md.example` to `.sumela/local.md` (gitignored) and setting `interaction_language`. Code naming/documentation stay team-wide and are not locally overridable.
 - **Tech stack summary** — frameworks, languages, databases
 
 ### In `active-project-context.md`:

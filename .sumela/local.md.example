@@ -1,0 +1,24 @@
+---
+# SumelaOS per-developer overrides (PERSONAL — never committed).
+#
+# Copy this file to `.sumela/local.md` (gitignored) to set YOUR own preferences
+# without changing the team-wide project config in AGENTS.md:
+#
+#   cp .sumela/local.md.example .sumela/local.md
+#
+# Only the keys listed below are honored. Anything else is ignored.
+
+# Interaction language — the language the agent talks to YOU in (explanations,
+# questions, status, the Context Manifest header). Overrides AGENTS.md Section 2's
+# project default for your clone only.
+interaction_language: English
+---
+
+<!--
+  Why only interaction_language?
+
+  Code NAMING and code DOCUMENTATION languages are deliberately NOT overridable
+  here — they must stay consistent across the whole team, so they live only in
+  AGENTS.md Section 2 (committed, team-wide). This file changes how the agent
+  speaks to you, never what lands in the shared codebase.
+-->

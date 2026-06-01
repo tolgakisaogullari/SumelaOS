@@ -27,9 +27,9 @@
 
 ## 2. Language Protocol (3-Layer)
 
-- **Interaction language** (agent chat, explanations, questions, status reports): {{interaction_language}}
-- **Code naming** (services, methods, functions, classes, variables, files): {{naming_language}}
-- **Code documentation** (comments, docstrings, XML docs, property descriptions): {{documentation_language}}
+- **Interaction language** (agent chat, explanations, questions, status reports): {{interaction_language}} — *project default; each developer may override this for their own clone via `.sumela/local.md` (gitignored — copy `.sumela/local.md.example`).*
+- **Code naming** (services, methods, functions, classes, variables, files): {{naming_language}} — team-wide, not locally overridable.
+- **Code documentation** (comments, docstrings, XML docs, property descriptions): {{documentation_language}} — team-wide, not locally overridable.
 
 ---
 

@@ -536,6 +536,28 @@ else {
 }
 
 # =============================================================================
+# 6c. CONFIGURE .gitignore (per-developer / runtime artifacts — never commit)
+# =============================================================================
+Write-Info "Ensuring .gitignore covers per-developer / runtime artifacts..."
+$gitignoreMarker = "# SumelaOS — per-developer / runtime artifacts"
+# Guard on the stable entry line (not the comment) so re-runs and the framework
+# repo's own .gitignore are both detected and not duplicated.
+if ((Test-Path .gitignore) -and (Select-String -Path .gitignore -Pattern '^\.sumela/local\.md$' -Quiet)) {
+    Write-Ok ".gitignore already ignores per-developer artifacts"
+}
+else {
+    if ((Test-Path .gitignore) -and ((Get-Item .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
+    Add-Content .gitignore "$gitignoreMarker (never commit)"
+    Add-Content .gitignore ".sumela/local.md"
+    Add-Content .gitignore ".sumela/.memory-sync.log"
+    Add-Content .gitignore ".superpowers/"
+    Add-Content .gitignore "**/scripts/.superpowers/"
+    Add-Content .gitignore "graphify-out/"
+    Add-Content .gitignore "qdrant-storage/"
+    Write-Ok ".gitignore SumelaOS block added"
+}
+
+# =============================================================================
 # 7. REGISTER MEMORY PLUGINS
 # =============================================================================
 if ($PluginArray.Count -gt 0) {

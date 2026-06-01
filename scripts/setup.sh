@@ -605,6 +605,30 @@ else
 fi
 
 # =============================================================================
+# 6c. CONFIGURE .gitignore (per-developer / runtime artifacts — never commit)
+# =============================================================================
+info "Ensuring .gitignore covers per-developer / runtime artifacts..."
+GITIGNORE_MARKER="# SumelaOS — per-developer / runtime artifacts"
+# Guard on the stable entry line (not the comment) so re-runs AND the framework
+# repo's own .gitignore — which already lists these under different headers — are
+# both detected and not duplicated.
+if [ -f .gitignore ] && grep -qxF ".sumela/local.md" .gitignore; then
+  ok ".gitignore already ignores per-developer artifacts"
+else
+  {
+    [ -s .gitignore ] && echo ""
+    echo "$GITIGNORE_MARKER (never commit)"
+    echo ".sumela/local.md"          # per-developer interaction-language override
+    echo ".sumela/.memory-sync.log"  # memory-sync hook log
+    echo ".superpowers/"             # brainstorming skill runtime state
+    echo "**/scripts/.superpowers/"
+    echo "graphify-out/"             # Graphify plugin output
+    echo "qdrant-storage/"           # Qdrant plugin storage
+  } >> .gitignore
+  ok ".gitignore SumelaOS block added"
+fi
+
+# =============================================================================
 # 7. REGISTER MEMORY PLUGINS
 # =============================================================================
 if [ ${#PLUGINS[@]} -gt 0 ]; then
