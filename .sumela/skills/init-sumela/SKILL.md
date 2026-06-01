@@ -131,7 +131,7 @@ Is this correct? Anything that needs fixing?
 
 **WAIT for user confirmation.** If user says "2", ask which part to correct and re-analyze. If user says "3", abort.
 
-## PHASE 2a — Language Configuration (MANDATORY)
+## PHASE 2a — Language & Governance Configuration (MANDATORY)
 
 After the user confirms the analysis, MUST ask about language preferences. NEVER skip this step — these settings control how the agent communicates, names code, and writes documentation.
 
@@ -183,6 +183,24 @@ Your choice: ___
 
 **Default suggestion:** If the user seems unsure, suggest "English" for all three — it's the most portable choice.
 
+### Governance mode (MANDATORY)
+
+Also ask how `/evolve` should apply changes to the **agent-control surface** (rules, skills, prompt, schema — the files that change every developer's agent):
+
+```
+## 🏛️ Governance Mode
+
+- solo — /evolve applies approved changes directly. Best when one developer owns
+         the agent configuration.
+- team — /evolve routes changes to rules/skills/prompt/schema through a pull
+         request so a code owner reviews them before they become everyone's
+         standard. Lower-stakes wiki/active-context changes still apply directly.
+
+Your choice (solo/team): ___
+```
+
+**Store as `GOVERNANCE_MODE`** → `solo` (default) or `team`. If the user is unsure or working alone, choose `solo`. Note: this is independent of whether the repo has CODEOWNERS — a solo developer may still use CODEOWNERS on GitHub/Azure, so we ask explicitly rather than auto-detecting.
+
 ## PHASE 2b — Memory Plugin Selection (MANDATORY)
 
 After the user confirms the analysis, MUST ask about optional memory plugins. NEVER skip this step.
@@ -227,8 +245,10 @@ Read `AGENTS.md.template` and fill all `{{placeholders}}`:
 - `{{project_name}}` → from repo root directory name or user input
 - `{{project_purpose}}` → from README.md one-liner or user input
 - `{{tech_stack_summary}}` → from Phase 1 analysis
-- `{{interaction_language}}` → ask user (default: English)
-- `{{code_language}}` → English (standard)
+- `{{interaction_language}}` → `INTERACTION_LANGUAGE` from PHASE 2a (default: English)
+- `{{naming_language}}` → `NAMING_LANGUAGE` from PHASE 2a (default: English)
+- `{{documentation_language}}` → `DOCUMENTATION_LANGUAGE` from PHASE 2a (default: English)
+- `{{governance_mode}}` → `GOVERNANCE_MODE` from PHASE 2a (`solo` or `team`)
 - `{{backend_commands}}` → from package.json scripts / csproj commands
 - `{{frontend_commands}}` → from frontend package.json scripts
 - `{{mobile_commands}}` → from mobile package.json scripts
@@ -287,6 +307,28 @@ was selected in PHASE 2b (choice 1 or 2):
 4. Tell the user each teammate must run the `git config core.hooksPath` command
    once per clone (hooks are not shared by git automatically), and that `setup.sh`
    / `setup.ps1` do this step for them.
+
+### Step 3.8: CODEOWNERS for the agent-control surface (only if `GOVERNANCE_MODE` is `team`)
+
+In `team` mode, `/evolve` routes agent-control changes through a PR; CODEOWNERS
+ensures those PRs require a code owner's review. Skip entirely in `solo` mode.
+
+1. Create or append to `.github/CODEOWNERS` (do NOT overwrite an existing one —
+   append the agent-control block if your marker line is not already present):
+
+   ```
+   # SumelaOS agent-control surface — changes here alter every developer's agent.
+   # Replace @OWNER with your team/maintainer handle (e.g. @org/maintainers).
+   /.sumela/rules/                     @OWNER
+   /.sumela/skills/                    @OWNER
+   /.sumela/sumela-prompt.md           @OWNER
+   /.sumela/RULE_REGISTRY.md           @OWNER
+   /.sumela/SKILL_REGISTRY.md          @OWNER
+   /.sumela/git-hooks/                 @OWNER
+   /docs/second-brain/wiki/_SCHEMA.md  @OWNER
+   ```
+2. Ask the user for their owner handle and replace `@OWNER`; if unknown, leave the
+   placeholder and tell them to set it before enabling branch protection.
 
 ## PHASE 4 — Validation & Summary
 

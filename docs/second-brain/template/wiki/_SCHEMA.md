@@ -161,7 +161,7 @@ Obsidian wikilink'leri vault içinde dosya adına göre çözülür — yol bilm
 | `lint` | Wiki sağlık kontrolü yapıldı |
 | `code-commit` | Bir geliştirme branch'i finish edildi, wiki yansıması yapıldı |
 | `decision` | Yeni mimari karar kaydedildi (decision page güncellendi) |
-| `evolve` | Self-improvement queue review (`/evolve`) — bir IMP entry applied/superseded oldu |
+| `evolve` | Self-improvement queue review (`/evolve`) — bir IMP entry proposed/applied/superseded oldu |
 | `migration` | Wiki yapısal değişikliği (klasör taşıma, format güncelleme) |
 
 **Parse doğrulaması:**
@@ -548,9 +548,10 @@ başlıkları altında) yaşar; aşağıdaki alanlar frontmatter'dadır:
 | `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.sumela/rules/<topic>.md` (portable, IDE-agnostic). |
 | `provider_context` | string | Sinyali yakalayan model (`claude-opus-4-8`, `claude-sonnet-4-6`, vs.) |
 | `confidence` | enum | `high` \| `medium` \| `low` (bkz. 15.5) |
-| `status` | enum | `pending` \| `applied` \| `superseded` \| `rejected` |
+| `status` | enum | `pending` \| `proposed` \| `applied` \| `superseded` \| `rejected` |
 
 **Duruma göre ek frontmatter alanları (status değişince yerinde eklenir):**
+- `proposed` (team-mode, gated scope — PR açık) → `pr: <pr-url>` (gerçek PR URL'i; sadece branch adı değil), `proposed_at: YYYY-MM-DD`
 - `applied` → `applied: YYYY-MM-DD`, `last_validated: YYYY-MM-DD`, `challenges: [IMP-ID, ...]`
 - `superseded` → `superseded_by: IMP-ID`, `superseded_at: YYYY-MM-DD`
 - `rejected` → `rejected_at: YYYY-MM-DD`, `rejection_reason: text`
@@ -586,7 +587,7 @@ Farklı provider/zaman farklı karar verebilir. Agent yeni session'da mevcut bir
 3. `/evolve` review'da kullanıcı challenge'ı onaylarsa:
    - Orijinal entry dosyasının frontmatter'ı yerinde güncellenir: `status: superseded`, `superseded_by: <yeni-IMP-ID>`, `superseded_at` eklenir
    - Yeni entry `status: applied` olur, ilgili dosyaya uygulanır
-   - `_LOG.md`'ye `decision` entry'si: *"IMP-20260601-a1b2 superseded by IMP-20260714-c3d4 — reason: ..."*
+   - `_LOG.md`'ye `evolve` entry'si: *"IMP-20260714-c3d4 applied; supersedes IMP-20260601-a1b2 — reason: ..."*
 4. Orijinal entry dosyası **silinmez** — sadece frontmatter'ı `superseded` yapılır, dosya yerinde kalır (tarihsel doğruluk).
 
 ### 15.7 Proaktif Re-validation
@@ -607,6 +608,8 @@ Session başında `using-second-brain` eager-load içinde:
 | `rule` (`.sumela/rules/*.md`) | **Çift onay:** "bu kural yazılsın mı?" → sonra "uygula?" |
 | `schema` (`_SCHEMA.md`) | **Çift onay** + manuel review zorunlu |
 
+**Governance modu (team) — gated scope'lar için PR kapısı:** `AGENTS.md` Section 8'deki `governance` `team` ise, `rule` / `skill` / `schema` scope'lu (yani her geliştiricinin agent'ını etkileyen) değişiklikler doğrudan uygulanmaz; `/evolve` bunları `sumela/evolve-<IMP-ID>` branch'inde uygular + commit + **pull request** açar ve entry `status: proposed` olur. Bir code owner PR'ı merge edince `applied` olur (bkz. 15.10 reconcile). `solo` modda VEYA `wiki`/`active-context` scope'larda bugünkü doğrudan-apply davranışı geçerlidir. Detay: `self-improvement-curator/SKILL.md` `<evolve_review_workflow>`.
+
 ### 15.9 Hijyen & Arşivleme
 
 - `_improvement-queue/` 500+ entry olursa `superseded` ve `rejected` dosyaları `_improvement-queue/archive/YYYY/` alt dizinine taşınır (dosyalar silinmez)
@@ -616,18 +619,23 @@ Session başında `using-second-brain` eager-load içinde:
 
 ### 15.10 `_LOG.md` Entegrasyonu
 
-Aşağıdaki olaylar `_LOG.md`'ye `decision` entry'si olarak yazılır:
-- Bir IMP entry `applied` olduğunda
-- Bir IMP entry `superseded` olduğunda (challenge onayı)
-- Bir IMP entry `rejected` olduğunda (opsiyonel, sadece rule/schema scope için)
+Aşağıdaki olaylar `_LOG.md`'ye `evolve` entry'si olarak yazılır:
+- Bir IMP entry `proposed` olduğunda (team-mode, PR açıldı)
+- Bir IMP entry `applied` olduğunda (solo doğrudan apply VEYA team-mode PR merge — reconcile)
+- Bir IMP entry `superseded` olduğunda (challenge onayı; applied log satırına `supersedes: <IMP-ID>` eklenir)
+
+`rejected` olaylar `_LOG.md`'ye **yazılmaz** (log gürültüsünü önlemek için) — solo reddetme de team-mode'da kapanan PR de.
 
 Format:
 ```markdown
-## [2026-04-14] decision | IMP-20260414-a3f8 applied: AsSplitQuery rule added
+## [2026-04-14] evolve | IMP-20260414-a3f8 applied: AsSplitQuery rule added
 - Scope: rule → .sumela/rules/backend_standards.md
 - Provider: claude-opus-4-8
+- PR: <url> (team mode; none in solo)
 - Challenges: none
 ```
+
+**Reconcile (team mode):** `/evolve` başında, `proposed` durumundaki her entry'nin PR'ı kontrol edilir (`gh pr view` / `glab mr view`; yoksa kullanıcıya sorulur): merge olduysa → `applied` (+ `applied`/`last_validated`), merge olmadan kapandıysa → `rejected`, hâlâ açıksa → `proposed` kalır.
 
 ## 16. Scale Playbook (Wiki Büyüme Yol Haritası)
 

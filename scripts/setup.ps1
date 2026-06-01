@@ -40,6 +40,10 @@
 .PARAMETER IDEs
     Comma-separated list of IDEs: claude, cursor, cline, kilo-code, trae.
 
+.PARAMETER Governance
+    Governance mode: solo (apply /evolve changes directly) or team (PR-gate the
+    agent-control surface). Default: solo.
+
 .EXAMPLE
     pwsh -File scripts/setup.ps1
 
@@ -58,7 +62,8 @@ param(
     [string]$Stacks = "",
     [string]$RuleVariant = "best-practice",
     [string]$Plugins = "",
-    [string]$IDEs = ""
+    [string]$IDEs = "",
+    [string]$Governance = "solo"
 )
 
 $ErrorActionPreference = "Stop"
@@ -187,15 +192,26 @@ else {
 
     Write-Host ""
     $IDEArray = Read-MultiSelect "IDEs to generate pointer files for:" @("claude", "cursor", "cline", "kilo-code", "trae")
+
+    Write-Host ""
+    Write-Host "Governance mode controls how /evolve applies changes to the agent-control surface (rules/skills/prompt/schema):"
+    Write-Host "  solo — apply directly (one developer owns the config)"
+    Write-Host "  team — route through a pull request so a code owner reviews before it becomes everyone's standard"
+    $Governance = Read-WithDefault "Governance mode (solo/team)" "solo"
 }
 
 # Default naming/documentation languages to CodeLanguage when not supplied (non-interactive parity).
 if ([string]::IsNullOrWhiteSpace($NamingLanguage)) { $NamingLanguage = $CodeLanguage }
 if ([string]::IsNullOrWhiteSpace($DocumentationLanguage)) { $DocumentationLanguage = $CodeLanguage }
 
+# Normalize / validate governance value.
+$Governance = $Governance.ToLower().Trim()
+if ($Governance -ne "team") { $Governance = "solo" }
+
 $DateCreated = Get-Date -Format "yyyy-MM-dd"
 
 Write-Info "Project: $ProjectName"
+Write-Info "Governance: $Governance"
 Write-Info "Stacks: $(if ($StackArray.Count) { $StackArray -join ', ' } else { 'none' })"
 Write-Info "Rule variant: $RuleVariant"
 Write-Info "Plugins: $(if ($PluginArray.Count) { $PluginArray -join ', ' } else { 'none' })"
@@ -293,7 +309,6 @@ $content = $content -replace '\{\{project_name\}\}', $ProjectName
 $content = $content -replace '\{\{project_purpose\}\}', $ProjectPurpose
 $content = $content -replace '\{\{tech_stack_summary\}\}', $TechSummaryStr
 $content = $content -replace '\{\{interaction_language\}\}', $InteractionLanguage
-$content = $content -replace '\{\{code_language\}\}', $CodeLanguage
 $content = $content -replace '\{\{naming_language\}\}', $NamingLanguage
 $content = $content -replace '\{\{documentation_language\}\}', $DocumentationLanguage
 $content = $content -replace '\{\{backend_commands\}\}', $BackendCmds
@@ -302,6 +317,7 @@ $content = $content -replace '\{\{mobile_commands\}\}', $MobileCmds
 $content = $content -replace '\{\{infrastructure_commands\}\}', $InfraCmds
 $content = $content -replace '\{\{dependency_flow\}\}', $DepFlow
 $content = $content -replace '\{\{package_boundaries\}\}', $PkgBoundariesStr
+$content = $content -replace '\{\{governance_mode\}\}', $Governance
 $content = $content -replace '\{\{naming_conventions\}\}', "# Define your naming conventions here"
 $content = $content -replace '\{\{technical_constraints\}\}', "# Define your technical constraints here"
 $content = $content -replace '\{\{project_specific_security\}\}', $ProjectSecurity
@@ -568,6 +584,32 @@ if (($PluginArray -contains "qdrant-session-memory") -and (Test-Path ".sumela/gi
 }
 
 # =============================================================================
+# 7d. GOVERNANCE — CODEOWNERS for the agent-control surface (team mode only)
+# =============================================================================
+if ($Governance -eq "team") {
+    Write-Info "Ensuring CODEOWNERS covers the agent-control surface (team mode)..."
+    $codeownersFile = ".github/CODEOWNERS"
+    $codeownersMarker = "# SumelaOS agent-control surface"
+    if ((Test-Path $codeownersFile) -and (Select-String -Path $codeownersFile -SimpleMatch -Pattern $codeownersMarker -Quiet)) {
+        Write-Ok "CODEOWNERS already covers the agent-control surface"
+    }
+    else {
+        if (-not (Test-Path ".github")) { New-Item -ItemType Directory -Path ".github" -Force | Out-Null }
+        if ((Test-Path $codeownersFile) -and ((Get-Item $codeownersFile).Length -gt 0)) { Add-Content $codeownersFile "" }
+        Add-Content $codeownersFile "$codeownersMarker — changes here alter every developer's agent."
+        Add-Content $codeownersFile "# Replace @OWNER with your team/maintainer handle (e.g. @org/maintainers)."
+        Add-Content $codeownersFile "/.sumela/rules/                     @OWNER"
+        Add-Content $codeownersFile "/.sumela/skills/                    @OWNER"
+        Add-Content $codeownersFile "/.sumela/sumela-prompt.md           @OWNER"
+        Add-Content $codeownersFile "/.sumela/RULE_REGISTRY.md           @OWNER"
+        Add-Content $codeownersFile "/.sumela/SKILL_REGISTRY.md          @OWNER"
+        Add-Content $codeownersFile "/.sumela/git-hooks/                 @OWNER"
+        Add-Content $codeownersFile "/docs/second-brain/wiki/_SCHEMA.md  @OWNER"
+        Write-Ok "CODEOWNERS updated ($codeownersFile) — replace @OWNER with your handle"
+    }
+}
+
+# =============================================================================
 # 8. RUN VALIDATION
 # =============================================================================
 Write-Host ""
@@ -606,6 +648,7 @@ Write-Host "=== Setup Complete ===" -ForegroundColor White
 Write-Host ""
 Write-Host "  Project:    $ProjectName"
 Write-Host "  Purpose:    $ProjectPurpose"
+Write-Host "  Governance: $Governance"
 Write-Host "  Stacks:     $(if ($StackArray.Count) { $StackArray -join ', ' } else { 'none' })"
 Write-Host "  Rule variant: $RuleVariant"
 Write-Host "  Plugins:    $(if ($PluginArray.Count) { $PluginArray -join ', ' } else { 'none' })"
@@ -619,6 +662,7 @@ Write-Host "    - docs/second-brain/wiki/ (6 wiki pages)"
 if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
 if ($PluginArray -contains "qdrant-session-memory") { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks)" }
+if ($Governance -eq "team") { Write-Host "    - .github/CODEOWNERS (agent-control surface — replace @OWNER)" }
 Write-Host ""
 Write-Host "  Next steps:"
 Write-Host "    1. Edit AGENTS.md — fill in project-specific commands and conventions"

@@ -68,7 +68,7 @@ During every user turn, scan for these five signal types. Capture is silent — 
 1. Generate the ID `IMP-YYYYMMDD-<short>` where `YYYYMMDD` is today's date and `<short>` is 4 random lowercase base36 chars (e.g., `IMP-20260601-a3f8`). There is NO "next ID" counter — the ID is self-generated locally so concurrent captures by different developers never collide.
 2. Confirm `docs/second-brain/wiki/_improvement-queue/<id>.md` does not already exist; on the rare clash, regenerate `<short>` and retry.
 3. Create that file with YAML frontmatter (scannable metadata, including `status: pending`) plus body sections `## Proposed Change` and `## Evidence`, following the schema in `_SCHEMA.md` Section 15.2–15.3. The `id:` frontmatter MUST equal the filename stem.
-4. Do NOT update `_LOG.md` for pending entries — only applied/superseded/rejected get log entries.
+4. Do NOT update `_LOG.md` for pending entries — only `proposed`/`applied`/`superseded` get log entries (rejects are never logged).
 5. Do NOT notify the user mid-turn. The session-start notification covers visibility.
 
 **Scope decision (which file would this eventually touch?):**
@@ -90,13 +90,22 @@ If unsure, pick the closest scope and let `/evolve` review reclassify it.
 Triggered by the user invoking `/evolve` (or explicitly asking "pending improvements'ları göster", "öğrenilenleri review edelim").
 
 0. PRINT CONTEXT MANIFEST FIRST. `/evolve` mutates rules/skills/schema/wiki, so the user must see exactly which skills and rules are currently loaded BEFORE any pending entry is reviewed. Follow the format defined in `sumela-prompt.md` `<context_manifest_protocol>`. If GAPS are non-zero, ask the user whether to load the missing items first or proceed knowingly.
+0.5. GOVERNANCE + RECONCILE.
+   - Read the governance mode from `AGENTS.md` Section 8 (`governance: solo | team`). **Gated scopes** = `rule`, `skill`, `schema` (the agent-control surface that changes every developer's agent). `wiki` / `active-context` are NEVER gated. In `solo` mode there are no PRs to reconcile — skip the rest of this step.
+   - **Reconcile in-flight proposals (team mode).** A proposed change's `status: proposed` flip lives inside its own still-open PR, so it only reaches the base branch when that PR merges. First `git fetch` so PR/merge state is current. Find every in-flight proposal — the `sumela/evolve-<IMP-ID>` branches and their PRs (`gh pr list --head 'sumela/evolve-*' --state all`, or `glab`; if neither CLI is available, ask the user the state of each `sumela/evolve-*` branch). For each:
+     - PR **merged** → the merge carried that entry's `status: proposed` onto base. `git pull` the base so the merge is local, THEN flip the entry frontmatter `status: applied`, add `applied: <today>`, `last_validated: <today>`, `challenges: []`; append `_LOG.md` `evolve | <IMP-ID> applied: <summary> (PR merged)` — but only if no `evolve | <IMP-ID> applied` line already exists (idempotent: a re-run must not double-log); if it was a `signal_type: challenge`, NOW run the challenge-supersede update on the challenged entry (and log `supersedes: <IMP-ID>`). Delete the merged local branch.
+     - PR **closed without merge** → the change never reached base; the entry on base is still `pending`. Mark it `status: rejected`, `rejected_at: <today>`, `rejection_reason: "evolve PR closed without merge"`. Delete the local branch.
+     - PR **still open** → report it to the user ("IMP-… still awaiting code-owner review: <pr>"); leave it (step 1's skip-guard keeps it from being re-proposed).
+   - Also scan base for any entry already `status: proposed` whose merge you reconciled in a prior session but didn't finalize: `grep -l "^status: proposed" docs/second-brain/wiki/_improvement-queue/IMP-*.md` → if its PR is merged, flip to `applied` as above.
 1. Scan the queue directory: `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md` (PowerShell: `Select-String -Path docs/second-brain/wiki/_improvement-queue/IMP-*.md -Pattern "^status: pending"`). Use the `IMP-*.md` glob — never `grep -r` over the directory, which would also match the example in `README.md`.
+   - **In-flight skip-guard (team mode):** a `proposed` entry's status flip lives inside its still-open PR, so on the base branch it may still read `pending`. Before listing a pending entry, skip it if an evolve PR is already in flight for it: `git branch --list "sumela/evolve-<IMP-ID>"` is non-empty OR `gh pr list --head "sumela/evolve-<IMP-ID>" --state open` returns a PR. Report such entries as "in review" (handled by reconcile), do NOT re-propose them.
 2. List all `pending` entries to the user with full context (frontmatter: id, signal_type, scope, target, confidence, provider_context; body: `## Proposed Change`, `## Evidence`).
 3. For EACH pending entry, present a diff preview of what the change would look like (read the target file first, show before/after).
 4. Ask the user for each entry: **[onayla / reddet / düzenle / ertele]**.
 5. Based on user choice:
    - **Onayla (approve):**
      - If `scope: rule` or `scope: schema` → DOUBLE APPROVAL. First confirm: *"Bu kural/schema değişikliği için çift onay gerekiyor. Değişikliği yazmaya hazırım, onaylıyor musun?"* Only proceed on a second explicit yes.
+     - **ROUTING (governance, from step 0.5):** first VALIDATE `scope` — it MUST be one of `rule`, `skill`, `schema`, `wiki`, `active-context`. If it is missing or unrecognized, STOP and ask the user to fix the entry's scope; do NOT default to direct apply (a typo'd gated scope must never bypass the team gate). Then: if mode is `team` AND `scope` ∈ {`rule`, `skill`, `schema`} → use the **PR-GATED PATH** terminal. Otherwise (`solo` mode, or `scope` ∈ {`wiki`, `active-context`}) → use the **DIRECT PATH** terminal. The change MECHANICS below (BOOTSTRAP, DUPLICATE CHECK, apply, REGISTRY UPDATE) are IDENTICAL in both paths — only WHERE they run (working tree vs a dedicated branch) and the entry's terminal status differ.
      - **BOOTSTRAP (auto-create if missing):** Before writing, check if the target file exists. If NOT:
        1. Ensure the parent directory exists (`mkdir -p <parent>` equivalent — in bash: `mkdir -p "$(dirname <target>)"`).
        2. Create an empty file or a minimal stub (for `scope: rule`, a one-line topic header `# <topic>`; for other scopes, empty).
@@ -127,9 +136,20 @@ Triggered by the user invoking `/evolve` (or explicitly asking "pending improvem
        - **If `scope: schema`, `scope: wiki`, or `scope: active-context`:** registry update is not applicable, skip this sub-step.
        - **Same-transaction rollback:** if the user rejects the registry diff preview, REVERT the target file write made in the previous step (use `git restore <target>` for tracked files, delete the file for newly-created ones). The improvement entry stays `pending`. This prevents partial state where the rule/skill file exists but the registry does not know about it.
        - **`_LOG.md` extension:** append the registry path to the same `evolve` entry, e.g., `## [YYYY-MM-DD] evolve | <IMP-ID> applied: <summary>; registry: RULE_REGISTRY.md updated`.
-     - Edit the entry FILE's frontmatter IN PLACE: `status: applied`, add `applied: <today>`, `last_validated: <today>`, `challenges: []`. The file does NOT move — its `status` field is the source of truth.
-     - Append an `evolve` entry to `_LOG.md`: `## [YYYY-MM-DD] evolve | <IMP-ID> applied: <summary>` (extended with registry note per REGISTRY UPDATE step above when applicable).
-     - If this was a `signal_type: challenge` entry and it was approved → also edit the challenged entry FILE's frontmatter in place: `status: superseded`, `superseded_by: <this-id>`, `superseded_at: <today>`.
+     - **DIRECT PATH terminal** (solo mode, or `scope` ∈ {`wiki`, `active-context`}): the mechanics above ran in the working tree. Now:
+       - Edit the entry FILE's frontmatter IN PLACE: `status: applied`, add `applied: <today>`, `last_validated: <today>`, `challenges: []`. The file does NOT move — its `status` field is the source of truth.
+       - Append an `evolve` entry to `_LOG.md`: `## [YYYY-MM-DD] evolve | <IMP-ID> applied: <summary>` (extended with registry note per REGISTRY UPDATE step above when applicable).
+       - If this was a `signal_type: challenge` entry and it was approved → also edit the challenged entry FILE's frontmatter in place: `status: superseded`, `superseded_by: <this-id>`, `superseded_at: <today>`.
+     - **PR-GATED PATH terminal** (team mode AND `scope` ∈ {`rule`, `skill`, `schema`}): EVERYTHING goes into ONE pull request — never write the gated change OR the entry's status flip directly to the protected base branch.
+       1. Resolve the base: `BASE=$(git symbolic-ref --short HEAD)` is NOT it — determine the integration base explicitly (`main` or `master`, whichever exists). Create the work branch off that base: `git checkout -b sumela/evolve-<IMP-ID> <base>`.
+       2. On this branch, run the Shared mechanics (BOOTSTRAP, DUPLICATE CHECK, apply, REGISTRY UPDATE) for the gated file(s) + registry.
+       3. ALSO on this branch, edit the entry FILE's frontmatter: `status: proposed`, `proposed_at: <today>` (leave `pr:` for step 5). Committing the entry flip INSIDE the PR — not on base — is what keeps base unwritten; the pending-scan skip-guard (step 1) prevents re-listing in the meantime.
+       4. Commit everything together with a Conventional Commit citing the entry: `git commit -m "feat(agent): apply <IMP-ID> — <summary>"`.
+       5. Open a PR targeting the base: `gh pr create --fill --base <base>` (or `glab mr create`). Capture the returned URL and set the entry's `pr: <url>` (amend the commit). **If neither CLI is available:** push the branch, print a ready-to-paste PR title + body (citing the entry's evidence), and ask the user to open the PR. Do this BEFORE flipping anything user-visible — if the user cannot provide a PR URL now, REVERT the entry flip (leave it `status: pending`) and tell them the branch `sumela/evolve-<IMP-ID>` is pushed and ready; re-run `/evolve` once the PR exists. Never leave an entry `proposed` with a `pr:` that is only a branch name and no real PR.
+       6. Return to where you started: `git checkout -` (safe — nothing was written to base; the entry flip lives in the PR branch only).
+       - Append an `evolve` entry to `_LOG.md` on the branch: `## [YYYY-MM-DD] evolve | <IMP-ID> proposed: <summary> (PR: <url>)`.
+       - Do NOT mark `applied` and do NOT run the challenge-supersede update yet — both happen at RECONCILE (step 0.5) when the PR merges (the merge brings `status: proposed` onto base; reconcile then flips it to `applied`).
+       - Tell the user: the change awaits a code owner's review in the PR; it becomes `applied` automatically on the next `/evolve` after the PR merges.
    - **Reddet (reject):**
      - Edit the entry FILE's frontmatter in place: `status: rejected`, `rejected_at: <today>`; ask user for `rejection_reason` and record it. The file is NOT deleted.
      - Do NOT write to `_LOG.md` for rejects (avoids log noise).
@@ -137,8 +157,10 @@ Triggered by the user invoking `/evolve` (or explicitly asking "pending improvem
      - Ask user what to change in the `## Proposed Change` body / `target` / `scope`, update the entry file in place, keep `status: pending`.
    - **Ertele (defer):**
      - Leave `status: pending`, add a `deferred_at: <today>` frontmatter field.
-6. After processing all pending entries, report summary to user: N approved, N rejected, N deferred.
-7. If any `schema`, `rule`, or `skill` entries were applied, remind the user: *"Rule/skill değişiklikleri uygulandı, registry de güncellendi (varsa). Yeni session'da agent yeni durumu otomatik keşfedecek. İstersen şimdi `/context` ile manifest'i yeniden bastırabilirim."*
+6. After processing all pending entries, report summary to user: N applied (direct), N proposed (PR opened, team mode), N rejected, N deferred — plus any reconcile outcomes from step 0.5 (N merged→applied).
+7. Closing reminder, governance-aware:
+   - If any gated entry was **applied directly** (solo mode): *"Rule/skill değişiklikleri uygulandı, registry de güncellendi (varsa). Yeni session'da agent yeni durumu otomatik keşfedecek. İstersen `/context` ile manifest'i yeniden bastırabilirim."*
+   - If any gated entry was **proposed** (team mode): *"Rule/skill/schema değişiklikleri PR olarak açıldı ve code-owner review'ı bekliyor; merge olunca bir sonraki `/evolve`'da otomatik `applied` olacak. PR linkleri: <…>."* Do NOT claim these are live yet — they take effect only after the PR merges.
 </evolve_review_workflow>
 
 <challenge_detection_rules>

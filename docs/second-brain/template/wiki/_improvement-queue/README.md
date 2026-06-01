@@ -46,7 +46,7 @@ scope: rule                      # rule | skill | wiki | schema | active-context
 target: .sumela/rules/backend_standards.md
 provider_context: claude-opus-4-8
 confidence: high                 # high | medium | low (low is never written)
-status: pending                  # pending | applied | superseded | rejected
+status: pending                  # pending | proposed | applied | superseded | rejected
 ---
 
 ## Proposed Change
@@ -62,6 +62,7 @@ Session 2026-04-14: N+1 + Cartesian explosion caught; user approved AsSplitQuery
 
 | Status | Extra fields |
 |---|---|
+| `proposed` | `pr: <pr-url>` (a real PR URL, not just a branch name), `proposed_at: YYYY-MM-DD` (team mode, gated scope — PR open) |
 | `applied` | `applied: YYYY-MM-DD`, `last_validated: YYYY-MM-DD`, `challenges: [IMP-ID, ...]` |
 | `superseded` | `superseded_by: IMP-ID`, `superseded_at: YYYY-MM-DD` |
 | `rejected` | `rejected_at: YYYY-MM-DD`, `rejection_reason: <text>` |
@@ -72,6 +73,12 @@ Session 2026-04-14: N+1 + Cartesian explosion caught; user approved AsSplitQuery
 
 - Entries are created `status: pending`. Never auto-applied — `/evolve` is the
   human approval gate.
+- **Governance (team mode, `AGENTS.md` Section 8):** when `governance: team`, an
+  approved `rule`/`skill`/`schema` change is not applied directly — `/evolve` opens
+  a pull request and the entry becomes `status: proposed` (`pr:` recorded). A code
+  owner merging the PR makes it `applied`; closing it unmerged makes it `rejected`.
+  `/evolve` reconciles `proposed` entries by checking their PR. In `solo` mode (or
+  for `wiki`/`active-context` scope) changes apply directly to `applied`.
 - Status changes are edits to the entry's frontmatter **in place** (the file does
   not move). `superseded`/`rejected` entries are **kept** (historical accuracy);
   never delete an entry manually.

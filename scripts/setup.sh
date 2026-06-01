@@ -18,7 +18,8 @@
 #     --stacks "backend,frontend" \
 #     --rule-variant "best-practice" \
 #     --plugins "qdrant-session-memory,graphify-code-graph" \
-#     --ides "claude,cursor,cline,kilo-code,trae"
+#     --ides "claude,cursor,cline,kilo-code,trae" \
+#     --governance "solo"                   # or "team" (PR-gated /evolve)
 # -----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -47,6 +48,7 @@ NI_STACKS=""
 NI_RULE_VARIANT="best-practice"
 NI_PLUGINS=""
 NI_IDES=""
+NI_GOVERNANCE="solo"
 
 # --- Parse CLI args ---
 while [[ $# -gt 0 ]]; do
@@ -62,6 +64,7 @@ while [[ $# -gt 0 ]]; do
     --rule-variant)    NI_RULE_VARIANT="$2"; shift 2 ;;
     --plugins)         NI_PLUGINS="$2"; shift 2 ;;
     --ides)            NI_IDES="$2"; shift 2 ;;
+    --governance)      NI_GOVERNANCE="$2"; shift 2 ;;
     *) err "Unknown option: $1"; exit 1 ;;
   esac
 done
@@ -191,6 +194,7 @@ if [ "$NON_INTERACTIVE" = true ]; then
   RULE_VARIANT="$NI_RULE_VARIANT"
   IFS=',' read -ra PLUGINS <<< "$NI_PLUGINS"
   IFS=',' read -ra IDES <<< "$NI_IDES"
+  GOVERNANCE="$NI_GOVERNANCE"
 
   if [ -z "$PROJECT_NAME" ]; then
     err "--project-name is required in non-interactive mode"
@@ -232,7 +236,17 @@ else
   echo ""
   IDES=()
   read -ra IDES <<< "$(prompt_multiselect "IDEs to generate pointer files for:" "claude" "cursor" "cline" "kilo-code" "trae")"
+
+  echo ""
+  echo "Governance mode controls how /evolve applies changes to the agent-control surface (rules/skills/prompt/schema):"
+  echo "  solo — apply directly (one developer owns the config)"
+  echo "  team — route through a pull request so a code owner reviews before it becomes everyone's standard"
+  GOVERNANCE=$(prompt_default "Governance mode (solo/team)" "solo")
 fi
+
+# Normalize / validate governance value.
+GOVERNANCE="$(echo "$GOVERNANCE" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+if [ "$GOVERNANCE" != "team" ]; then GOVERNANCE="solo"; fi
 
 # --- Validate inputs ---
 if [ -z "$PROJECT_NAME" ]; then
@@ -243,6 +257,7 @@ fi
 DATE_CREATED="$(date +%Y-%m-%d)"
 
 info "Project: $PROJECT_NAME"
+info "Governance: $GOVERNANCE"
 info "Stacks: ${STACKS[*]:-none}"
 info "Rule variant: $RULE_VARIANT"
 info "Plugins: ${PLUGINS[*]:-none}"
@@ -343,7 +358,6 @@ export TMPL_PROJECT_NAME="$PROJECT_NAME"
 export TMPL_PROJECT_PURPOSE="$PROJECT_PURPOSE"
 export TMPL_TECH_STACK_SUMMARY="$TECH_SUMMARY"
 export TMPL_INTERACTION_LANGUAGE="$INTERACTION_LANG"
-export TMPL_CODE_LANGUAGE="$CODE_LANG"
 export TMPL_NAMING_LANGUAGE="$NAMING_LANG"
 export TMPL_DOCUMENTATION_LANGUAGE="$DOC_LANG"
 export TMPL_BACKEND_COMMANDS="$BACKEND_CMDS"
@@ -352,6 +366,7 @@ export TMPL_MOBILE_COMMANDS="$MOBILE_CMDS"
 export TMPL_INFRASTRUCTURE_COMMANDS="$INFRA_CMDS"
 export TMPL_DEPENDENCY_FLOW="$DEP_FLOW"
 export TMPL_PACKAGE_BOUNDARIES="$PKG_BOUNDARIES"
+export TMPL_GOVERNANCE_MODE="$GOVERNANCE"
 export TMPL_NAMING_CONVENTIONS="# Define your naming conventions here"
 export TMPL_TECHNICAL_CONSTRAINTS="# Define your technical constraints here"
 export TMPL_PROJECT_SPECIFIC_SECURITY="$PROJECT_SECURITY"
@@ -649,6 +664,33 @@ if [[ " ${PLUGINS[*]:-} " =~ " qdrant-session-memory" ]] && [ -d ".sumela/git-ho
 fi
 
 # =============================================================================
+# 7d. GOVERNANCE — CODEOWNERS for the agent-control surface (team mode only)
+# =============================================================================
+if [ "$GOVERNANCE" = "team" ]; then
+  info "Ensuring CODEOWNERS covers the agent-control surface (team mode)..."
+  CODEOWNERS_FILE=".github/CODEOWNERS"
+  CODEOWNERS_MARKER="# SumelaOS agent-control surface"
+  if [ -f "$CODEOWNERS_FILE" ] && grep -qF "$CODEOWNERS_MARKER" "$CODEOWNERS_FILE"; then
+    ok "CODEOWNERS already covers the agent-control surface"
+  else
+    mkdir -p .github
+    {
+      [ -s "$CODEOWNERS_FILE" ] && echo ""
+      echo "$CODEOWNERS_MARKER — changes here alter every developer's agent."
+      echo "# Replace @OWNER with your team/maintainer handle (e.g. @org/maintainers)."
+      echo "/.sumela/rules/                     @OWNER"
+      echo "/.sumela/skills/                    @OWNER"
+      echo "/.sumela/sumela-prompt.md           @OWNER"
+      echo "/.sumela/RULE_REGISTRY.md           @OWNER"
+      echo "/.sumela/SKILL_REGISTRY.md          @OWNER"
+      echo "/.sumela/git-hooks/                 @OWNER"
+      echo "/docs/second-brain/wiki/_SCHEMA.md  @OWNER"
+    } >> "$CODEOWNERS_FILE"
+    ok "CODEOWNERS updated ($CODEOWNERS_FILE) — replace @OWNER with your handle"
+  fi
+fi
+
+# =============================================================================
 # 8. RUN VALIDATION
 # =============================================================================
 echo ""
@@ -671,6 +713,7 @@ echo "${BOLD}=== Setup Complete ===${RESET}"
 echo ""
 echo "  Project:    $PROJECT_NAME"
 echo "  Purpose:    $PROJECT_PURPOSE"
+echo "  Governance: $GOVERNANCE"
 echo "  Stacks:     ${STACKS[*]:-none}"
 echo "  Rule variant: $RULE_VARIANT"
 echo "  Plugins:    ${PLUGINS[*]:-none}"
@@ -684,6 +727,7 @@ echo "    - docs/second-brain/wiki/ (6 wiki pages)"
 [ ${#IDES[@]} -gt 0 ] && echo "    - IDE pointer files"
 [ ${#PLUGINS[@]} -gt 0 ] && echo "    - SKILL_REGISTRY.md (plugins appended)"
 [[ " ${PLUGINS[*]:-} " =~ " qdrant-session-memory" ]] && echo "    - git hooks wired (core.hooksPath = .sumela/git-hooks)"
+[ "$GOVERNANCE" = "team" ] && echo "    - .github/CODEOWNERS (agent-control surface — replace @OWNER)"
 echo ""
 echo "  Next steps:"
 echo "    1. Edit AGENTS.md — fill in project-specific commands and conventions"
