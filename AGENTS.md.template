@@ -78,7 +78,7 @@
 
 ## 6. Session Bootstrap
 
-The full bootstrap contract — eager-load order, `_LOG`/`_IMPROVEMENT_QUEUE` lightweight checks, un-ingested source parity, eager vs lazy skill list — lives in `.sumela/sumela-prompt.md` (`<session_bootstrap>` section).
+The full bootstrap contract — eager-load order, `_LOG`/`_improvement-queue/` lightweight checks, un-ingested source parity, eager vs lazy skill list — lives in `.sumela/sumela-prompt.md` (`<session_bootstrap>` section).
 
 This file deliberately does NOT duplicate that content. Read the runtime contract there. If you ever see a discrepancy between this file and the runtime contract, the runtime contract wins.
 
@@ -123,7 +123,7 @@ The second-brain at `docs/second-brain/` implements Andrej Karpathy's LLM Wiki p
 | `wiki/_SEARCH_INDEX.md` | Agent-optimized keyword search table |
 | `wiki/_LOG.md` | Chronological ledger of wiki operations |
 | `wiki/_SCHEMA.md` | Canonical format rules (required before any wiki write) |
-| `wiki/_IMPROVEMENT_QUEUE.md` | Pending / applied / rejected self-improvement entries |
+| `wiki/_improvement-queue/` | Self-improvement entries (one `IMP-*.md` per signal; status in frontmatter) |
 
 Other zones: `raw_sources/` (unprocessed inputs), `artifacts/plans/` (immutable plans), `artifacts/specs/` (immutable specs).
 

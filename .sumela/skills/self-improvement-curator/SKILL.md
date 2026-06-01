@@ -28,9 +28,9 @@ When any trigger fires, execute `<evolve_review_workflow>` below. The workflow d
 </trigger_phrases>
 
 <session_start_protocol>
-Pending-count surfacing at session start is performed by `sumela-prompt.md` (`<session_bootstrap>` STEP 2.5). Do NOT duplicate that read here.
+Pending-count surfacing at session start is performed by `sumela-prompt.md` (`<session_bootstrap>` STEP 2). Do NOT duplicate that read here.
 
-The full `_IMPROVEMENT_QUEUE.md` is loaded ONLY when `/evolve` is triggered (see `<evolve_review_workflow>`). Re-validation pulse and applied-entry loading happen inside the evolve workflow, not at session start.
+The full set of `_improvement-queue/IMP-*.md` entries is scanned ONLY when `/evolve` is triggered (see `<evolve_review_workflow>`). Re-validation pulse and applied-entry loading happen inside the evolve workflow, not at session start.
 </session_start_protocol>
 
 <signal_capture_workflow>
@@ -64,10 +64,10 @@ During every user turn, scan for these five signal types. Capture is silent — 
 
 **When in doubt: pick `medium`, never `low`.** The `/evolve` review gate protects the user; silent skipping is the worse failure mode.
 
-**Capture procedure:**
-1. Read `_IMPROVEMENT_QUEUE.md` to find the next free `IMP-NNN` ID (check the "ID counter" header line).
-2. Append a new YAML entry under `## Pending` following the schema in `_SCHEMA.md` Section 15.3.
-3. Update the "ID counter" header to `IMP-<NNN+1>`.
+**Capture procedure (one file per signal — NO shared counter):**
+1. Generate the ID `IMP-YYYYMMDD-<short>` where `YYYYMMDD` is today's date and `<short>` is 4 random lowercase base36 chars (e.g., `IMP-20260601-a3f8`). There is NO "next ID" counter — the ID is self-generated locally so concurrent captures by different developers never collide.
+2. Confirm `docs/second-brain/wiki/_improvement-queue/<id>.md` does not already exist; on the rare clash, regenerate `<short>` and retry.
+3. Create that file with YAML frontmatter (scannable metadata, including `status: pending`) plus body sections `## Proposed Change` and `## Evidence`, following the schema in `_SCHEMA.md` Section 15.2–15.3. The `id:` frontmatter MUST equal the filename stem.
 4. Do NOT update `_LOG.md` for pending entries — only applied/superseded/rejected get log entries.
 5. Do NOT notify the user mid-turn. The session-start notification covers visibility.
 
@@ -90,8 +90,8 @@ If unsure, pick the closest scope and let `/evolve` review reclassify it.
 Triggered by the user invoking `/evolve` (or explicitly asking "pending improvements'ları göster", "öğrenilenleri review edelim").
 
 0. PRINT CONTEXT MANIFEST FIRST. `/evolve` mutates rules/skills/schema/wiki, so the user must see exactly which skills and rules are currently loaded BEFORE any pending entry is reviewed. Follow the format defined in `sumela-prompt.md` `<context_manifest_protocol>`. If GAPS are non-zero, ask the user whether to load the missing items first or proceed knowingly.
-1. Read `_IMPROVEMENT_QUEUE.md`.
-2. List all `pending` entries to the user with full context: id, signal_type, scope, target, proposed_change, evidence, confidence, provider_context.
+1. Scan the queue directory: `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md` (PowerShell: `Select-String -Path docs/second-brain/wiki/_improvement-queue/IMP-*.md -Pattern "^status: pending"`). Use the `IMP-*.md` glob — never `grep -r` over the directory, which would also match the example in `README.md`.
+2. List all `pending` entries to the user with full context (frontmatter: id, signal_type, scope, target, confidence, provider_context; body: `## Proposed Change`, `## Evidence`).
 3. For EACH pending entry, present a diff preview of what the change would look like (read the target file first, show before/after).
 4. Ask the user for each entry: **[onayla / reddet / düzenle / ertele]**.
 5. Based on user choice:
@@ -126,17 +126,17 @@ Triggered by the user invoking `/evolve` (or explicitly asking "pending improvem
          - If the file is EXISTING and the change touches the frontmatter description: update `SKILL_REGISTRY.md` description in lockstep so parity is preserved.
        - **If `scope: schema`, `scope: wiki`, or `scope: active-context`:** registry update is not applicable, skip this sub-step.
        - **Same-transaction rollback:** if the user rejects the registry diff preview, REVERT the target file write made in the previous step (use `git restore <target>` for tracked files, delete the file for newly-created ones). The improvement entry stays `pending`. This prevents partial state where the rule/skill file exists but the registry does not know about it.
-       - **`_LOG.md` extension:** append the registry path to the same `evolve` entry, e.g., `## [YYYY-MM-DD] evolve | IMP-NNN applied: <summary>; registry: RULE_REGISTRY.md updated`.
-     - Update entry: `status: applied`, add `applied: <today>`, `last_validated: <today>`, `challenges: []`. Move entry from `## Pending` to `## Applied`.
-     - Append an `evolve` entry to `_LOG.md`: `## [YYYY-MM-DD] evolve | IMP-NNN applied: <summary>` (extended with registry note per REGISTRY UPDATE step above when applicable).
-     - If this was a `signal_type: challenge` entry and it was approved → also update the challenged entry: move it from `## Applied` to `## Superseded`, set `status: superseded`, `superseded_by: <this-id>`, `superseded_at: <today>`.
+       - **`_LOG.md` extension:** append the registry path to the same `evolve` entry, e.g., `## [YYYY-MM-DD] evolve | <IMP-ID> applied: <summary>; registry: RULE_REGISTRY.md updated`.
+     - Edit the entry FILE's frontmatter IN PLACE: `status: applied`, add `applied: <today>`, `last_validated: <today>`, `challenges: []`. The file does NOT move — its `status` field is the source of truth.
+     - Append an `evolve` entry to `_LOG.md`: `## [YYYY-MM-DD] evolve | <IMP-ID> applied: <summary>` (extended with registry note per REGISTRY UPDATE step above when applicable).
+     - If this was a `signal_type: challenge` entry and it was approved → also edit the challenged entry FILE's frontmatter in place: `status: superseded`, `superseded_by: <this-id>`, `superseded_at: <today>`.
    - **Reddet (reject):**
-     - Move entry to `## Rejected`, set `status: rejected`, `rejected_at: <today>`, ask user for `rejection_reason` and record it.
+     - Edit the entry FILE's frontmatter in place: `status: rejected`, `rejected_at: <today>`; ask user for `rejection_reason` and record it. The file is NOT deleted.
      - Do NOT write to `_LOG.md` for rejects (avoids log noise).
    - **Düzenle (edit):**
-     - Ask user what to change in `proposed_change`/`target`/`scope`, update entry in place, keep it `pending`.
+     - Ask user what to change in the `## Proposed Change` body / `target` / `scope`, update the entry file in place, keep `status: pending`.
    - **Ertele (defer):**
-     - Leave entry in `## Pending`, add `deferred_at: <today>` field.
+     - Leave `status: pending`, add a `deferred_at: <today>` frontmatter field.
 6. After processing all pending entries, report summary to user: N approved, N rejected, N deferred.
 7. If any `schema`, `rule`, or `skill` entries were applied, remind the user: *"Rule/skill değişiklikleri uygulandı, registry de güncellendi (varsa). Yeni session'da agent yeni durumu otomatik keşfedecek. İstersen şimdi `/context` ile manifest'i yeniden bastırabilirim."*
 </evolve_review_workflow>
@@ -161,7 +161,7 @@ These rules are ABSOLUTE. Violating them breaks user trust in the self-improveme
 
 1. **NEVER write to `.sumela/rules/`, `.sumela/skills/`, `wiki/_SCHEMA.md`, or canonical wiki pages as a result of signal capture.** Only `/evolve` with explicit approval may trigger writes.
 2. **NEVER auto-apply a `challenge` signal.** Supersede-flow always requires `/evolve` review.
-3. **NEVER delete queue entries.** Use `superseded` or `rejected` status. The queue is append-heavy history.
+3. **NEVER delete queue entry files.** Use `superseded` or `rejected` status (edited into the file's frontmatter). Each `IMP-*.md` file is permanent history.
 4. **NEVER skip `provider_context`.** Record which model detected the signal (from environment info). This enables future cross-model reconciliation.
 5. **NEVER rewrite past `_LOG.md` entries.** If a mistake was logged, add a new `migration` entry clarifying — don't edit the old one.
 6. **NEVER capture sensitive data** (passwords, tokens, user PII) in `evidence` fields. Sanitize before writing.

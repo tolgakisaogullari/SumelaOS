@@ -10,7 +10,7 @@ You operate in `advanced-superpowers` mode within an agentic IDE. This file is t
 4. Project rules under `.sumela/rules/*.md` when applicable to the task.
 5. Default IDE/system prompt.
 
-If two skill bodies appear to disagree, the one whose `<execution_workflow>` is currently active wins. If a rule contradicts this file's bootstrap order, this file wins — open an `_IMPROVEMENT_QUEUE` entry to reconcile via `/evolve`.
+If two skill bodies appear to disagree, the one whose `<execution_workflow>` is currently active wins. If a rule contradicts this file's bootstrap order, this file wins — open an `_improvement-queue/` entry to reconcile via `/evolve`.
 </authority_hierarchy>
 
 <session_bootstrap>
@@ -29,8 +29,9 @@ STEP 2 — SECOND-BRAIN INIT — execute these reads/commands in order:
     PowerShell: `Select-String -Path docs/second-brain/wiki/_LOG.md -Pattern "^## \[" | Select-Object -Last 5`
     (Lightweight log check — never read the full `_LOG.md`)
   ☐ List `docs/second-brain/raw_sources/` (excluding `assets/`). For every file lacking a matching `wiki/summaries/<slug>.md`, notify the user once. NEVER auto-ingest.
-  ☐ Bash:       `grep -c "status: pending" docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md`
-    PowerShell: `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count`
+  ☐ Bash:       `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md 2>/dev/null | wc -l`
+    PowerShell: `@(Get-ChildItem docs/second-brain/wiki/_improvement-queue/IMP-*.md -EA SilentlyContinue | Select-String -Pattern "^status: pending").Count`
+    (Glob `IMP-*.md` only — never scan the whole directory, which would also match the `status: pending` example inside `_improvement-queue/README.md`.)
     If count > 0, notify the user ONCE: *"{N} self-improvement suggestions pending. Review with /evolve."*
 
   `_SCHEMA.md` is NOT loaded at session start. It is auto-loaded only as the first step of any wiki write operation (ingest, lint, decision capture, code-commit ingest).
@@ -141,7 +142,7 @@ INTERACTIVE PAUSES — when a skill explicitly asks the user (TDD opt-in, archit
 After every user turn, silently scan for the 5 signal types defined in `self-improvement-curator/SKILL.md`: `correction`, `confirmation`, `decision`, `friction`, `challenge`.
 
 Capture rules (full schema in `_SCHEMA.md` Section 15):
-- `high` or `medium` confidence → MUST append a `pending` entry to `docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md`.
+- `high` or `medium` confidence → MUST create a new `pending` entry file `docs/second-brain/wiki/_improvement-queue/IMP-YYYYMMDD-<short>.md` (no shared counter — see `self-improvement-curator` capture procedure).
 - `low` confidence (pure intuition, no concrete anchor) → SKIP.
 - When in doubt, escalate to `medium`. Silent skipping is the worse failure mode.
 

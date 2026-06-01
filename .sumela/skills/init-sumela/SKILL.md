@@ -260,7 +260,8 @@ Based on detected stack:
 From templates:
 - `active-project-context.md` → fill with current project state from git log, README, detected structure
 - `_INDEX.md` → standard sections with project name
-- `_LOG.md`, `_SEARCH_INDEX.md`, `_IMPROVEMENT_QUEUE.md` → standard templates
+- `_LOG.md`, `_SEARCH_INDEX.md` → standard templates
+- `_improvement-queue/` → create the directory and copy its `README.md` anchor (the queue is a directory, one `IMP-*.md` per signal — no monolithic file)
 
 ### Step 3.5: Generate IDE Pointers
 

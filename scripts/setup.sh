@@ -90,7 +90,7 @@ REQUIRED_TEMPLATES=(
   "docs/second-brain/template/wiki/_INDEX.md.template"
   "docs/second-brain/template/wiki/_LOG.md.template"
   "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template"
-  "docs/second-brain/template/wiki/_IMPROVEMENT_QUEUE.md.template"
+  "docs/second-brain/template/wiki/_improvement-queue/README.md"
   "docs/second-brain/template/wiki/_SCHEMA.md"
   "docs/second-brain/template/wiki/active-project-context.md.template"
 )
@@ -522,6 +522,7 @@ done
 info "Copying wiki templates..."
 
 mkdir -p docs/second-brain/wiki
+mkdir -p docs/second-brain/wiki/_improvement-queue
 mkdir -p docs/second-brain/raw_sources
 mkdir -p docs/second-brain/artifacts/plans
 mkdir -p docs/second-brain/artifacts/specs
@@ -530,7 +531,6 @@ WIKI_TEMPLATES=(
   "_INDEX.md.template:_INDEX.md"
   "_LOG.md.template:_LOG.md"
   "_SEARCH_INDEX.md.template:_SEARCH_INDEX.md"
-  "_IMPROVEMENT_QUEUE.md.template:_IMPROVEMENT_QUEUE.md"
   "_SCHEMA.md:_SCHEMA.md"
   "active-project-context.md.template:active-project-context.md"
 )
@@ -548,6 +548,35 @@ for entry in "${WIKI_TEMPLATES[@]}"; do
     warn "Template not found: $src — skipping"
   fi
 done
+
+# Improvement queue is a DIRECTORY (one file per signal) — copy its README anchor.
+IQ_SRC="docs/second-brain/template/wiki/_improvement-queue/README.md"
+IQ_DST="docs/second-brain/wiki/_improvement-queue/README.md"
+if [ -f "$IQ_SRC" ]; then
+  export TMPL_PROJECT_NAME="$PROJECT_NAME"
+  render_template "$IQ_SRC" "$IQ_DST"
+  ok "Copied $IQ_DST"
+else
+  warn "Template not found: $IQ_SRC — skipping"
+fi
+
+# =============================================================================
+# 6b. CONFIGURE GIT MERGE STRATEGY (append-only ledger)
+# =============================================================================
+info "Ensuring .gitattributes union-merge for the append-only log..."
+GITATTR_LINE="docs/second-brain/wiki/_LOG.md merge=union"
+if [ -f .gitattributes ] && grep -qF "$GITATTR_LINE" .gitattributes; then
+  ok ".gitattributes already has the union-merge rule"
+else
+  {
+    # -s (not -f): the redirect creates the file before this runs, so -f would
+    # be true even on a brand-new empty file and emit a spurious leading blank.
+    [ -s .gitattributes ] && echo ""
+    echo "# SumelaOS — append-only ledger: concurrent log appends combine instead of conflicting"
+    echo "$GITATTR_LINE"
+  } >> .gitattributes
+  ok ".gitattributes union-merge rule added"
+fi
 
 # =============================================================================
 # 7. REGISTER MEMORY PLUGINS

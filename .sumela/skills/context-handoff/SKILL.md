@@ -39,7 +39,7 @@ After completing the current task unit, when trigger conditions are met:
      - **If the sprint plan or recent session context is missing from working memory, run the four-tier decision tree before proceeding:** `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<topic>" --limit 3` for session summaries (Tier 1), then `_SEARCH_INDEX.md` for wiki pages (Tier 3). Do NOT rely solely on manual file reads for historical context.
    - Is the current task FULLY DONE or IN PROGRESS?
    - Did the active sprint/project state change? If yes, is `wiki/active-project-context.md` up to date? If no, the session summary + `_SEARCH_INDEX.md` update may be the correct persistent artifact.
-   - Run `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count (PowerShell) or grep -c (bash)` to get the pending count — do NOT read the full file.
+   - Run `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md 2>/dev/null | wc -l (bash) or @(Get-ChildItem docs/second-brain/wiki/_improvement-queue/IMP-*.md | Select-String "^status: pending").Count (PowerShell) — glob IMP-*.md only, never the whole dir` to get the pending count — do NOT read the full file.
 
 2. **Choose protocol:**
    - Current task is FULLY COMPLETE → **Protocol A**
@@ -66,7 +66,7 @@ Use when: The current task is fully finished and verified.
 - **Critical:** The next session's eager-load reads `active-project-context.md` first, then index/search surfaces. Stale active state is dangerous; unnecessary active-context churn is also dangerous.
 
 **Step 2 — Evolve Check:**
-- Run `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count (PowerShell) or grep -c (bash)` — do NOT read the full file.
+- Run `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md 2>/dev/null | wc -l (bash) or @(Get-ChildItem docs/second-brain/wiki/_improvement-queue/IMP-*.md | Select-String "^status: pending").Count (PowerShell) — glob IMP-*.md only, never the whole dir` — do NOT read the full file.
 - If count > 0, ask the user:
   > *"There are {N} pending /evolve suggestions before handoff. Would you like to review them now, or add them as a note to the handoff prompt?"*
 - If user says **now**: execute `/evolve` workflow (self-improvement-curator skill).
@@ -268,7 +268,7 @@ Present the filled template inside a fenced code block so the user can copy-past
 - Plan / Artifact → use the active plan when one exists; otherwise reference the maintenance artifact or session-summary path.
 - Task description → copy verbatim from plan file when one exists; otherwise write `N/A - maintenance/session-summary handoff`.
 - Checkpoint → exact file/method/line reference, not vague direction.
-- `/evolve pending` → actual count from `(Select-String -Path docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md -Pattern "status: pending").Count (PowerShell) or grep -c (bash)`.
+- `/evolve pending` → actual count from `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md 2>/dev/null | wc -l (bash) or @(Get-ChildItem docs/second-brain/wiki/_improvement-queue/IMP-*.md | Select-String "^status: pending").Count (PowerShell) — glob IMP-*.md only, never the whole dir`.
 - `{session-summary}` → path to the session summary created in Step 3/5.
 - Staged changes → actual `git status --short` output or a concise summary.
 </handoff_template>

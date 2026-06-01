@@ -22,7 +22,7 @@ The `wiki/` directory has FIVE special files (frontmatter-free, governed by `_SC
 - `_LOG.md`: Chronological append-only log. Format: `## [YYYY-MM-DD] type | topic` (parse-friendly). Type whitelist: `ingest | query | lint | code-commit | decision | migration`. NEVER rewrite past entries — they are immutable history.
 - `_LOG.md` note: `_SCHEMA.md` is the canonical whitelist source; `evolve` is a valid log type for self-improvement applications.
 - `_SCHEMA.md`: Canonical format source. Read this BEFORE writing any wiki page. Defines page types, frontmatter schemas, naming, templates, and cross-ref conventions.
-- `_IMPROVEMENT_QUEUE.md`: Self-improvement queue. Managed by `self-improvement-curator` skill and reviewed via `/evolve`. Read at session start to surface pending count to the user. Do NOT modify as part of normal wiki operations — it has its own workflow.
+- `_improvement-queue/`: Self-improvement queue — a directory, one `IMP-*.md` per signal. Managed by `self-improvement-curator` skill and reviewed via `/evolve`. At session start, surface the pending count by globbing `IMP-*.md` (never scan the whole dir — the `README.md` example would inflate the count). Do NOT modify as part of normal wiki operations — it has its own workflow.
 </core_indexes>
 
 <trigger_conditions>
@@ -93,7 +93,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
 
 5. DECISION CAPTURE (Persisting ad-hoc architectural decisions):
    - Triggered when the user makes or confirms a significant **project-level** architectural/technology decision during a conversation that is NOT part of a code-commit flow.
-   - **BOUNDARY with `self-improvement-curator`:** This workflow captures decisions about **the project** (which technology, which pattern, which endpoint design — things another developer without Claude would still follow). Decisions about **how the agent itself should work** (rule changes, skill updates, workflow preferences) are handled by `self-improvement-curator`'s `decision` signal → `_IMPROVEMENT_QUEUE.md`, NOT this workflow. Decision tree: *"If a new developer joined the team without Claude, would this decision still apply to them?"* → Yes = this workflow (wiki) / No = `self-improvement-curator` (queue). If both apply, split into two captures.
+   - **BOUNDARY with `self-improvement-curator`:** This workflow captures decisions about **the project** (which technology, which pattern, which endpoint design — things another developer without Claude would still follow). Decisions about **how the agent itself should work** (rule changes, skill updates, workflow preferences) are handled by `self-improvement-curator`'s `decision` signal → `_improvement-queue/`, NOT this workflow. Decision tree: *"If a new developer joined the team without Claude, would this decision still apply to them?"* → Yes = this workflow (wiki) / No = `self-improvement-curator` (queue). If both apply, split into two captures.
    - ASK the user: *"Would you like me to save this decision to the wiki?"* — NEVER auto-capture without approval.
    - If approved:
      - Read `wiki/architecture-decisions.md` to find the latest AD-XX number.

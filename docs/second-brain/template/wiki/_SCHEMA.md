@@ -161,6 +161,7 @@ Obsidian wikilink'leri vault içinde dosya adına göre çözülür — yol bilm
 | `lint` | Wiki sağlık kontrolü yapıldı |
 | `code-commit` | Bir geliştirme branch'i finish edildi, wiki yansıması yapıldı |
 | `decision` | Yeni mimari karar kaydedildi (decision page güncellendi) |
+| `evolve` | Self-improvement queue review (`/evolve`) — bir IMP entry applied/superseded oldu |
 | `migration` | Wiki yapısal değişikliği (klasör taşıma, format güncelleme) |
 
 **Parse doğrulaması:**
@@ -377,6 +378,11 @@ Bu dört dosya **frontmatter almaz** ve özel kurallara tabidir:
 
 **Tarihsel doğruluk kuralı:** `_LOG.md` immutable history sayılır. Bir entry yazıldıktan sonra path veya isim değişiklikleri için entry'yi yeniden yazmak yasaktır — bunun yerine yeni bir `migration` entry'si eklenir.
 
+**Takım eşzamanlılık modeli (multi-developer merge stratejisi):**
+- `_LOG.md` → append-only olduğu için repo kökündeki `.gitattributes`'te `merge=union` ile işaretlidir: farklı geliştiricilerin eşzamanlı log eklemeleri conflict yerine birleşir. (Rotasyon/`migration` istisnası: bkz. `.gitattributes` notları.)
+- `_improvement-queue/` → her sinyal ayrı `IMP-*.md` dosyası olduğu için eşzamanlı yakalama hiç conflict üretmez (merge driver gerekmez).
+- `active-project-context.md` → yapılandırılmış prose; `union` UYGULANMAZ (bölümleri bozardı). Paylaşılan sprint state'tir, kişisel scratchpad değil — per-developer aktif iş "Active Work" bölümünde `@isim`/branch ile ayrı satırlarda tutulur, geçici detay session summary'ye yazılır. Gerçek conflict elle çözülür.
+
 ---
 
 ## 11. `_LOG.md` Rotasyon Mekanizması
@@ -465,108 +471,91 @@ Güncel special files (frontmatter ALMAZ):
 | `_LOG.md` | Kronolojik append-only aktivite kaydı | Her operasyon |
 | `_SCHEMA.md` | Kanonik format kuralları | Schema değişikliğinde |
 | `_SEARCH_INDEX.md` | Agent-optimized arama indeksi (tag + key term tablosu) | Her ingest/code-commit/lint |
-| `_IMPROVEMENT_QUEUE.md` | Self-improvement öneri kuyruğu (sinyal yakalama + onay + challenge) | Her sinyal yakalandığında (append-heavy) |
+| `_improvement-queue/` | Self-improvement öneri kuyruğu — dizin, her sinyal kendi `IMP-*.md` dosyası (sinyal yakalama + onay + challenge) | Her sinyal yakalandığında yeni dosya |
 
 ---
 
-## 15. Self-Improvement Queue (`_IMPROVEMENT_QUEUE.md`)
+## 15. Self-Improvement Queue (`_improvement-queue/`)
 
-Agent'ın session'lar arası öğrenebilmesi için kullanılan persistent öneri kuyruğudur. `self-improvement-curator` skill tarafından yönetilir, `/evolve` slash command ile review edilir.
+Agent'ın session'lar arası öğrenebilmesi için kullanılan persistent öneri kuyruğudur. `self-improvement-curator` skill tarafından yönetilir, `/evolve` slash command ile review edilir. Kuyruk bir **dizindir** (her sinyal kendi `IMP-*.md` dosyası) — takımda eşzamanlı yakalama merge-conflict üretmesin diye. Bkz. `_improvement-queue/README.md`.
 
 ### 15.1 Amaç
 
-Karpathy wiki pattern'i **bilgi** için çelişki toleransı sağlar; `_IMPROVEMENT_QUEUE.md` ise **agent'ın kendi davranış/kural öğrenmesi** için aynı pattern'i uygular. Hedef:
+Karpathy wiki pattern'i **bilgi** için çelişki toleransı sağlar; `_improvement-queue/` ise **agent'ın kendi davranış/kural öğrenmesi** için aynı pattern'i uygular. Hedef:
 - Session'da yakalanan düzeltme/onay/karar sinyallerini kaybetmeden kuyruğa yazmak
 - Onay kapısı olmadan rule/skill/wiki'ye yazmayı kesinlikle önlemek
 - Eski öğrenilmiş kuralların **challenge edilmesine + supersede edilmesine** izin vermek
 - Farklı LLM provider'ların öğrenmelerinin geçmişini saklamak (`provider_context` alanı)
 
-### 15.2 Dosya Yapısı
+### 15.2 Dosya Yapısı (Dizin — Her Sinyal Kendi Dosyası)
 
-`_IMPROVEMENT_QUEUE.md` frontmatter **ALMAZ**. Human-readable başlık + YAML entry'ler şeklindedir:
+Kuyruk **monolitik bir dosya değil**, bir dizindir: `_improvement-queue/`. Her sinyal
+**kendi dosyasıdır**. Takımda birden çok geliştiricinin agent'ı aynı anda sinyal
+yakalar — her sinyal ayrı dosya olduğu için eşzamanlı yakalamalar **merge-conflict
+üretmez**. Paylaşılan `IMP-NNN` sayacı **YOKTUR** (paylaşılan sayaç eşzamanlı
+yakalamada çakışır). Durum (pending/applied/...) her dosyanın frontmatter'ında
+yaşar; status değişimi tek küçük dosyaya edit'tir, monolitin çekişmeli yeniden
+yazımı değil.
+
+**Dosya adı = ID:** `IMP-YYYYMMDD-<short>.md`
+- `IMP-` prefix (greppable) + `YYYYMMDD` capture tarihi (kronolojik) + `<short>`
+  (4 küçük-harf base36, lokal üretilir, koordinasyon yok). Agent yazmadan önce
+  dosya adının var olmadığını doğrular; nadir çakışmada yeniden üretir. "İnsan-dostu
+  GUID": sayaçsız çakışmasız, ama review'da söylenebilir ("IMP-20260601-a3f8 uygula").
+- `id:` frontmatter alanı dosya adının kök adına **eşit olmalı**. Dosya adı tek
+  doğruluk kaynağıdır; hiçbir yerde artırılacak sayaç yoktur.
+- Yalnızca `IMP-*.md` dosyaları entry'dir. `README.md` entry değildir; tüm durum
+  sorguları `IMP-*.md` glob'lar (README sayılmaz).
+
+Frontmatter taranabilir metadata'yı tutar; gövde insan-okunur prose'u (`## Proposed
+Change`, `## Evidence`) tutar:
 
 ```markdown
-# Self-Improvement Queue
+---
+id: IMP-20260414-a3f8
+detected: 2026-04-14
+signal_type: correction
+scope: rule
+target: .sumela/rules/backend_standards.md
+provider_context: claude-opus-4-8
+confidence: high
+status: pending
+---
 
-> Bu dosya agent'ın session'lar arası öğrenmesini tutar. Asla elle silme — supersede/reject kullan. Detay: `_SCHEMA.md` Section 15.
+## Proposed Change
 
-## Pending
+EF Core queries with 3+ joins must explicitly declare `AsSplitQuery()`.
 
-\`\`\`yaml
-- id: IMP-003
-  detected: 2026-04-14
-  signal_type: correction
-  scope: rule
-  target: .claude/rules/backend_standards.md
-  proposed_change: |
-    EF Core queries with 3+ joins must explicitly declare AsSplitQuery().
-  evidence: |
-    Session 2026-04-14'de N+1 + Cartesian explosion yakalandı,
-    kullanıcı AsSplitQuery'yi onayladı.
-  provider_context: claude-opus-4-6
-  confidence: high
-  status: pending
-\`\`\`
+## Evidence
 
-## Applied
-
-\`\`\`yaml
-- id: IMP-001
-  detected: 2026-04-10
-  applied: 2026-04-10
-  signal_type: decision
-  scope: wiki
-  target: wiki/architecture-decisions.md
-  proposed_change: "AD-12: Redis cache only for read-heavy endpoints"
-  evidence: "Brainstorming session, user confirmed"
-  provider_context: claude-opus-4-6
-  confidence: validated
-  status: applied
-  last_validated: 2026-04-10
-  challenges: []
-\`\`\`
-
-## Superseded
-
-\`\`\`yaml
-- id: IMP-000
-  status: superseded
-  superseded_by: IMP-005
-  superseded_at: 2026-04-14
-  # ... original fields preserved
-\`\`\`
-
-## Rejected
-
-\`\`\`yaml
-- id: IMP-002
-  status: rejected
-  rejected_at: 2026-04-12
-  rejection_reason: "Kullanıcı bu pattern'i istemiyor"
-  # ... original fields preserved
-\`\`\`
+Session 2026-04-14: N+1 + Cartesian explosion yakalandı; kullanıcı AsSplitQuery'yi onayladı.
 ```
+
+Status değiştiğinde dosya **yerinde** düzenlenir (taşınmaz): `applied`/`superseded`/
+`rejected` entry'ler **silinmez** (tarihsel doğruluk), sadece frontmatter'ları güncellenir.
 
 ### 15.3 Entry Şeması (Zorunlu Alanlar)
 
+`proposed_change` ve `evidence` gövdede (`## Proposed Change` / `## Evidence`
+başlıkları altında) yaşar; aşağıdaki alanlar frontmatter'dadır:
+
 | Alan | Tip | Açıklama |
 |---|---|---|
-| `id` | `IMP-NNN` | Monoton artan ID. Asla yeniden kullanma. |
+| `id` | `IMP-YYYYMMDD-<short>` | Dosya adının kök adı. Sayaç yok, asla yeniden kullanma. |
 | `detected` | `YYYY-MM-DD` | Sinyalin yakalandığı tarih |
 | `signal_type` | enum | `correction` \| `confirmation` \| `decision` \| `friction` \| `challenge` |
 | `scope` | enum | `rule` \| `skill` \| `wiki` \| `schema` \| `active-context` |
-| `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.sumela/learned-rules/<topic>.md` (portable, IDE-agnostic); kullanıcı manuel olarak kendi agent'ının native rule klasörüne kopyalar. |
-| `proposed_change` | text | Ne yapılacak — insan-okunur özet + gerekirse diff |
-| `evidence` | text | Neden — somut session referansı, kullanıcı alıntısı, dosya/satır |
-| `provider_context` | string | Sinyali yakalayan model (`claude-opus-4-6`, `claude-sonnet-4-6`, vs.) |
+| `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.sumela/rules/<topic>.md` (portable, IDE-agnostic). |
+| `provider_context` | string | Sinyali yakalayan model (`claude-opus-4-8`, `claude-sonnet-4-6`, vs.) |
 | `confidence` | enum | `high` \| `medium` \| `low` (bkz. 15.5) |
 | `status` | enum | `pending` \| `applied` \| `superseded` \| `rejected` |
 
-**Duruma göre ek alanlar:**
+**Duruma göre ek frontmatter alanları (status değişince yerinde eklenir):**
 - `applied` → `applied: YYYY-MM-DD`, `last_validated: YYYY-MM-DD`, `challenges: [IMP-ID, ...]`
 - `superseded` → `superseded_by: IMP-ID`, `superseded_at: YYYY-MM-DD`
 - `rejected` → `rejected_at: YYYY-MM-DD`, `rejection_reason: text`
-- `signal_type: challenge` → `challenges: IMP-ID` (hangi applied entry'i sorguluyor)
+- `pending` (deferred at `/evolve`) → `deferred_at: YYYY-MM-DD` (status stays `pending`)
+- `signal_type: challenge` → `supersedes: IMP-ID` (hangi applied entry'i sorguluyor)
 
 ### 15.4 Sinyal Tipleri (Ne Yakalanır?)
 
@@ -592,19 +581,19 @@ Karpathy wiki pattern'i **bilgi** için çelişki toleransı sağlar; `_IMPROVEM
 
 Farklı provider/zaman farklı karar verebilir. Agent yeni session'da mevcut bir `applied` entry ile çelişen somut kanıt bulursa:
 
-1. **Yeni bir entry oluşturur**, `signal_type: challenge`, `challenges: <IMP-ID>` alanıyla orijinale referans verir.
+1. **Yeni bir entry oluşturur**, `signal_type: challenge`, `supersedes: <IMP-ID>` alanıyla orijinale referans verir.
 2. Entry `pending` olarak kuyruğa yazılır — **asla otomatik uygulanmaz**.
 3. `/evolve` review'da kullanıcı challenge'ı onaylarsa:
-   - Orijinal entry `status: superseded`, `superseded_by: <yeni-IMP-ID>`, `superseded_at` eklenir
+   - Orijinal entry dosyasının frontmatter'ı yerinde güncellenir: `status: superseded`, `superseded_by: <yeni-IMP-ID>`, `superseded_at` eklenir
    - Yeni entry `status: applied` olur, ilgili dosyaya uygulanır
-   - `_LOG.md`'ye `decision` entry'si: *"IMP-001 superseded by IMP-047 — reason: ..."*
-4. Orijinal entry **silinmez** — "Superseded" bölümüne taşınır (tarihsel doğruluk).
+   - `_LOG.md`'ye `decision` entry'si: *"IMP-20260601-a1b2 superseded by IMP-20260714-c3d4 — reason: ..."*
+4. Orijinal entry dosyası **silinmez** — sadece frontmatter'ı `superseded` yapılır, dosya yerinde kalır (tarihsel doğruluk).
 
 ### 15.7 Proaktif Re-validation
 
 Session başında `using-second-brain` eager-load içinde:
 - Pending entry sayısı raporlanır (sayı > 0 ise kullanıcıya *"N öneri onay bekliyor, /evolve ile bakabilirsin"* denir)
-- Son 5 applied entry'nin özeti gösterilir (context bütçesi bu kadar)
+- Son 5 applied entry'nin özeti gösterilir (context bütçesi bu kadar) — dizini `grep -l "^status: applied" IMP-*.md` ile tarayıp tarihe göre son 5'i al
 - **Re-validation pulse**: Son 90 günde `last_validated` güncellenmemiş applied entry'lerden rastgele 1 tanesi seçilir → agent session boyunca bu entry'nin hâlâ geçerli olup olmadığına dair pasif dikkat eder. Çelişki görürse otomatik `challenge` sinyali açar.
 
 ### 15.8 Onay Modeli (Çift Onay Kuralı)
@@ -615,15 +604,15 @@ Session başında `using-second-brain` eager-load içinde:
 | `active-context` | Tek onay |
 | `skill` (yeni) | Tek onay + `writing-skills` skill'i zorunlu |
 | `skill` (mevcut edit) | Tek onay + diff + etkilenen workflow listesi |
-| `rule` (`.claude/rules/*.md`) | **Çift onay:** "bu kural yazılsın mı?" → sonra "uygula?" |
+| `rule` (`.sumela/rules/*.md`) | **Çift onay:** "bu kural yazılsın mı?" → sonra "uygula?" |
 | `schema` (`_SCHEMA.md`) | **Çift onay** + manuel review zorunlu |
 
 ### 15.9 Hijyen & Arşivleme
 
-- `_IMPROVEMENT_QUEUE.md` 500+ entry olursa `superseded` ve `rejected` olanlar `archive/_IMPROVEMENT_QUEUE-YYYY.md`'ye taşınır
+- `_improvement-queue/` 500+ entry olursa `superseded` ve `rejected` dosyaları `_improvement-queue/archive/YYYY/` alt dizinine taşınır (dosyalar silinmez)
 - `applied` entry'ler **asla** arşivlenmez (aktif öğrenme, challenge edilebilir olmalı)
 - Arşivleme bir `migration` log entry'si ile kayıt altına alınır
-- Session başı eager-load sadece `pending` + son 5 `applied` okur (context bütçesi)
+- Session başı eager-load sadece `pending` + son 5 `applied` okur (context bütçesi); durum dizini `grep -l "^status: <durum>" IMP-*.md` ile taranır
 
 ### 15.10 `_LOG.md` Entegrasyonu
 
@@ -634,9 +623,9 @@ Aşağıdaki olaylar `_LOG.md`'ye `decision` entry'si olarak yazılır:
 
 Format:
 ```markdown
-## [2026-04-14] decision | IMP-003 applied: AsSplitQuery rule added
-- Scope: rule → .claude/rules/backend_standards.md
-- Provider: claude-opus-4-6
+## [2026-04-14] decision | IMP-20260414-a3f8 applied: AsSplitQuery rule added
+- Scope: rule → .sumela/rules/backend_standards.md
+- Provider: claude-opus-4-8
 - Challenges: none
 ```
 

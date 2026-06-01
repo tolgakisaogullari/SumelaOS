@@ -15,5 +15,5 @@
 ## [{{date_created}}] migration | Initial second brain adoption
 
 - Second brain template adopted for {{project_name}}.
-- Template files installed: _INDEX, _LOG, _SCHEMA, _SEARCH_INDEX, _IMPROVEMENT_QUEUE, active-project-context.
+- Template files installed: _INDEX, _LOG, _SCHEMA, _SEARCH_INDEX, _improvement-queue/, active-project-context.
 - Affected wiki pages: [[active-project-context]], [[_INDEX]], [[_SEARCH_INDEX]]

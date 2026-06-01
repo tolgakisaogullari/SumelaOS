@@ -88,8 +88,13 @@ EXCLUDED_FILES = {
     "_INDEX.md",
     "_SEARCH_INDEX.md",
     "_LOG.md",
-    "_IMPROVEMENT_QUEUE.md",
     "_SCHEMA.md",
+}
+# Whole subdirectories to skip during wiki ingestion. The improvement queue is
+# agent self-learning (one IMP-*.md per signal), not project knowledge — do not
+# ingest it into the wiki_pages collection.
+EXCLUDED_DIRS = {
+    "_improvement-queue",
 }
 
 
@@ -123,6 +128,8 @@ def main():
     all_jobs = []  # (page_path, page_title, fm, chunk_index, chunk_text, total_chunks)
     for md_path in md_files:
         if md_path.name in EXCLUDED_FILES:
+            continue
+        if EXCLUDED_DIRS.intersection(md_path.parts):
             continue
 
         page_path = md_path.relative_to(REPO_ROOT).as_posix()

@@ -177,9 +177,9 @@ EXPECTED_WIKI_TEMPLATES=(
   "_INDEX.md.template"
   "_LOG.md.template"
   "_SEARCH_INDEX.md.template"
-  "_IMPROVEMENT_QUEUE.md.template"
   "_SCHEMA.md"
   "active-project-context.md.template"
+  "_improvement-queue/README.md"
 )
 
 WIKI_FOUND=0

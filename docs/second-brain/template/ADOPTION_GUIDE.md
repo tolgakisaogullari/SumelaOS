@@ -14,7 +14,7 @@ This template implements Andrej Karpathy's LLM Wiki pattern — a three-layer kn
 - **`artifacts/`** — Immutable. LLM-generated write-once documents (plans, specs).
 - **`wiki/`** — Live. Continuously updated synthesis layer maintained by the agent.
 
-The template includes 5 wiki special files (`_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`, `_IMPROVEMENT_QUEUE.md`), one starter page (`active-project-context.md`), and empty directory scaffolding for sources and artifacts.
+The template includes 4 wiki special files (`_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`), the `_improvement-queue/` directory (one `IMP-*.md` per signal — team-safe, no merge conflicts), one starter page (`active-project-context.md`), and empty directory scaffolding for sources and artifacts.
 
 Companion components (not included in this template but required for full functionality):
 - `AGENTS.md` — Canonical agent bootstrap file at repo root
@@ -69,7 +69,7 @@ Write a canonical agent bootstrap file. Include:
    - `docs/second-brain/wiki/_INDEX.md`
    - `docs/second-brain/wiki/_SCHEMA.md`
    - `docs/second-brain/wiki/active-project-context.md`
-   - `docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md` (check pending count)
+   - `docs/second-brain/wiki/_improvement-queue/` (check pending count)
 4. **Skill resolution protocol** — reference `.sumela/SKILL_REGISTRY.md`.
 5. **Security mandate** — reference `secure-coding-standard` skill.
 6. **Signal capture** — enable `self-improvement-curator` skill.
@@ -214,7 +214,7 @@ The agent (or human) reads these files in order on the first session:
 1. **`AGENTS.md`** (repo root) — project identity, language protocol, developer commands, architecture conventions.
 2. **`.sumela/SKILL_REGISTRY.md`** — discover all available skills (eager and lazy).
 3. **`docs/second-brain/wiki/active-project-context.md`** — current sprint state, active work, recent decisions.
-4. **`docs/second-brain/wiki/_IMPROVEMENT_QUEUE.md`** — check pending count. If > 0, review with `/evolve`.
+4. **`docs/second-brain/wiki/_improvement-queue/`** — check pending count. If > 0, review with `/evolve`.
 
 ### C.2. What to Expect on First Session
 
@@ -223,7 +223,7 @@ The agent will automatically:
 1. **Run the full bootstrap sequence** (per `sumela-prompt.md`):
    - Read `SKILL_REGISTRY.md` + `RULE_REGISTRY.md`
    - Read `_INDEX.md` + `active-project-context.md`
-   - Check `_IMPROVEMENT_QUEUE.md` pending count
+   - Check `_improvement-queue/` pending count
    - Eager-load 2 skills: `using-superpowers` (dispatcher) + `context-handoff` (context-pressure guardian)
    - Load applicable rules based on phase + stack scope
 2. **Print a Context Manifest** — this is the first user-facing output. It shows: active skills, loaded rules, detected stack scope, and any rule gaps. Review it to confirm the agent understood the project correctly.
@@ -235,7 +235,7 @@ The agent will automatically:
 |---|---|
 | Add a new skill | Follow the `writing-skills` skill — create `SKILL.md` under `.sumela/skills/<name>/`, register in `SKILL_REGISTRY.md` |
 | Add a new rule | Use `/evolve` — the agent creates the rule file, registers it in `RULE_REGISTRY.md`, and updates the phase-to-rule matrix |
-| Report friction or a correction | Use `/evolve` — the agent captures the signal in `_IMPROVEMENT_QUEUE.md` for review |
+| Report friction or a correction | Use `/evolve` — the agent captures the signal as a new file in `_improvement-queue/` for review |
 | Ingest a new source document | Place in `docs/second-brain/raw_sources/`, then trigger ingest via the `using-second-brain` skill |
 
 ---
@@ -288,11 +288,11 @@ After copying the template, customize these project-specific values:
 When an agent loads the project for the first time after adoption, it runs the full bootstrap sequence (defined in `sumela-prompt.md`):
 
 1. **Read discovery surfaces** — `SKILL_REGISTRY.md` + `RULE_REGISTRY.md`.
-2. **Second-brain init** — `_INDEX.md` → `active-project-context.md` → last 5 `_LOG.md` entries → pending count in `_IMPROVEMENT_QUEUE.md`.
+2. **Second-brain init** — `_INDEX.md` → `active-project-context.md` → last 5 `_LOG.md` entries → pending count in `_improvement-queue/`.
 3. **Eager-load 2 skills** — `using-superpowers` (top-level dispatcher) + `context-handoff` (context-pressure guardian). All other skills load lazily on demand.
 4. **Load applicable rules** — universal rules always, phase-conditional rules based on active phase, stack-conditional rules based on detected scope.
 5. **Print Context Manifest** — the first user-facing output. Shows: active skills, loaded rules, detected stack scope, and any rule gaps. Review it to confirm the agent understood the project correctly.
-6. **Check `_IMPROVEMENT_QUEUE.md`** — if pending count > 0, the agent notifies you (in the project's interaction language) and offers to review via `/evolve`.
+6. **Check `_improvement-queue/`** — if pending count > 0, the agent notifies you (in the project's interaction language) and offers to review via `/evolve`.
 
 If any expected file is missing, the agent flags the gap and offers to create it.
 
@@ -307,7 +307,7 @@ If any expected file is missing, the agent flags the gap and offers to create it
 | Update `active-project-context.md` | Every sprint/milestone completion | `finishing-a-development-branch` skill |
 | Update `_SEARCH_INDEX.md` | Every ingest, code-commit, lint | Automatic during wiki operations |
 | Append to `_LOG.md` | Every significant operation | Automatic |
-| Review `_IMPROVEMENT_QUEUE.md` | When pending count > 0 | `/evolve` command |
+| Review `_improvement-queue/` | When pending count > 0 | `/evolve` command |
 | Lint wiki (check parity, orphans) | Monthly or when prompted | Manual or lint trigger in `using-second-brain` |
 | Archive old `_LOG.md` entries | When entry count > 50 | During lint (see `_SCHEMA.md` Section 11) |
 
@@ -400,10 +400,13 @@ If either command fails with a connection error, check that the external service
 - **Cause:** IDE pointer file missing or misconfigured.
 - **Fix:** Verify the pointer file exists for your IDE (Section 6). Ensure it contains the directive to read `AGENTS.md`.
 
-### `_IMPROVEMENT_QUEUE.md` ID counter desync
+### Two improvement-queue entries with the same ID
 
-- **Cause:** Manual editing or concurrent agent sessions.
-- **Fix:** Set `ID counter` to `IMP-{max_existing_id + 1}`. Never reuse IDs.
+- **Cause:** Extremely rare random-suffix clash in `IMP-YYYYMMDD-<short>` (there is no
+  shared counter to desync — concurrent captures create separate files). Typically
+  surfaces as a git **add/add conflict** on the same `IMP-*.md` path during merge.
+- **Fix:** Rename one entry file to a fresh `IMP-YYYYMMDD-<short>` and update its `id:`
+  frontmatter to match, then re-add. IDs are the filename; never reuse one.
 
 ### Wiki pages have no frontmatter
 

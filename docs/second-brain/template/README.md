@@ -35,7 +35,7 @@ docs/second-brain/
     ├── _LOG.md            <- Chronological append-only activity log.
     ├── _SCHEMA.md         <- Canonical format rules (do not modify lightly).
     ├── _SEARCH_INDEX.md   <- Agent-optimized search index (tag + key term table).
-    ├── _IMPROVEMENT_QUEUE.md <- Self-improvement suggestion queue.
+    ├── _improvement-queue/ <- Self-improvement queue (one IMP-*.md per signal; team-safe).
     └── active-project-context.md <- Current sprint snapshot (read every session).
 ```
 

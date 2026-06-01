@@ -89,7 +89,7 @@ $RequiredTemplates = @(
     "docs/second-brain/template/wiki/_INDEX.md.template",
     "docs/second-brain/template/wiki/_LOG.md.template",
     "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template",
-    "docs/second-brain/template/wiki/_IMPROVEMENT_QUEUE.md.template",
+    "docs/second-brain/template/wiki/_improvement-queue/README.md",
     "docs/second-brain/template/wiki/_SCHEMA.md",
     "docs/second-brain/template/wiki/active-project-context.md.template"
 )
@@ -456,6 +456,7 @@ Write-Info "Copying wiki templates..."
 
 $wikiDirs = @(
     "docs/second-brain/wiki",
+    "docs/second-brain/wiki/_improvement-queue",
     "docs/second-brain/raw_sources",
     "docs/second-brain/artifacts/plans",
     "docs/second-brain/artifacts/specs"
@@ -471,9 +472,9 @@ $WikiTemplates = @(
     @{ Src = "_INDEX.md.template"; Dst = "_INDEX.md" }
     @{ Src = "_LOG.md.template"; Dst = "_LOG.md" }
     @{ Src = "_SEARCH_INDEX.md.template"; Dst = "_SEARCH_INDEX.md" }
-    @{ Src = "_IMPROVEMENT_QUEUE.md.template"; Dst = "_IMPROVEMENT_QUEUE.md" }
     @{ Src = "_SCHEMA.md"; Dst = "_SCHEMA.md" }
     @{ Src = "active-project-context.md.template"; Dst = "active-project-context.md" }
+    @{ Src = "_improvement-queue/README.md"; Dst = "_improvement-queue/README.md" }
 )
 
 foreach ($entry in $WikiTemplates) {
@@ -489,6 +490,21 @@ foreach ($entry in $WikiTemplates) {
     else {
         Write-Warn "Template not found: $src — skipping"
     }
+}
+
+# =============================================================================
+# 6b. CONFIGURE GIT MERGE STRATEGY (append-only ledger)
+# =============================================================================
+Write-Info "Ensuring .gitattributes union-merge for the append-only log..."
+$gitAttrLine = "docs/second-brain/wiki/_LOG.md merge=union"
+if ((Test-Path .gitattributes) -and (Select-String -Path .gitattributes -SimpleMatch -Pattern $gitAttrLine -Quiet)) {
+    Write-Ok ".gitattributes already has the union-merge rule"
+}
+else {
+    if (Test-Path .gitattributes) { Add-Content .gitattributes "" }
+    Add-Content .gitattributes "# SumelaOS — append-only ledger: concurrent log appends combine instead of conflicting"
+    Add-Content .gitattributes $gitAttrLine
+    Write-Ok ".gitattributes union-merge rule added"
 }
 
 # =============================================================================

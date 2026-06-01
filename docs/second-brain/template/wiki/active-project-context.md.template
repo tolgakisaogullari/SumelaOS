@@ -9,12 +9,28 @@ status: active
 # Active Project Context — {{project_name}}
 
 > **This file is read at the start of every session.** Holds only the **active sprint, next steps, and open tech-debt headings**. Keep it slim.
+>
+> **Concurrency convention (multi-developer teams):** this is *shared sprint-level state*, not a personal scratchpad — it is the one wiki file most prone to merge conflicts. To minimize them:
+> - Per-developer "what I'm working on right now" goes under **Active Work** below as one bullet keyed by `@name` or branch (different lines → edits rarely collide). Transient detail belongs in your session summary (one file per session, conflict-free), not here.
+> - Prefer updating this file on the integration branch, or rebase/pull before editing it.
+> - This file is deliberately **not** union-merged (unlike `_LOG.md`) — it is structured prose, so a real merge conflict here should be resolved by hand.
 
 ---
 
 ## Active Sprint
 
 <!-- Current sprint or feature work goes here. Include sprint name, goal, and status. -->
+
+---
+
+## Active Work (Per Developer)
+
+<!-- One bullet per developer, keyed by @name or branch, so concurrent edits touch
+     different lines instead of conflicting. Keep to the CURRENT in-flight task only;
+     move finished work out. Transient detail goes in your session summary, not here.
+     Example:
+     - **@alice** (feat/checkout): wiring the payment retry flow — blocked on AD-14.
+     - **@bob** (fix/login-rate-limit): done, in review. -->
 
 ---
 

@@ -1,0 +1,20 @@
+# SumelaOS — second-brain ledger merge strategy.
+#
+# _LOG.md is an append-only chronological ledger (entries: `## [YYYY-MM-DD] type | topic`).
+# Git's built-in `union` merge driver concatenates BOTH sides of a conflicting
+# append instead of raising a merge conflict, so log entries written concurrently
+# on different branches/by different developers combine cleanly on merge.
+#
+# This is safe ONLY for append-only files. Do not apply `union` to structured
+# files (active-project-context.md, _SEARCH_INDEX.md) — there it would duplicate
+# or garble sections. The improvement queue avoids conflicts via per-entry files
+# (one file per signal), not a merge driver.
+#
+# Caveats:
+#  - Rotation/`migration` (moving old entries to wiki/archive/_LOG-YYYY.md) REWRITES
+#    _LOG.md and temporarily violates append-only. Do rotation on the integration
+#    branch (or merge it before others diverge) — union would silently mis-merge a
+#    rotation against concurrent edits instead of raising a reviewable conflict.
+#  - This rule is hardcoded to the default wiki path. If you relocate the wiki
+#    (custom WIKI_PATH), update this path or union protection silently won't apply.
+docs/second-brain/wiki/_LOG.md merge=union
