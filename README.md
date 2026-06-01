@@ -6,6 +6,8 @@
 
 A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 26 universal skills, structured rules, and a living knowledge base from the first session.
 
+Built to scale from **a single developer to a whole team** — with git-native shared memory, governed self-improvement, enforced structure, per-developer overrides, and a versioned upgrade path. See [Working as a Team](#working-as-a-team).
+
 ## Why SumelaOS?
 
 In 386 AD, two Athenian monks climbed a nearly vertical cliff in the Pontic Mountains of Trabzon, Turkey. At 1,200 meters elevation, they built a monastery that would endure for over 1,600 years.
@@ -82,6 +84,26 @@ Then run `/initSumela` in your AI assistant.
 - **Self-improvement loop** — `/evolve` command captures corrections and friction signals
 - **Setup automation** — `setup.sh` / `setup.ps1` with interactive and non-interactive modes
 - **Auto-detection** — `/initSumela` scans your existing project and generates configuration automatically
+- **Team-ready** — git-native shared session memory, conflict-free wiki, and per-developer language overrides (see [Working as a Team](#working-as-a-team))
+- **Governed learning** — in team mode, `/evolve` routes rule/skill/schema changes through a reviewed pull request (CODEOWNERS)
+- **Enforced structure** — `validate-structure.sh` runs via a pre-commit hook and an opt-in CI workflow, so the contract can't silently drift
+- **Versioned upgrades** — `update.sh` refreshes the framework core without touching your project's overlay; `sync-mirrors.sh` keeps verbatim IDE mirrors in lockstep
+
+## Working as a Team
+
+SumelaOS started as a single-developer tool; these layers make the same setup safe for a whole team. All are opt-in and degrade gracefully when unused.
+
+| Capability | How it works |
+|---|---|
+| **Shared session memory** | Session summaries are committed to git (the shared source of truth). `post-merge`/`post-checkout` git hooks re-ingest changed summaries into each developer's **local** Qdrant on `git pull`, so a teammate's recorded decisions become searchable on your machine. |
+| **Conflict-free wiki** | The append-only `_LOG.md` uses git's `union` merge; the self-improvement queue is a directory (one `IMP-YYYYMMDD-<short>.md` per signal, no shared counter) so concurrent captures never collide; `active-project-context.md` has a per-developer "Active Work" convention. |
+| **Governed self-improvement** | `governance: solo \| team` in `AGENTS.md`. In **team** mode, `/evolve` routes changes to the agent-control surface (rules, skills, prompt, schema) through a **pull request** reviewed by `CODEOWNERS` — one developer's learning can't become everyone's standard without review. Lower-stakes wiki/context changes still apply directly. |
+| **Enforcement** | A `pre-commit` hook runs the structure validation (and an IDE-mirror drift check) before commits touching the agent surface; an **opt-in** GitHub Actions workflow (`setup.sh --ci`) runs the same on push/PR. Bypass a commit with `git commit --no-verify`. |
+| **Per-developer config** | Each developer can override **only** their interaction language via a gitignored `.sumela/local.md` (copy `.sumela/local.md.example`). Code naming/documentation languages stay team-wide for codebase consistency. |
+| **Versioned upgrades** | `.sumela/VERSION` + `scripts/update.sh` (and `.ps1`) refresh the framework **core** (prompt, skills, scripts, hooks, universal rules, templates) from upstream — with a per-file diff and your consent — while never touching your **overlay** (AGENTS.md, stack rules, wiki, registries, governance/CI choices). |
+| **IDE mirror sync** | Some IDEs need the prompt body verbatim. List those files in `.sumela/mirrors.conf`; `scripts/sync-mirrors.sh` keeps a marker block in each one byte-equal to `sumela-prompt.md`, and pre-commit + CI fail on drift. |
+
+Setup tooling wires these per clone (`setup.sh` / `setup.ps1` / `/initSumela`). For step-by-step team adoption, see the [ADOPTION_GUIDE](docs/second-brain/template/ADOPTION_GUIDE.md).
 
 ## The Sumela Prompt — Your Agent's Constitution
 
@@ -156,19 +178,28 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 ├── .kilocode/rules.md.template
 ├── .trae/rules/00-agent.md.template
 ├── scripts/
-│   ├── setup.sh                    # Interactive setup (Bash)
-│   ├── setup.ps1                   # Interactive setup (PowerShell)
-│   └── validate-structure.sh       # Structure validation
+│   ├── setup.sh / setup.ps1        # Interactive setup
+│   ├── bootstrap.sh / bootstrap.ps1 # One-command install
+│   ├── validate-structure.sh       # Structure validation (CI + pre-commit run this)
+│   ├── update.sh / update.ps1      # Refresh framework core (keeps your overlay)
+│   ├── sync-mirrors.sh / .ps1      # Keep verbatim IDE mirrors in sync
+│   └── auto-update-memory.py       # Memory-stack maintenance orchestrator
+├── .github/workflows/
+│   └── sumela-validate.yml         # Opt-in CI structure check
 ├── .sumela/
+│   ├── VERSION                     # Core framework version (for update.sh)
 │   ├── SKILL_REGISTRY.md           # Skill catalog
 │   ├── RULE_REGISTRY.md.template   # Rule catalog template
 │   ├── skills/                     # 26 skills (across 21 dirs)
 │   ├── rules/                      # Universal + stack-specific rules
+│   ├── git-hooks/                  # pre-commit validation + memory-sync hooks
+│   ├── local.md.example            # Per-developer override template (gitignored when copied)
+│   ├── mirrors.conf.example        # IDE mirror targets
 │   └── memory-plugins/             # Optional memory stack
 │       ├── qdrant-session-memory/
 │       └── graphify-code-graph/
 └── docs/second-brain/
-    └── template/                   # Wiki scaffolding template
+    └── template/                   # Wiki scaffolding template (incl. _improvement-queue/)
 ```
 
 ## Documentation
@@ -185,11 +216,14 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 |---|---|---|
 | **No workflow structure** | Agent improvises each task | 26 skills define structured workflows (brainstorm → plan → implement → review → ship) |
 | **No coding standards** | Agent uses its own defaults | Project-specific rules enforce your conventions |
-| **No session memory** | Every session starts from zero | Qdrant plugin remembers past decisions and context |
+| **No session memory** | Every session starts from zero | Qdrant plugin remembers past decisions; on a team, summaries sync to every developer via git hooks |
 | **No code structure awareness** | Agent greps blindly | Graphify plugin understands call graphs and dependencies |
 | **No knowledge capture** | Knowledge lives in chat history | Second-brain wiki captures decisions, entities, and architecture |
 | **No self-improvement** | Same mistakes repeat | `/evolve` command captures friction signals and applies learnings |
 | **IDE lock-in** | Different configs per IDE | One `AGENTS.md` serves all IDEs via thin pointer files |
+| **Team merge conflicts** | Everyone edits the same memory/queue files | Union-merge logs + one-file-per-signal queue + per-developer overrides |
+| **Ungoverned agent standards** | One dev's correction silently becomes everyone's rule | Team mode routes rule/skill/schema changes through a reviewed PR (CODEOWNERS) |
+| **Drift & decay** | Structure rots; framework updates clobber customizations | Pre-commit + CI enforce the contract; `update.sh` upgrades the core, never the overlay |
 
 ## Credits & Foundations
 
@@ -206,6 +240,7 @@ The core skill architecture — the universal skills covering brainstorming, pla
 - **Context Manifest** protocol for session-start transparency
 - **Proactive impact analysis** — agent checks code dependencies before making changes
 - **Project-agnostic template** — works with any stack, not just one project
+- **Team-enablement layer** — git-native shared memory, conflict-free wiki, PR-governed `/evolve`, pre-commit + CI enforcement, per-developer overrides, and a versioned core upgrade path
 
 ### [safishamsi/graphify](https://github.com/safishamsi/graphify) — The Code Graph
 
