@@ -2,23 +2,31 @@
 # SumelaOS Bootstrap — one-liner setup for existing projects
 # Usage: curl -sSL https://raw.githubusercontent.com/tolgakisaogullari/SumelaOS/master/scripts/bootstrap.sh | bash
 
-set -e
+set -euo pipefail
 
 REPO_URL="https://github.com/tolgakisaogullari/SumelaOS.git"
-TEMP_DIR=$(mktemp -d)
+TEMP_DIR="$(mktemp -d)"
+# Always clean up the clone, even on early failure.
+trap 'rm -rf "$TEMP_DIR"' EXIT
 
 echo "📦 Cloning SumelaOS..."
-git clone --depth 1 "$REPO_URL" "$TEMP_DIR" 2>/dev/null
+if ! git clone --depth 1 "$REPO_URL" "$TEMP_DIR"; then
+  echo "❌ Failed to clone $REPO_URL — check your network and that git is installed." >&2
+  exit 1
+fi
 
 echo "📂 Copying files to current project..."
-cp -r "$TEMP_DIR/.sumela" . 2>/dev/null || true
-cp -r "$TEMP_DIR/scripts" . 2>/dev/null || true
-cp "$TEMP_DIR/AGENTS.md.template" . 2>/dev/null || true
-cp "$TEMP_DIR/CLAUDE.md.template" . 2>/dev/null || true
+# Essential payload — fail loudly if these don't land (a half-install is worse than none).
+cp -r "$TEMP_DIR/.sumela" . || { echo "❌ Failed to copy .sumela" >&2; exit 1; }
+cp -r "$TEMP_DIR/scripts" . || { echo "❌ Failed to copy scripts" >&2; exit 1; }
+# Optional template/IDE files — best-effort (a missing one just means that IDE isn't wired).
+cp "$TEMP_DIR/AGENTS.md.template" .   2>/dev/null || true
+cp "$TEMP_DIR/CLAUDE.md.template" .   2>/dev/null || true
 cp "$TEMP_DIR/.clinerules.template" . 2>/dev/null || true
-cp -r "$TEMP_DIR/.cursor" . 2>/dev/null || true
+cp -r "$TEMP_DIR/.cursor" .   2>/dev/null || true
 cp -r "$TEMP_DIR/.kilocode" . 2>/dev/null || true
-cp -r "$TEMP_DIR/.trae" . 2>/dev/null || true
+cp -r "$TEMP_DIR/.trae" .     2>/dev/null || true
+cp -r "$TEMP_DIR/.opencode" . 2>/dev/null || true
 
 # Create .gitkeep files for empty directories
 mkdir -p docs/second-brain/template/raw_sources
@@ -29,7 +37,6 @@ touch docs/second-brain/template/artifacts/plans/.gitkeep
 touch docs/second-brain/template/artifacts/specs/.gitkeep
 
 echo "🧹 Cleaning up temp files..."
-rm -rf "$TEMP_DIR"
 
 echo ""
 echo "✅ SumelaOS installed! Next steps:"
