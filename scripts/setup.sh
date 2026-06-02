@@ -771,6 +771,16 @@ jobs:
                    .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
             [ -f "$h" ] && bash -n "$h"
           done
+      - name: PowerShell script parse check
+        shell: pwsh
+        run: |
+          $bad = 0
+          Get-ChildItem -Recurse -Filter *.ps1 -ErrorAction SilentlyContinue | ForEach-Object {
+            $tokens = $null; $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errs)
+            if ($errs) { Write-Host "::error::Parse errors in $($_.FullName)"; $errs | ForEach-Object { Write-Host "  $($_.Extent.StartLineNumber): $($_.Message)" }; $bad = 1 }
+          }
+          if ($bad) { exit 1 } else { Write-Host "PowerShell scripts parse clean." }
 YAML
     ok "CI workflow added — GitHub Actions; delete it if you use other CI (GitLab/Azure: see ADOPTION_GUIDE)"
   fi
