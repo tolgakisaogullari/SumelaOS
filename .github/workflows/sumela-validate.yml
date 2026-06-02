@@ -3,7 +3,8 @@ name: SumelaOS Validate
 # Enforces the SumelaOS structure contract on every push / PR so the framework
 # (skills, rules, registries, wiki templates, generated AGENTS.md / RULE_REGISTRY)
 # cannot silently drift. Mirrors `scripts/validate-structure.sh` — the same check
-# the pre-commit hook runs locally.
+# the pre-commit hook runs locally. Also runs `tests/smoke.sh`, an end-to-end check
+# that setup.sh renders + registers correctly and is idempotent on re-run.
 #
 # Not on GitHub? See docs/second-brain/template/ADOPTION_GUIDE.md for a GitLab CI
 # / Azure Pipelines equivalent (both just run the same script).
@@ -25,13 +26,16 @@ jobs:
       - name: Validate SumelaOS structure (+ unfilled placeholders)
         run: bash scripts/validate-structure.sh --check-placeholders
 
+      - name: Setup smoke test (end-to-end — runs setup against a throwaway copy)
+        run: bash tests/smoke.sh
+
       - name: IDE mirror drift check (no-op unless .sumela/mirrors.conf lists mirrors)
         run: bash scripts/sync-mirrors.sh --check
 
       - name: Shell script syntax check
         run: |
           set -e
-          for f in scripts/*.sh; do
+          for f in scripts/*.sh tests/*.sh; do
             [ -f "$f" ] && bash -n "$f"
           done
           # Git hooks have no .sh extension; lint them explicitly if present.

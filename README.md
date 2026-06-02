@@ -189,8 +189,10 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 │   ├── sync-shared-rules.py        # Distribute .sumela-shared/rules/ into each install (monorepo)
 │   ├── sync-mirrors.sh / .ps1      # Keep verbatim IDE mirrors in sync
 │   └── auto-update-memory.py       # Memory-stack maintenance orchestrator
+├── tests/
+│   └── smoke.sh                    # End-to-end setup test (run + idempotency); CI runs it
 ├── .github/workflows/
-│   └── sumela-validate.yml         # Opt-in CI structure check
+│   └── sumela-validate.yml         # Opt-in CI: structure + smoke test
 ├── .sumela/
 │   ├── VERSION                     # Core framework version (for update.sh)
 │   ├── SKILL_REGISTRY.md           # Skill catalog

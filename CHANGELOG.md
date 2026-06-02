@@ -29,6 +29,11 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 - **OpenCode IDE support** — `.opencode/AGENTS.md.template` pointer; wired into
   `setup.sh` / `setup.ps1` (template list, IDE map, multiselect, `--ides`) and the
   README Supported-IDEs table, completing the IDE matrix the README already advertised.
+- **End-to-end smoke test** — `tests/smoke.sh` runs `setup.sh` against a throwaway
+  copy and asserts the contract (AGENTS.md + every selected IDE pointer generated, a
+  plugin registered exactly once, no unrendered placeholders, structure + reconcile
+  pass) and that a second run is idempotent. Wired into the opt-in CI workflow; this
+  is the first FUNCTIONAL test of the self-modifying setup pipeline (was parse-only).
 
 ### Fixed
 
