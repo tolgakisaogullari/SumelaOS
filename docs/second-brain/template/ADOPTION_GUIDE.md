@@ -205,9 +205,25 @@ Create `tech-debt-and-known-issues.md` with prioritized items (High / Medium / L
 
 ## 5. Mode C: Team Onboarding
 
-Use this mode when a **new team member** joins a project that already has SumelaOS set up. No template copying or configuration needed — the newcomer reads existing files and starts contributing.
+Use this mode when a **new team member** joins a project that already has SumelaOS set up. No template copying or project configuration is needed — but a few **one-time local steps** wire the per-developer pieces (git hooks, optional memory, your language), because git does not share those automatically.
 
-### C.1. Read the Core Files
+### C.1. One-Time Local Setup (run once per clone)
+
+Fastest path — re-run setup; it wires everything idempotently and won't overwrite the project's committed config:
+
+```bash
+bash scripts/setup.sh        # or: powershell scripts/setup.ps1
+```
+
+Or do the equivalent by hand:
+
+1. **Wire the git hooks** (required — hooks are NOT shared by git). Enables the pre-commit validation, the IDE-mirror drift check, and team memory sync:
+   `git config core.hooksPath .sumela/git-hooks`
+2. **Shared memory** (only if your team uses the Qdrant plugin): so teammates' committed session summaries sync into *your* local Qdrant on `git pull`, install Python 3.10+, a local Qdrant, and Ollama with `qwen3-embedding:0.6b`, then `pip install -r .sumela/memory-plugins/qdrant-session-memory/requirements.txt`. See [Plugin Activation](#11-plugin-activation). Without it, the lower memory tiers still work.
+3. **Your interaction language** (optional): copy `.sumela/local.md.example` to `.sumela/local.md` and set `interaction_language`. It's gitignored, so your choice doesn't change the team config; code naming/documentation stay team-wide.
+4. **Know the governance mode:** check `AGENTS.md` §8 (`governance: solo | team`). In **team** mode, your `/evolve` changes to the agent-control surface (rules, skills, prompt, schema) open a **pull request** for a code owner to review instead of applying directly.
+
+### C.2. Read the Core Files
 
 The agent (or human) reads these files in order on the first session:
 
@@ -216,7 +232,7 @@ The agent (or human) reads these files in order on the first session:
 3. **`docs/second-brain/wiki/active-project-context.md`** — current sprint state, active work, recent decisions.
 4. **`docs/second-brain/wiki/_improvement-queue/`** — check pending count. If > 0, review with `/evolve`.
 
-### C.2. What to Expect on First Session
+### C.3. What to Expect on First Session
 
 The agent will automatically:
 
@@ -229,7 +245,7 @@ The agent will automatically:
 2. **Print a Context Manifest** — this is the first user-facing output. It shows: active skills, loaded rules, detected stack scope, and any rule gaps. Review it to confirm the agent understood the project correctly.
 3. **Report readiness** — if any expected file is missing, the agent will flag the gap.
 
-### C.3. How to Contribute
+### C.4. How to Contribute
 
 | Action | Method |
 |---|---|
@@ -237,6 +253,19 @@ The agent will automatically:
 | Add a new rule | Use `/evolve` — the agent creates the rule file, registers it in `RULE_REGISTRY.md`, and updates the phase-to-rule matrix |
 | Report friction or a correction | Use `/evolve` — the agent captures the signal as a new file in `_improvement-queue/` for review |
 | Ingest a new source document | Place in `docs/second-brain/raw_sources/`, then trigger ingest via the `using-second-brain` skill |
+
+In **team** governance mode, `/evolve`'s rule/skill/schema changes don't land directly — they open a pull request for a code owner (`CODEOWNERS`) to review before they become everyone's standard. The pre-commit hook and CI also run the structure + mirror-drift checks on your commits; bypass an individual commit with `git commit --no-verify`.
+
+### C.5. Staying Current
+
+Pull framework improvements without losing your project's customizations:
+
+```bash
+bash scripts/update.sh --dry-run    # preview
+bash scripts/update.sh              # apply (diff + consent per changed core file)
+```
+
+It refreshes the framework **core** and never touches your **overlay** (AGENTS.md, stack rules, wiki, registries, governance/CI choices, `.sumela/local.md`). See [Upgrading SumelaOS](#upgrading-sumelaos-core-vs-overlay).
 
 ---
 
