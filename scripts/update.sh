@@ -233,6 +233,22 @@ if [ "$schema_changed" = true ]; then
   fi
 fi
 
+# Skill registry: auto-register any newly-added on-disk skills (with consent);
+# orphans are reported, not deleted. Rules are NOT auto-reconciled (they need
+# phase/stack metadata) — handled by the reminder below.
+if [ -f "$ROOT/scripts/reconcile-registry.py" ] && command -v python3 >/dev/null 2>&1; then
+  reg_out="$(python3 "$ROOT/scripts/reconcile-registry.py" --check 2>&1)"; reg_rc=$?
+  if [ "$reg_rc" -ne 0 ]; then
+    echo ""; printf '%s\n' "$reg_out" | sed 's/^/  /'
+    do_reg=true
+    if [ "$ASSUME_YES" != true ]; then
+      echo "Reconcile SKILL_REGISTRY.md now (register new skills; orphans only reported)? [Y/n]:"
+      read -r yn; case "$yn" in n|N) do_reg=false ;; esac
+    fi
+    [ "$do_reg" = true ] && python3 "$ROOT/scripts/reconcile-registry.py" | sed 's/^/  /'
+  fi
+fi
+
 # --- Finalize ----------------------------------------------------------------
 printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
 chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" 2>/dev/null || true
@@ -246,7 +262,7 @@ fi
 echo ""
 ok "Core updated to ${SRC_VER}."
 [ "$n_skipped" -gt 0 ] && warn "${n_skipped} changed core file(s) were SKIPPED and still differ from upstream ${SRC_VER}. Re-run with --force to revisit them."
-warn "Overlay was untouched. If this update ADDED or REMOVED skills/rules, reconcile the"
-warn "registries (SKILL_REGISTRY.md / RULE_REGISTRY.md) — re-run /initSumela's registry step or use /evolve."
+warn "Overlay was untouched. Skills were auto-reconciled into SKILL_REGISTRY.md; if RULES"
+warn "changed, reconcile RULE_REGISTRY.md via /initSumela's registry step or /evolve (rules need phase/stack metadata)."
 [ "$n_def" -gt 0 ] && warn "The updater itself changed upstream — re-run 'bash scripts/update.sh' to pick up the new version."
 echo "Review changes with 'git diff' before committing."

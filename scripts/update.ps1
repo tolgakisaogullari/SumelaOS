@@ -204,6 +204,22 @@ try {
         } else { Write-Host "  skip   $schemaLive"; $nSkipped++ }
     }
 
+    # Skill registry: auto-register newly-added on-disk skills (with consent);
+    # orphans reported, not deleted. Rules are NOT auto-reconciled.
+    $reconcile = Join-Path $root "scripts/reconcile-registry.py"
+    if ((Test-Path $reconcile) -and (Get-Command python3 -ErrorAction SilentlyContinue)) {
+        $regOut = & python3 $reconcile --check 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ""; $regOut | ForEach-Object { Write-Host "  $_" }
+            $doReg = $true
+            if (-not $Yes) {
+                $yn = Read-Host "Reconcile SKILL_REGISTRY.md now (register new skills; orphans only reported)? [Y/n]"
+                if ($yn -match '^[nN]') { $doReg = $false }
+            }
+            if ($doReg) { & python3 $reconcile | ForEach-Object { Write-Host "  $_" } }
+        }
+    }
+
     Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer
 
     Write-Host ""
@@ -215,8 +231,8 @@ try {
     Write-Host ""
     Write-Ok "Core updated to $srcVer."
     if ($nSkipped -gt 0) { Write-Warn "$nSkipped changed core file(s) were SKIPPED and still differ from upstream $srcVer. Re-run with -Force to revisit them." }
-    Write-Warn "Overlay was untouched. If this update ADDED or REMOVED skills/rules, reconcile the"
-    Write-Warn "registries (SKILL_REGISTRY.md / RULE_REGISTRY.md) — re-run /initSumela's registry step or use /evolve."
+    Write-Warn "Overlay was untouched. Skills were auto-reconciled into SKILL_REGISTRY.md; if RULES"
+    Write-Warn "changed, reconcile RULE_REGISTRY.md via /initSumela's registry step or /evolve (rules need phase/stack metadata)."
     if ($deferredList.Count -gt 0) { Write-Warn "The updater itself changed upstream — re-run scripts/update.ps1 to pick up the new version." }
     Write-Host "Review changes with 'git diff' before committing."
 }

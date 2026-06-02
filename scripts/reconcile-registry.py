@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""
+reconcile-registry.py — keep SKILL_REGISTRY.md in sync with the skills on disk.
+
+After a framework update (or any time), this registers any core skill that exists
+on disk but is missing from the registry, and flags registry entries whose file is
+gone. It removes the old "reconcile the registry by hand" homework.
+
+Scope:
+  * Handles core skills only: `.sumela/skills/<name>/SKILL.md` (one frontmatter
+    `name` + `description` each). New entries get activation="lazy" and the
+    description is copied VERBATIM from the skill's frontmatter (the parity contract).
+  * Does NOT touch memory-plugin entries (`.sumela/memory-plugins/.../SKILL.md`) —
+    those are managed by setup, conditional on plugin selection.
+  * Does NOT auto-delete orphan entries (a missing path may be an intentionally
+    not-yet-copied plugin) — it reports them for the human to resolve.
+  * Does NOT handle RULE_REGISTRY.md — rules need phase/stack/activation metadata
+    that isn't in the rule files; reconcile those via /initSumela or /evolve.
+
+Usage:
+  python3 scripts/reconcile-registry.py            # add missing skill entries; report orphans
+  python3 scripts/reconcile-registry.py --check     # report only; exit 1 if out of sync
+"""
+import sys
+import os
+import re
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+CHECK = "--check" in sys.argv[1:]
+
+
+def find_root(start):
+    cur = os.path.abspath(start)
+    while cur != os.path.dirname(cur):
+        if os.path.isdir(os.path.join(cur, ".sumela")):
+            return cur
+        cur = os.path.dirname(cur)
+    return None
+
+
+ROOT = find_root(os.getcwd())
+if not ROOT:
+    print("reconcile-registry: no .sumela/ found from this directory upward.")
+    sys.exit(0)
+
+REGISTRY = os.path.join(ROOT, ".sumela", "SKILL_REGISTRY.md")
+SKILLS_DIR = os.path.join(ROOT, ".sumela", "skills")
+if not os.path.isfile(REGISTRY):
+    print(f"reconcile-registry: {REGISTRY} not found — nothing to do.")
+    sys.exit(0)
+
+
+def read_frontmatter(path):
+    """Return (name, description) from a SKILL.md frontmatter, or (None, None)."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    if not text.startswith("---"):
+        return None, None
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return None, None
+    fm = parts[1]
+    name = desc = None
+    for line in fm.splitlines():
+        m = re.match(r"\s*name\s*:\s*(.+?)\s*$", line)
+        if m and name is None:
+            name = m.group(1).strip().strip('"').strip("'")
+        m = re.match(r'\s*description\s*:\s*(.+?)\s*$', line)
+        if m and desc is None:
+            desc = m.group(1).strip()
+            if (desc.startswith('"') and desc.endswith('"')) or (desc.startswith("'") and desc.endswith("'")):
+                desc = desc[1:-1]
+    return name, desc
+
+
+with open(REGISTRY, encoding="utf-8") as f:
+    reg_text = f.read()
+
+reg_blocks = re.findall(r"<skill\b[^>]*>(.*?)</skill>", reg_text, re.S)
+registered_names = set()
+registered_paths = []
+for b in reg_blocks:
+    n = re.search(r"<name>(.*?)</name>", b, re.S)
+    p = re.search(r"<path>(.*?)</path>", b, re.S)
+    if n:
+        registered_names.add(n.group(1).strip())
+    if p:
+        registered_paths.append(p.group(1).strip())
+
+# 1) Skills on disk (core skills dir) missing from the registry.
+unregistered = []  # (name, description, relpath)
+if os.path.isdir(SKILLS_DIR):
+    for entry in sorted(os.listdir(SKILLS_DIR)):
+        skill_md = os.path.join(SKILLS_DIR, entry, "SKILL.md")
+        if not os.path.isfile(skill_md):
+            continue
+        name, desc = read_frontmatter(skill_md)
+        if not name:
+            continue
+        relpath = os.path.relpath(skill_md, ROOT).replace(os.sep, "/")
+        # Skip if EITHER the name OR the path is already registered. The path guard
+        # prevents a silent duplicate when a skill's frontmatter `name` has drifted
+        # from its registry <name> (that parity drift is for /evolve to fix, not us).
+        if name in registered_names or relpath in registered_paths:
+            continue
+        desc = desc or ""
+        # The registry is pseudo-XML parsed by regex; a closing tag inside the
+        # description/name would corrupt the block. Refuse rather than emit broken XML.
+        if "</description>" in desc or "</skill>" in desc or "</name>" in name:
+            print(f"  SKIP (reserved tag in metadata, register by hand): {name}  ({relpath})")
+            continue
+        unregistered.append((name, desc, relpath))
+
+# 2) Registry entries whose path no longer exists (orphans) — report, don't delete.
+orphans = [p for p in registered_paths if not os.path.isfile(os.path.join(ROOT, p))]
+
+if not unregistered and not orphans:
+    print("reconcile-registry: SKILL_REGISTRY.md is in sync with skills on disk.")
+    sys.exit(0)
+
+for name, _desc, relpath in unregistered:
+    print(f"  unregistered skill: {name}  ({relpath})")
+for p in orphans:
+    print(f"  ORPHAN registry entry (path missing): {p}")
+
+if CHECK:
+    print("reconcile-registry: registry is OUT OF SYNC (run: python3 scripts/reconcile-registry.py).")
+    sys.exit(1)
+
+# Apply: insert new <skill> entries before </available_skills>.
+if unregistered:
+    tag = "</available_skills>"
+    if tag not in reg_text:
+        print("reconcile-registry: could not find </available_skills> — not modifying.", file=sys.stderr)
+        sys.exit(1)
+    block = ""
+    for name, desc, relpath in unregistered:
+        block += (
+            f'\n<skill activation="lazy">\n'
+            f"<name>{name}</name>\n"
+            f"<description>{desc}</description>\n"
+            f"<path>{relpath}</path>\n"
+            f"</skill>\n"
+        )
+    reg_text = reg_text.replace(tag, block + "\n" + tag, 1)
+    with open(REGISTRY, "w", encoding="utf-8") as f:
+        f.write(reg_text)
+    print(f"reconcile-registry: registered {len(unregistered)} skill(s) (activation=lazy).")
+
+if orphans:
+    print(f"reconcile-registry: {len(orphans)} orphan entry(ies) above were NOT removed — "
+          "delete them by hand if the skill was intentionally removed, or restore the file.")
+sys.exit(0)
