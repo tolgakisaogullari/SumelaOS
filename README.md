@@ -164,7 +164,7 @@ Git + any IDE          Python 3.10+
 | Cline | `.clinerules` (root) | Yes |
 | Kilo Code | `.kilocode/rules.md` | Yes |
 | Trae | `.trae/rules/00-agent.md` | Yes |
-| OpenCode | `.opencode/` | Yes |
+| OpenCode | `.opencode/AGENTS.md` | Yes |
 
 All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one file only; pointers never drift.
 
@@ -178,6 +178,7 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 ├── .cursor/rules/00-agent.md.template
 ├── .kilocode/rules.md.template
 ├── .trae/rules/00-agent.md.template
+├── .opencode/AGENTS.md.template
 ├── scripts/
 │   ├── setup.sh / setup.ps1        # Interactive setup
 │   ├── bootstrap.sh / bootstrap.ps1 # One-command install

@@ -38,7 +38,7 @@
     Comma-separated list of plugins: qdrant-session-memory, graphify-code-graph.
 
 .PARAMETER IDEs
-    Comma-separated list of IDEs: claude, cursor, cline, kilo-code, trae.
+    Comma-separated list of IDEs: claude, cursor, cline, kilo-code, trae, opencode.
 
 .PARAMETER Governance
     Governance mode: solo (apply /evolve changes directly) or team (PR-gate the
@@ -95,6 +95,7 @@ $RequiredTemplates = @(
     ".cursor/rules/00-agent.md.template",
     ".kilocode/rules.md.template",
     ".trae/rules/00-agent.md.template",
+    ".opencode/AGENTS.md.template",
     "docs/second-brain/template/wiki/_INDEX.md.template",
     "docs/second-brain/template/wiki/_LOG.md.template",
     "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template",
@@ -195,7 +196,7 @@ else {
     if (Read-YesNo "Enable graphify-code-graph plugin?" "n") { $PluginArray += "graphify-code-graph" }
 
     Write-Host ""
-    $IDEArray = Read-MultiSelect "IDEs to generate pointer files for:" @("claude", "cursor", "cline", "kilo-code", "trae")
+    $IDEArray = Read-MultiSelect "IDEs to generate pointer files for:" @("claude", "cursor", "cline", "kilo-code", "trae", "opencode")
 
     Write-Host ""
     Write-Host "Governance mode controls how /evolve applies changes to the agent-control surface (rules/skills/prompt/schema):"
@@ -451,6 +452,7 @@ $IDEFileMap = @{
     "cline"     = @{ Dst = ".clinerules"; Tmpl = ".clinerules.template" }
     "kilo-code" = @{ Dst = ".kilocode/rules.md"; Tmpl = ".kilocode/rules.md.template" }
     "trae"      = @{ Dst = ".trae/rules/00-agent.md"; Tmpl = ".trae/rules/00-agent.md.template" }
+    "opencode"  = @{ Dst = ".opencode/AGENTS.md"; Tmpl = ".opencode/AGENTS.md.template" }
 }
 
 foreach ($ide in $IDEArray) {
@@ -585,11 +587,21 @@ if ((Test-Path .gitignore) -and (Select-String -Path .gitignore -SimpleMatch -Pa
 if ($PluginArray.Count -gt 0) {
     Write-Info "Registering memory plugins in SKILL_REGISTRY.md..."
 
+    # Read the registry once so we can guard against re-registering (idempotent:
+    # the shipped registry may already list a plugin, and a re-run must not append
+    # a duplicate <skill> block — parity with setup.sh's grep guard).
+    $registryText = if (Test-Path ".sumela/SKILL_REGISTRY.md") { Get-Content ".sumela/SKILL_REGISTRY.md" -Raw } else { "" }
     $PluginEntries = ""
     foreach ($plugin in $PluginArray) {
         $plugin = $plugin.Trim()
         $skillPath = ".sumela/memory-plugins/$plugin/SKILL.md"
-        if (Test-Path $skillPath) {
+        if (-not (Test-Path $skillPath)) {
+            Write-Warn "Plugin SKILL.md not found: $skillPath"
+        }
+        elseif ($registryText -match "<name>$([regex]::Escape($plugin))</name>") {
+            Write-Info "Plugin already registered: $plugin — skipping"
+        }
+        else {
             $PluginEntries += @"
 
 <skill activation="lazy">
@@ -599,9 +611,6 @@ if ($PluginArray.Count -gt 0) {
 </skill>
 "@
             Write-Ok "Registered plugin: $plugin"
-        }
-        else {
-            Write-Warn "Plugin SKILL.md not found: $skillPath"
         }
     }
 

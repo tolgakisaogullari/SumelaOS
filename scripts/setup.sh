@@ -18,7 +18,7 @@
 #     --stacks "backend,frontend" \
 #     --rule-variant "best-practice" \
 #     --plugins "qdrant-session-memory,graphify-code-graph" \
-#     --ides "claude,cursor,cline,kilo-code,trae" \
+#     --ides "claude,cursor,cline,kilo-code,trae,opencode" \
 #     --governance "solo"                   # or "team" (PR-gated /evolve)
 #     --ci                                  # opt in to the GitHub Actions workflow (default: off)
 # -----------------------------------------------------------------------------
@@ -94,6 +94,7 @@ REQUIRED_TEMPLATES=(
   ".cursor/rules/00-agent.md.template"
   ".kilocode/rules.md.template"
   ".trae/rules/00-agent.md.template"
+  ".opencode/AGENTS.md.template"
   "docs/second-brain/template/wiki/_INDEX.md.template"
   "docs/second-brain/template/wiki/_LOG.md.template"
   "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template"
@@ -239,7 +240,7 @@ else
 
   echo ""
   IDES=()
-  read -ra IDES <<< "$(prompt_multiselect "IDEs to generate pointer files for:" "claude" "cursor" "cline" "kilo-code" "trae")"
+  read -ra IDES <<< "$(prompt_multiselect "IDEs to generate pointer files for:" "claude" "cursor" "cline" "kilo-code" "trae" "opencode")"
 
   echo ""
   echo "Governance mode controls how /evolve applies changes to the agent-control surface (rules/skills/prompt/schema):"
@@ -519,6 +520,7 @@ ide_file_map() {
     cline)     echo ".clinerules:.clinerules.template" ;;
     kilo-code) echo ".kilocode/rules.md:.kilocode/rules.md.template" ;;
     trae)      echo ".trae/rules/00-agent.md:.trae/rules/00-agent.md.template" ;;
+    opencode)  echo ".opencode/AGENTS.md:.opencode/AGENTS.md.template" ;;
     *)         echo "" ;;
   esac
 }
