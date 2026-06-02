@@ -102,6 +102,7 @@ SumelaOS started as a single-developer tool; these layers make the same setup sa
 | **Per-developer config** | Each developer can override **only** their interaction language via a gitignored `.sumela/local.md` (copy `.sumela/local.md.example`). Code naming/documentation languages stay team-wide for codebase consistency. |
 | **Versioned upgrades** | `.sumela/VERSION` + `scripts/update.sh` (and `.ps1`) refresh the framework **core** (prompt, skills, scripts, hooks, universal rules, templates) from upstream — with a per-file diff and your consent — while never touching your **overlay** (AGENTS.md, stack rules, wiki, registries, governance/CI choices). |
 | **IDE mirror sync** | Some IDEs need the prompt body verbatim. List those files in `.sumela/mirrors.conf`; `scripts/sync-mirrors.sh` keeps a marker block in each one byte-equal to `sumela-prompt.md`, and pre-commit + CI fail on drift. |
+| **Monorepo-ready** | Install at the repo root **or** a subdir — hooks self-anchor to their install. Multiple installs in one repo auto-promote to a root dispatcher (`.sumela-hooks/`) that runs every install's hooks. Rules shared across packages live once in `.sumela-shared/rules/` and `sync-shared-rules.py` distributes + registers them (universal) into each install. See the [ADOPTION_GUIDE §13](docs/second-brain/template/ADOPTION_GUIDE.md). |
 
 Setup tooling wires these per clone (`setup.sh` / `setup.ps1` / `/initSumela`). For step-by-step team adoption, see the [ADOPTION_GUIDE](docs/second-brain/template/ADOPTION_GUIDE.md).
 
@@ -184,6 +185,7 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 │   ├── status.sh / status.ps1      # Read-only health report (version, drift, queue, hooks)
 │   ├── update.sh / update.ps1      # Refresh framework core (keeps your overlay)
 │   ├── reconcile-registry.py       # Auto-register on-disk skills into SKILL_REGISTRY.md
+│   ├── sync-shared-rules.py        # Distribute .sumela-shared/rules/ into each install (monorepo)
 │   ├── sync-mirrors.sh / .ps1      # Keep verbatim IDE mirrors in sync
 │   └── auto-update-memory.py       # Memory-stack maintenance orchestrator
 ├── .github/workflows/

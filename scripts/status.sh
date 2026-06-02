@@ -79,6 +79,24 @@ else
   info "reconcile-registry.py / python3 unavailable — skipped"
 fi
 
+# --- Shared rules (monorepo / org) ------------------------------------------
+section "Shared rules"
+if [ -f "$SCRIPTS_DIR/sync-shared-rules.py" ] && [ "$HAVE_PY3" = true ]; then
+  shr_out="$(python3 "$SCRIPTS_DIR/sync-shared-rules.py" --check 2>&1)"; shr_rc=$?
+  case "$shr_out" in
+    *"no .sumela-shared/rules"*) info "no org-shared rules configured (.sumela-shared/rules/ above this install)" ;;
+    *)
+      if [ "$shr_rc" -eq 0 ]; then
+        ok "in sync with .sumela-shared/rules/"
+      else
+        printf '%s\n' "$shr_out" | grep -E 'out of date|not registered|ORPHAN' | sed 's/^ */  /'
+        attention "org-shared rules drifted — fix: python3 scripts/sync-shared-rules.py"
+      fi ;;
+  esac
+else
+  info "sync-shared-rules.py / python3 unavailable — skipped"
+fi
+
 # --- 4. IDE mirror drift ----------------------------------------------------
 section "IDE mirrors"
 if [ -f "$ROOT/.sumela/mirrors.conf" ] && [ -f "$SCRIPTS_DIR/sync-mirrors.sh" ]; then

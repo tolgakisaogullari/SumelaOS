@@ -249,6 +249,21 @@ if [ -f "$ROOT/scripts/reconcile-registry.py" ] && command -v python3 >/dev/null
   fi
 fi
 
+# Org-shared rules (monorepo): if .sumela-shared/rules/ exists above this install,
+# refresh the synced copies + register new ones (universal). No-op otherwise.
+if [ -f "$ROOT/scripts/sync-shared-rules.py" ] && command -v python3 >/dev/null 2>&1; then
+  shr_out="$(python3 "$ROOT/scripts/sync-shared-rules.py" --check 2>&1)"; shr_rc=$?
+  if [ "$shr_rc" -ne 0 ]; then
+    echo ""; printf '%s\n' "$shr_out" | sed 's/^/  /'
+    do_shr=true
+    if [ "$ASSUME_YES" != true ]; then
+      echo "Sync org-shared rules into this install now? [Y/n]:"
+      read -r yn; case "$yn" in n|N) do_shr=false ;; esac
+    fi
+    [ "$do_shr" = true ] && python3 "$ROOT/scripts/sync-shared-rules.py" | sed 's/^/  /'
+  fi
+fi
+
 # --- Finalize ----------------------------------------------------------------
 printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
 chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" 2>/dev/null || true

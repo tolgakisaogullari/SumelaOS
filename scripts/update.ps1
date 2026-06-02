@@ -220,6 +220,22 @@ try {
         }
     }
 
+    # Org-shared rules (monorepo): refresh synced copies + register new ones. No-op
+    # unless .sumela-shared/rules/ exists above this install.
+    $syncShared = Join-Path $root "scripts/sync-shared-rules.py"
+    if ((Test-Path $syncShared) -and (Get-Command python3 -ErrorAction SilentlyContinue)) {
+        $shrOut = & python3 $syncShared --check 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ""; $shrOut | ForEach-Object { Write-Host "  $_" }
+            $doShr = $true
+            if (-not $Yes) {
+                $yn = Read-Host "Sync org-shared rules into this install now? [Y/n]"
+                if ($yn -match '^[nN]') { $doShr = $false }
+            }
+            if ($doShr) { & python3 $syncShared | ForEach-Object { Write-Host "  $_" } }
+        }
+    }
+
     Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer
 
     Write-Host ""

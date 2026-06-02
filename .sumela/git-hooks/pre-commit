@@ -8,10 +8,14 @@
 
 [ -n "${SUMELA_DISABLE_PRECOMMIT:-}" ] && exit 0
 
-repo="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
-[ -n "$repo" ] || exit 0
-cd "$repo" || exit 0
-[ -f scripts/validate-structure.sh ] || exit 0   # not a SumelaOS project → do nothing
+# Anchor to the SumelaOS install dir — this hook lives at <install>/.sumela/git-hooks/,
+# so deriving the root from $0 (not `git rev-parse --show-toplevel`) makes a monorepo
+# subpackage install validate its OWN subtree instead of silently no-op'ing because
+# scripts/ isn't at the repo root.
+hookdir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" || exit 0
+install="$(cd "$hookdir/../.." 2>/dev/null && pwd)" || exit 0
+cd "$install" || exit 0
+[ -f scripts/validate-structure.sh ] || exit 0   # not a SumelaOS install → do nothing
 
 staged="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)"
 rc=0

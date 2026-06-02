@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/update.sh`).
 
+## [Unreleased]
+
+### Added — less manual work, monorepo support
+
+- **Auto-reconcile `SKILL_REGISTRY.md`** — `scripts/reconcile-registry.py` registers
+  on-disk skills missing from the registry (verbatim description, `activation="lazy"`)
+  and reports orphans; run by `update.sh` with consent.
+- **Health report** — `scripts/status.sh` / `status.ps1`: one read-only command for
+  version, governance, structure, registry/mirror/shared-rule drift, improvement-queue
+  count, git-hook wiring, secret scanner, and memory plugins. Every issue lists its fix.
+- **Secret governance** — if `gitleaks` is installed, the pre-commit hook scans staged
+  changes and blocks on a finding (silent if absent; `SUMELA_DISABLE_SECRET_SCAN=1` to
+  disable; tool/version errors never block). Setup seeds a `.gitignore` secret baseline.
+- **Monorepo support** — hooks self-anchor to their install dir (subdir installs now
+  validate their own subtree instead of silently no-op'ing). Multiple installs in one
+  repo auto-promote to a root dispatcher (`.sumela-hooks/` + `_dispatch.sh`) that runs
+  every install's hooks. Org-shared rules live once in `.sumela-shared/rules/`;
+  `scripts/sync-shared-rules.py` distributes + registers them (universal) into each
+  install (run by setup / update; drift surfaced by `status.sh`).
+
 ## [0.3.0] - 2026-06-01
 
 ### Added — team enablement

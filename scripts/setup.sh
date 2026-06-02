@@ -707,22 +707,70 @@ fi
 # Wired whenever the project is a git repo: the pre-commit validation hook is
 # useful for everyone, and the post-merge/post-checkout memory hooks self-gate
 # (they no-op unless the Qdrant plugin + summaries + a reachable Qdrant exist).
+# Helpers for the multi-install (monorepo) dispatcher. core.hooksPath holds ONE path,
+# so a second SumelaOS install in the same repo is handled by a root dispatcher that
+# fans each git event out to every registered install (see .sumela/git-hooks/_dispatch.sh).
+sumela_register_install() {        # $1 = git_root, $2 = install_rel ("" => repo root)
+  local reg="$1/.sumela-hooks/installs" entry="${2:-.}"
+  [ -z "$entry" ] && entry="."
+  touch "$reg"
+  grep -qxF "$entry" "$reg" 2>/dev/null || printf '%s\n' "$entry" >> "$reg"
+}
+sumela_setup_dispatch() {          # $1 = git_root, $2 = install_abs (source of _dispatch.sh)
+  local dh="$1/.sumela-hooks" hk
+  mkdir -p "$dh"
+  for hk in pre-commit post-merge post-checkout; do
+    cp "$2/.sumela/git-hooks/_dispatch.sh" "$dh/$hk"
+    chmod +x "$dh/$hk" 2>/dev/null || true
+  done
+}
+
 if [ -d ".sumela/git-hooks" ]; then
   info "Wiring git hooks (pre-commit validation + memory sync)..."
   if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+    INSTALL_ABS="$(pwd)"
+    # --show-prefix gives cwd relative to the repo root ("packages/app/" or "" at root),
+    # avoiding fragile path subtraction (e.g. macOS /var vs /private/var symlinks).
+    INSTALL_REL="$(git rev-parse --show-prefix 2>/dev/null)"
+    INSTALL_REL="${INSTALL_REL%/}"                          # strip trailing slash; "" at repo root
+    HOOKS_REL="${INSTALL_REL:+$INSTALL_REL/}.sumela/git-hooks"
+    chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
     EXISTING_HOOKS_PATH="$(git config --local --get core.hooksPath 2>/dev/null || true)"
-    if [ -n "$EXISTING_HOOKS_PATH" ] && [ "$EXISTING_HOOKS_PATH" != ".sumela/git-hooks" ]; then
-      warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' — not overriding."
-      warn "To enable SumelaOS hooks, copy .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$EXISTING_HOOKS_PATH' or merge hook paths manually."
-    else
-      git config core.hooksPath .sumela/git-hooks
-      chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
+
+    if [ -z "$EXISTING_HOOKS_PATH" ] || [ "$EXISTING_HOOKS_PATH" = "$HOOKS_REL" ]; then
+      # Unset, or already pointing at THIS install → wire directly (idempotent).
+      git config core.hooksPath "$HOOKS_REL"
       HOOKS_WIRED=true
-      ok "Git hooks enabled (core.hooksPath = .sumela/git-hooks) — pre-commit validation active (bypass: git commit --no-verify)"
+      ok "Git hooks enabled (core.hooksPath = $HOOKS_REL) — pre-commit validation active (bypass: git commit --no-verify)"
+    else
+      case "$EXISTING_HOOKS_PATH" in
+        .sumela-hooks|*/.sumela-hooks)
+          # A SumelaOS dispatcher already owns hooks → just register this install.
+          sumela_setup_dispatch "$GIT_ROOT" "$INSTALL_ABS"   # refresh dispatcher scripts
+          sumela_register_install "$GIT_ROOT" "$INSTALL_REL"
+          HOOKS_WIRED=true
+          ok "Registered this install with the existing SumelaOS hook dispatcher (.sumela-hooks/)." ;;
+        *.sumela/git-hooks)
+          # Another SumelaOS install owns core.hooksPath → promote to a dispatcher that
+          # runs BOTH (this + the other) on every git event (multi-install monorepo).
+          OTHER_REL="${EXISTING_HOOKS_PATH%/.sumela/git-hooks}"
+          [ "$OTHER_REL" = "$EXISTING_HOOKS_PATH" ] && OTHER_REL=""   # other install at root
+          sumela_setup_dispatch "$GIT_ROOT" "$INSTALL_ABS"
+          sumela_register_install "$GIT_ROOT" "$OTHER_REL"
+          sumela_register_install "$GIT_ROOT" "$INSTALL_REL"
+          git config core.hooksPath ".sumela-hooks"
+          HOOKS_WIRED=true
+          ok "Multiple SumelaOS installs detected — installed a hook dispatcher at .sumela-hooks/ that runs all of them."
+          info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)." ;;
+        *)
+          warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' (non-SumelaOS) — not overriding."
+          warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$EXISTING_HOOKS_PATH', or unset it and re-run setup." ;;
+      esac
     fi
   else
     warn "Not a git repository — skipping git hook setup."
-    warn "After 'git init', run: git config core.hooksPath .sumela/git-hooks"
+    warn "After 'git init', run setup again (it wires core.hooksPath automatically)."
   fi
 fi
 
@@ -808,6 +856,20 @@ jobs:
 YAML
     ok "CI workflow added — GitHub Actions; delete it if you use other CI (GitLab/Azure: see ADOPTION_GUIDE)"
   fi
+fi
+
+# =============================================================================
+# 7f. SYNC ORG-SHARED RULES (monorepo — no-op unless .sumela-shared/rules/ exists)
+# =============================================================================
+if [ -f scripts/sync-shared-rules.py ] && command -v python3 >/dev/null 2>&1; then
+  shr_out="$(python3 scripts/sync-shared-rules.py --check 2>&1)"
+  case "$shr_out" in
+    *"no .sumela-shared/rules"*) : ;;   # not a shared-rules monorepo — silent
+    *)
+      info "Syncing org-shared rules from .sumela-shared/rules/ ..."
+      python3 scripts/sync-shared-rules.py | sed 's/^/  /'
+      ok "Org-shared rules synced + registered (universal)." ;;
+  esac
 fi
 
 # =============================================================================

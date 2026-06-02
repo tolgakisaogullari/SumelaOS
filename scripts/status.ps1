@@ -72,6 +72,23 @@ if ((Test-Path $reconcile) -and $havePy3) {
     Info "reconcile-registry.py / python3 unavailable — skipped"
 }
 
+# --- Shared rules (monorepo / org) ------------------------------------------
+Section "Shared rules"
+$shr = Join-Path $scriptsDir "sync-shared-rules.py"
+if ((Test-Path $shr) -and $havePy3) {
+    $shrOut = & python3 $shr --check 2>&1 | Out-String
+    if ($shrOut -match 'no \.sumela-shared/rules') {
+        Info "no org-shared rules configured (.sumela-shared/rules/ above this install)"
+    } elseif ($LASTEXITCODE -eq 0) {
+        Ok "in sync with .sumela-shared/rules/"
+    } else {
+        $shrOut -split "`n" | Select-String -Pattern 'out of date|not registered|ORPHAN' | ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+        Attn "org-shared rules drifted — fix: python3 scripts/sync-shared-rules.py"
+    }
+} else {
+    Info "sync-shared-rules.py / python3 unavailable — skipped"
+}
+
 # --- 4. IDE mirror drift ----------------------------------------------------
 Section "IDE mirrors"
 $conf = Join-Path $root ".sumela/mirrors.conf"

@@ -529,3 +529,31 @@ If either command fails with a connection error, check that the external service
 
 - **Cause:** Insufficient codebase analysis or skipped user confirmation.
 - **Fix:** All inferred content must be marked with `<!-- INFERRED FROM CODE, NEEDS CONFIRMATION -->`. The agent must ask the user to confirm before finalizing. Use `/evolve` to review and correct.
+
+---
+
+## 13. Monorepos & Multiple Installs
+
+SumelaOS can live at the repo root **or** in a subdirectory, and a single repo can host several installs. Setup handles each case automatically — you never edit `core.hooksPath` by hand.
+
+### Single install in a subdirectory
+
+Install SumelaOS in `packages/app/` (a `.sumela/` there) and run setup from that directory. Setup wires `core.hooksPath` to the **repo-root-relative** path (`packages/app/.sumela/git-hooks`), and the hooks **self-anchor** to their install dir — so pre-commit validation, mirror-drift, and the secret scan run against *that* subtree. (Earlier versions assumed SumelaOS sat at the git root and silently did nothing in a subdir.)
+
+### Multiple installs in one repo (`packages/app` + `packages/api`)
+
+`core.hooksPath` can hold only one path, so the second `setup` run **auto-promotes to a dispatcher**: it creates `.sumela-hooks/` at the repo root (three small hook scripts + an `installs` list) and points `core.hooksPath` there. On every git event the dispatcher runs the matching hook in **every** registered install; pre-commit fails if *any* install's checks fail, so none is silently skipped.
+
+- **Commit `.sumela-hooks/`** so teammates share the dispatcher. Each developer still runs `setup` once locally to set their own `core.hooksPath` (hooks are never shared by git).
+- Adding a third install later just appends it to `.sumela-hooks/installs`.
+
+### Org-shared rules (`.sumela-shared/rules/`)
+
+Rules every package must obey shouldn't be copy-pasted into each install. Put them **once** in `.sumela-shared/rules/*.md` at the repo (or monorepo) root. Setup and `update.sh` then run `sync-shared-rules.py`, which for each install:
+
+- copies each shared rule into `<install>/.sumela/rules/<name>.md` (with a managed-marker header — edit the **source** in `.sumela-shared/rules/`, then re-sync; never edit the copy);
+- registers it in that install's `RULE_REGISTRY.md` as a **universal** rule (`applies_phases="all"`), so the normal rule loader picks it up in every phase — no phase/stack judgement needed.
+
+`scripts/status.sh` reports shared-rule drift, and `bash scripts/sync-shared-rules.py` (or re-running `update.sh` / `setup.sh`) brings an install back in sync. A shared rule whose source is later removed is **reported, not auto-deleted** (retire it and its registry entry by hand). Project- and stack-specific rules still belong in each install and go through `/evolve`.
+
+Resolution is **nearest-ancestor**: each install uses the closest `.sumela-shared/rules/` above it. A nested `.sumela-shared/` (e.g. under `packages/`) **shadows** the monorepo-root one for the packages beneath it — there is no inheritance/merge across levels, so keep shared rules at a single level unless you intend that override.

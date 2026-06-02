@@ -21,6 +21,15 @@
 # "nothing", so every existing summary counts as added on first checkout).
 SUMELA_EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
+# The SumelaOS install may live in a monorepo SUBDIR, not at the git root. Resolve
+# the install root ONCE from this file's own location (it lives at
+# <install>/.sumela/git-hooks/_lib.sh), independent of cwd or the git root — so a
+# subpackage install syncs its OWN summaries, not paths under the repo root.
+if [ -z "${SUMELA_INSTALL_ROOT:-}" ]; then
+  _sumela_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+  SUMELA_INSTALL_ROOT="$(cd "$_sumela_lib_dir/../.." 2>/dev/null && pwd)"
+fi
+
 sumela_memory_sync() {
   # $1 = "from" ref, $2 = "to" ref. Ingests summaries changed in from..to.
   local from="$1" to="$2"
@@ -31,13 +40,26 @@ sumela_memory_sync() {
   repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
   [ -n "$repo" ] || return 0
 
+  # Install dir (absolute) and its path within the repo (empty when at the root).
+  # Derive install_rel via git, NOT a prefix-strip of pwd vs the resolved root — those
+  # differ under a symlinked root (e.g. /tmp -> /private/tmp, /var -> /private/var) and
+  # would silently degrade the diff pathspec to root-relative, skipping a subdir's summaries.
+  local install="${SUMELA_INSTALL_ROOT:-$repo}"
+  local install_rel
+  install_rel="$(git -C "$install" rev-parse --show-prefix 2>/dev/null)"
+  install_rel="${install_rel%/}"
+
   # Qdrant plugin not installed in this project -> nothing to sync.
-  local ingest="$repo/.sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py"
+  local ingest="$install/.sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py"
   [ -f "$ingest" ] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
 
   local summaries_dir="${SUMELA_SUMMARIES_DIR:-${WIKI_PATH:-docs/second-brain/wiki}/session-summaries}"
-  [ -d "$repo/$summaries_dir" ] || return 0
+  [ -d "$install/$summaries_dir" ] || return 0
+
+  # The diff runs at the git root, so the pathspec must be root-relative: prefix the
+  # install's in-repo path when SumelaOS lives in a subdir.
+  local pathspec="${install_rel:+$install_rel/}$summaries_dir"
 
   # Which summaries were Added/Modified in this range? (Deletes are ignored —
   # removing a summary file does not retract a past decision from memory.)
@@ -46,7 +68,7 @@ sumela_memory_sync() {
   # file-existence guard below would silently skip them. (Newline-in-filename
   # is still unsupported — unrealistic for committed summary slugs.)
   local changed
-  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "$summaries_dir" 2>/dev/null)" || return 0
+  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "$pathspec" 2>/dev/null)" || return 0
   [ -n "$changed" ] || return 0
 
   # Prereq gate: Qdrant must be reachable. If not, skip silently — the summaries
@@ -60,7 +82,7 @@ sumela_memory_sync() {
 
   local count
   count="$(printf '%s\n' "$changed" | grep -c .)"
-  local log="$repo/.sumela/.memory-sync.log"
+  local log="$install/.sumela/.memory-sync.log"
   # Keep the per-developer log bounded (truncate past ~512 KB).
   [ -f "$log" ] && [ "$(wc -c <"$log" 2>/dev/null || echo 0)" -gt 524288 ] && : >"$log"
   echo "sumela: syncing ${count} changed session summary file(s) to local Qdrant in background (log: .sumela/.memory-sync.log)"
