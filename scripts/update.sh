@@ -11,10 +11,13 @@
 #   docs/second-brain/template/ (incl. template/wiki/_SCHEMA.md),
 #   .sumela/memory-plugins/<plugin>/ (only plugins already installed),
 #   scripts/*, .sumela/VERSION
+#   Plus a DERIVED pair: the live docs/second-brain/wiki/_SCHEMA.md is refreshed from
+#   the updated template (diff + consent) so you don't have to copy it by hand.
 #
 # OVERLAY (never touched): AGENTS.md, .sumela/RULE_REGISTRY.md,
 #   .sumela/SKILL_REGISTRY.md, stack rules (backend/frontend/mobile_standards,
-#   operational_excellence_maintenance), docs/second-brain/wiki/* (except _SCHEMA.md),
+#   operational_excellence_maintenance), docs/second-brain/wiki/* (except the
+#   derived _SCHEMA.md above),
 #   .sumela/local.md, .gitignore, .gitattributes, IDE pointers, CODEOWNERS, CI workflow.
 #
 # Usage:
@@ -151,15 +154,27 @@ for f in ${candidates[@]+"${candidates[@]}"}; do
   fi
 done
 
+# Derived file: the LIVE docs/second-brain/wiki/_SCHEMA.md is generated from the
+# template (template/wiki/_SCHEMA.md) at setup. It's framework-authored schema living
+# in the overlay zone, so refresh it here too (with consent) rather than leaving the
+# user to copy it by hand. Only when the project actually has a live copy.
+SCHEMA_LIVE="docs/second-brain/wiki/_SCHEMA.md"
+SCHEMA_SRC="docs/second-brain/template/wiki/_SCHEMA.md"
+schema_changed=false
+if [ -f "$ROOT/$SCHEMA_LIVE" ] && [ -f "$SRC/$SCHEMA_SRC" ] && ! cmp -s "$SRC/$SCHEMA_SRC" "$ROOT/$SCHEMA_LIVE"; then
+  schema_changed=true
+fi
+
 n_new=${#new_list[@]}; n_changed=${#changed_list[@]}; n_def=${#deferred_list[@]}
 echo ""
 echo "${BOLD}=== SumelaOS core update: ${LOCAL_VER} → ${SRC_VER} ===${RESET}"
 echo "  New core files:      $n_new"
 echo "  Changed core files:  $n_changed"
+[ "$schema_changed" = true ] && echo "  Derived (live _SCHEMA): 1 (from refreshed template)"
 [ "$n_def" -gt 0 ] && echo "  Updater self-changed: $n_def (re-run after this to pick up; not auto-applied)"
 echo "  Overlay (AGENTS.md, RULE/SKILL_REGISTRY, stack rules, wiki, governance/CI): left untouched"
 
-if [ "$n_new" -eq 0 ] && [ "$n_changed" -eq 0 ]; then
+if [ "$n_new" -eq 0 ] && [ "$n_changed" -eq 0 ] && [ "$schema_changed" != true ]; then
   ok "No core file changes to apply."
   [ "$n_def" -gt 0 ] && warn "Only the updater itself changed upstream — re-copy scripts/update.* manually."
   # Still advance the version stamp so the gate is satisfied next time.
@@ -171,6 +186,7 @@ if [ "$DRY_RUN" = true ]; then
   echo ""; info "--dry-run: the following would change (nothing written):"
   for f in ${new_list[@]+"${new_list[@]}"};     do echo "  + $f (new)"; done
   for f in ${changed_list[@]+"${changed_list[@]}"}; do echo "  ~ $f (changed)"; done
+  [ "$schema_changed" = true ] && echo "  ~ $SCHEMA_LIVE (changed; derived from template)"
   exit 0
 fi
 
@@ -201,6 +217,22 @@ if [ "$n_changed" -gt 0 ]; then
   done
 fi
 
+# Derived live _SCHEMA.md (sourced from the refreshed template) — diff + consent.
+if [ "$schema_changed" = true ]; then
+  do_schema=true
+  if [ "$ASSUME_YES" != true ]; then
+    echo ""; echo "${BOLD}--- $SCHEMA_LIVE (derived from template) ---${RESET}"
+    diff -u "$ROOT/$SCHEMA_LIVE" "$SRC/$SCHEMA_SRC" | sed 's/^/  /' || true
+    echo "Update your live _SCHEMA from the refreshed template? [Y/n]:"; read -r yn
+    case "$yn" in n|N) do_schema=false ;; esac
+  fi
+  if [ "$do_schema" = true ]; then
+    mkdir -p "$ROOT/$(dirname "$SCHEMA_LIVE")"; cp "$SRC/$SCHEMA_SRC" "$ROOT/$SCHEMA_LIVE"; ok "updated $SCHEMA_LIVE (from template)"
+  else
+    echo "  skip   $SCHEMA_LIVE"; n_skipped=$((n_skipped+1))
+  fi
+fi
+
 # --- Finalize ----------------------------------------------------------------
 printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
 chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" 2>/dev/null || true
@@ -215,8 +247,6 @@ echo ""
 ok "Core updated to ${SRC_VER}."
 [ "$n_skipped" -gt 0 ] && warn "${n_skipped} changed core file(s) were SKIPPED and still differ from upstream ${SRC_VER}. Re-run with --force to revisit them."
 warn "Overlay was untouched. If this update ADDED or REMOVED skills/rules, reconcile the"
-warn "registries by hand (or re-run /initSumela's registry step): SKILL_REGISTRY.md / RULE_REGISTRY.md."
-warn "Wiki _SCHEMA: the template was refreshed; to update your live copy, diff/copy"
-warn "docs/second-brain/template/wiki/_SCHEMA.md → docs/second-brain/wiki/_SCHEMA.md."
+warn "registries (SKILL_REGISTRY.md / RULE_REGISTRY.md) — re-run /initSumela's registry step or use /evolve."
 [ "$n_def" -gt 0 ] && warn "The updater itself changed upstream — re-run 'bash scripts/update.sh' to pick up the new version."
 echo "Review changes with 'git diff' before committing."

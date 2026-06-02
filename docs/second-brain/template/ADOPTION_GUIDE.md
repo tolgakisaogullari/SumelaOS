@@ -386,9 +386,11 @@ bash scripts/update.ps1             # Windows
   your stack rules (`backend_standards.md`, …, `operational_excellence_maintenance.md`),
   `docs/second-brain/wiki/*`, `.sumela/local.md`, `.gitignore`/`.gitattributes`,
   IDE pointers, CODEOWNERS, CI workflow.
-- After an update that added/removed skills or rules, reconcile the registries by hand
-  (or re-run `/initSumela`'s registry step). If `_SCHEMA.md` changed, diff/copy
-  `docs/second-brain/template/wiki/_SCHEMA.md` → `docs/second-brain/wiki/_SCHEMA.md`.
+- `update.sh` also offers to refresh your **live** `docs/second-brain/wiki/_SCHEMA.md`
+  from the updated template (diff + consent) — no manual copy needed.
+- After an update that added/removed skills or rules, reconcile the registries
+  (`/initSumela`'s registry step or `/evolve`) so `SKILL_REGISTRY.md` / `RULE_REGISTRY.md`
+  match what's on disk.
 
 **IDE mirrors:** if some IDE entrypoints carry the prompt body verbatim, list them in
 `.sumela/mirrors.conf` (copy `.sumela/mirrors.conf.example`) and run

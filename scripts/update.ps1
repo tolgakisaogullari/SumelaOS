@@ -11,7 +11,8 @@
       git_workflow_mandatory_review_protocol, self_improvement_protocol),
       docs/second-brain/template/, .sumela/memory-plugins/<installed-plugin>/, scripts/*
     OVERLAY (never touched): AGENTS.md, RULE_REGISTRY.md, SKILL_REGISTRY.md, stack rules,
-      docs/second-brain/wiki/* (except via the _SCHEMA reminder), .sumela/local.md,
+      docs/second-brain/wiki/* (except the live _SCHEMA.md, refreshed as a derived pair
+      with diff + consent), .sumela/local.md,
       .gitignore, .gitattributes, IDE pointers, CODEOWNERS, CI workflow.
 
 .PARAMETER SourceDir   Use a local framework checkout instead of cloning.
@@ -124,14 +125,26 @@ try {
         else { $changedList.Add($f) }
     }
 
+    # Derived file: the LIVE wiki/_SCHEMA.md is generated from the template at setup
+    # (framework-authored schema in the overlay zone) — refresh it here too, with consent.
+    $schemaLive = "docs/second-brain/wiki/_SCHEMA.md"
+    $schemaSrc = "docs/second-brain/template/wiki/_SCHEMA.md"
+    $schemaChanged = $false
+    $schemaLivePath = Join-Path $root $schemaLive
+    $schemaSrcPath = Join-Path $src $schemaSrc
+    if ((Test-Path $schemaLivePath) -and (Test-Path $schemaSrcPath) -and (-not (Same-File $schemaSrcPath $schemaLivePath))) {
+        $schemaChanged = $true
+    }
+
     Write-Host ""
     Write-Host "=== SumelaOS core update: $localVer -> $srcVer ===" -ForegroundColor White
     Write-Host "  New core files:      $($newList.Count)"
     Write-Host "  Changed core files:  $($changedList.Count)"
+    if ($schemaChanged) { Write-Host "  Derived (live _SCHEMA): 1 (from refreshed template)" }
     if ($deferredList.Count -gt 0) { Write-Host "  Updater self-changed: $($deferredList.Count) (re-run after this; not auto-applied)" }
     Write-Host "  Overlay (AGENTS.md, registries, stack rules, wiki, governance/CI): left untouched"
 
-    if (($newList.Count -eq 0) -and ($changedList.Count -eq 0)) {
+    if (($newList.Count -eq 0) -and ($changedList.Count -eq 0) -and (-not $schemaChanged)) {
         Write-Ok "No core file changes to apply."
         if (-not $DryRun) { Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer }
         exit 0
@@ -140,6 +153,7 @@ try {
         Write-Host ""; Write-Info "--DryRun: the following would change (nothing written):"
         foreach ($f in $newList) { Write-Host "  + $f (new)" }
         foreach ($f in $changedList) { Write-Host "  ~ $f (changed)" }
+        if ($schemaChanged) { Write-Host "  ~ $schemaLive (changed; derived from template)" }
         exit 0
     }
 
@@ -174,6 +188,22 @@ try {
         }
     }
 
+    # Derived live _SCHEMA.md (sourced from the refreshed template) — diff + consent.
+    if ($schemaChanged) {
+        $doSchema = $true
+        if (-not $Yes) {
+            Write-Host ""; Write-Host "--- $schemaLive (derived from template) ---" -ForegroundColor White
+            & git --no-pager diff --no-index $schemaLivePath $schemaSrcPath 2>$null
+            $yn = Read-Host "Update your live _SCHEMA from the refreshed template? [Y/n]"
+            if ($yn -match '^[nN]') { $doSchema = $false }
+        }
+        if ($doSchema) {
+            New-Item -ItemType Directory -Path (Split-Path $schemaLivePath -Parent) -Force | Out-Null
+            Copy-Item -Path $schemaSrcPath -Destination $schemaLivePath -Force
+            Write-Ok "updated $schemaLive (from template)"
+        } else { Write-Host "  skip   $schemaLive"; $nSkipped++ }
+    }
+
     Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer
 
     Write-Host ""
@@ -186,9 +216,7 @@ try {
     Write-Ok "Core updated to $srcVer."
     if ($nSkipped -gt 0) { Write-Warn "$nSkipped changed core file(s) were SKIPPED and still differ from upstream $srcVer. Re-run with -Force to revisit them." }
     Write-Warn "Overlay was untouched. If this update ADDED or REMOVED skills/rules, reconcile the"
-    Write-Warn "registries by hand (or re-run /initSumela's registry step): SKILL_REGISTRY.md / RULE_REGISTRY.md."
-    Write-Warn "Wiki _SCHEMA: the template was refreshed; to update your live copy, diff/copy"
-    Write-Warn "docs/second-brain/template/wiki/_SCHEMA.md -> docs/second-brain/wiki/_SCHEMA.md."
+    Write-Warn "registries (SKILL_REGISTRY.md / RULE_REGISTRY.md) — re-run /initSumela's registry step or use /evolve."
     if ($deferredList.Count -gt 0) { Write-Warn "The updater itself changed upstream — re-run scripts/update.ps1 to pick up the new version." }
     Write-Host "Review changes with 'git diff' before committing."
 }
