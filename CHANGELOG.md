@@ -7,6 +7,8 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-02
+
 ### Added — less manual work, monorepo support
 
 - **Auto-reconcile `SKILL_REGISTRY.md`** — `scripts/reconcile-registry.py` registers
@@ -24,6 +26,25 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   every install's hooks. Org-shared rules live once in `.sumela-shared/rules/`;
   `scripts/sync-shared-rules.py` distributes + registers them (universal) into each
   install (run by setup / update; drift surfaced by `status.sh`).
+- **OpenCode IDE support** — `.opencode/AGENTS.md.template` pointer; wired into
+  `setup.sh` / `setup.ps1` (template list, IDE map, multiselect, `--ides`) and the
+  README Supported-IDEs table, completing the IDE matrix the README already advertised.
+
+### Fixed
+
+- **`status.sh` / `status.ps1` hook detection** now recognizes all three wiring forms
+  the monorepo work introduced (root, subdir `<rel>/.sumela/git-hooks`, and the
+  `.sumela-hooks` dispatcher — verifying this install is registered) instead of only
+  the root form; the fix it suggests is rerunning setup (correct for every topology).
+- **`setup.ps1` plugin registration is now idempotent** — guards on an existing
+  `<name>` before appending, matching `setup.sh`; re-running with a plugin selected no
+  longer duplicates its `<skill>` block in `SKILL_REGISTRY.md`.
+- **Bootstrap scripts hardened** — `bootstrap.sh` uses `set -euo pipefail`, surfaces
+  clone failures, fails loudly on the essential payload, and cleans up via `trap`;
+  `bootstrap.ps1` reaches parity (copies all IDE templates + `.gitkeep` dirs, real
+  error/next-step output) instead of being a minimal stub.
+- **`.sumela/VERSION` bumped to 0.4.0** so `update.sh`'s version gate and `status.sh`
+  reflect the post-0.3.0 core (it had stayed at 0.3.0 while features landed).
 
 ## [0.3.0] - 2026-06-01
 
