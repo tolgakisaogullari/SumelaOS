@@ -119,13 +119,31 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     git -C $root rev-parse --git-dir *> $null; if ($LASTEXITCODE -eq 0) { $isGit = $true }
 }
 if ($isGit) {
+    # Recognize ALL three wiring forms setup produces (root / subdir / dispatcher),
+    # not just the root one — else a monorepo install is mis-flagged as "not wired"
+    # and the old fix would break it. The one correct fixer is rerunning setup.
     $hp = (git -C $root config --get core.hooksPath 2>$null)
-    if ($hp -eq ".sumela/git-hooks") {
-        Ok "core.hooksPath = .sumela/git-hooks (validation + memory-sync active)"
-    } elseif (Test-Path (Join-Path $root ".sumela/git-hooks")) {
-        Attn "hooks not wired — fix: git config core.hooksPath .sumela/git-hooks  (or rerun setup)"
-    } else {
+    $gitRoot = (git -C $root rev-parse --show-toplevel 2>$null)
+    $instRel = (git -C $root rev-parse --show-prefix 2>$null)
+    if ($instRel) { $instRel = $instRel.TrimEnd('/') }
+    $expected = if ($instRel) { "$instRel/.sumela/git-hooks" } else { ".sumela/git-hooks" }
+    $regEntry = if ($instRel) { $instRel } else { "." }
+    $hpLeaf = if ($hp) { ($hp -split '/')[-1] } else { "" }
+    if (-not (Test-Path (Join-Path $root ".sumela/git-hooks"))) {
         Info "no .sumela/git-hooks present — skipped"
+    } elseif ($hp -eq $expected) {
+        Ok "core.hooksPath = $hp (validation + memory-sync active)"
+    } elseif ($hpLeaf -eq ".sumela-hooks") {
+        $installsFile = Join-Path $gitRoot ".sumela-hooks/installs"
+        if ((Test-Path $installsFile) -and ((Get-Content $installsFile) -contains $regEntry)) {
+            Ok "core.hooksPath = $hp (multi-install dispatcher; this install registered)"
+        } else {
+            Attn "dispatcher active but this install isn't registered — fix: rerun setup (pwsh scripts/setup.ps1)"
+        }
+    } elseif ($hp) {
+        Attn "core.hooksPath = '$hp' (not this install) — fix: rerun setup (pwsh scripts/setup.ps1)"
+    } else {
+        Attn "hooks not wired — fix: rerun setup (pwsh scripts/setup.ps1)"
     }
 } else {
     Info "not a git repository — hooks skipped"

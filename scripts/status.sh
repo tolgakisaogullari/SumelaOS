@@ -124,15 +124,37 @@ else
 fi
 
 # --- 6. Git hooks -----------------------------------------------------------
+# Recognize ALL three wiring forms setup produces (see scripts/setup.sh), not just
+# the root one — otherwise a monorepo subdir/dispatcher install is mis-flagged as
+# "not wired" and the suggested fix would actually break it:
+#   * root install   → core.hooksPath = .sumela/git-hooks
+#   * subdir install → core.hooksPath = <install-rel>/.sumela/git-hooks
+#   * multi-install  → core.hooksPath = .sumela-hooks (dispatcher fans out to every
+#                      install listed in <git-root>/.sumela-hooks/installs)
+# The single correct fixer for every drift case is rerunning setup.
 section "Git hooks"
-if [ -d "$ROOT/.git" ] || git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   hp="$(git -C "$ROOT" config --get core.hooksPath 2>/dev/null || true)"
-  if [ "$hp" = ".sumela/git-hooks" ]; then
-    ok "core.hooksPath = .sumela/git-hooks (validation + memory-sync active)"
-  elif [ -d "$ROOT/.sumela/git-hooks" ]; then
-    attention "hooks not wired — fix: git config core.hooksPath .sumela/git-hooks  (or rerun setup)"
-  else
+  git_root="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)"
+  # This install's path relative to the git root (via git → robust to symlinked roots).
+  inst_rel="$(git -C "$ROOT" rev-parse --show-prefix 2>/dev/null)"; inst_rel="${inst_rel%/}"
+  expected="${inst_rel:+$inst_rel/}.sumela/git-hooks"
+  reg_entry="${inst_rel:-.}"
+  if [ ! -d "$ROOT/.sumela/git-hooks" ]; then
     info "no .sumela/git-hooks present — skipped"
+  elif [ "$hp" = "$expected" ]; then
+    ok "core.hooksPath = $hp (validation + memory-sync active)"
+  elif [ "${hp##*/}" = ".sumela-hooks" ]; then
+    # A dispatcher owns hooks — healthy only if THIS install is registered with it.
+    if grep -qxF "$reg_entry" "$git_root/.sumela-hooks/installs" 2>/dev/null; then
+      ok "core.hooksPath = $hp (multi-install dispatcher; this install registered)"
+    else
+      attention "dispatcher active but this install isn't registered — fix: rerun setup (bash scripts/setup.sh)"
+    fi
+  elif [ -n "$hp" ]; then
+    attention "core.hooksPath = '$hp' (not this install) — fix: rerun setup (bash scripts/setup.sh)"
+  else
+    attention "hooks not wired — fix: rerun setup (bash scripts/setup.sh)"
   fi
 else
   info "not a git repository — hooks skipped"
