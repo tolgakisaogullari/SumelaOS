@@ -140,7 +140,7 @@ INTERACTIVE PAUSES — when a skill explicitly asks the user (TDD opt-in, archit
 </skill_resolution>
 
 <signal_capture>
-After every user turn, silently scan for the 5 signal types defined in `self-improvement-curator/SKILL.md`: `correction`, `confirmation`, `decision`, `friction`, `challenge`.
+After every user turn — and after you independently resolve a bug or problem — silently scan for the 7 signal types defined in `self-improvement-curator/SKILL.md`: `correction`, `confirmation`, `decision`, `friction`, `challenge`, `resolution`, `preference`. `resolution` is agent-originated (a bug/problem you fixed yourself): capture the GENERALIZED lesson — the class of problem and its guard — never the one-off instance. `preference` is a proactive standing user instruction (no triggering mistake), distinct from a reactive `correction`.
 
 Capture rules (full schema in `_SCHEMA.md` Section 15):
 - `high` or `medium` confidence → MUST create a new `pending` entry file `docs/second-brain/wiki/_improvement-queue/IMP-YYYYMMDD-<short>.md` (no shared counter — see `self-improvement-curator` capture procedure).

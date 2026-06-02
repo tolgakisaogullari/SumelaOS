@@ -13,7 +13,7 @@ Order: user explicit instructions → `.sumela/sumela-prompt.md` → loaded skil
 
 ## STEP 2 — Signal capture from previous turn (silent)
 
-Apply `.sumela/sumela-prompt.md` `<signal_capture>` exactly. High/medium-confidence `correction`, `confirmation`, `decision`, `friction`, or `challenge` signals load `self-improvement-curator` and create pending queue entries. Mutations still flow only through `/evolve`.
+Apply `.sumela/sumela-prompt.md` `<signal_capture>` exactly. High/medium-confidence `correction`, `confirmation`, `decision`, `friction`, `challenge`, `resolution`, or `preference` signals load `self-improvement-curator` and create pending queue entries. (`resolution` = a bug/problem the agent fixed on its own — capture the generalized lesson, not the instance; `preference` = a proactive standing user instruction.) Mutations still flow only through `/evolve`.
 
 ## STEP 3 — Information gap check (silent, BUT enforced via canonical contract)
 

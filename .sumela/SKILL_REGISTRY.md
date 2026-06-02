@@ -163,7 +163,7 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="lazy">
 <name>self-improvement-curator</name>
-<description>Use after every user turn to capture correction, confirmation, decision, friction, or challenge signals; or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'review suggestions', 'pending önerileri incele', or asks to review captured learnings.</description>
+<description>Use after every user turn to capture correction, confirmation, decision, friction, challenge, resolution, or preference signals (resolution = bugs the agent fixes itself; preference = standing user instructions); or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'pending önerileri incele', or asks to review captured learnings.</description>
 <path>.sumela/skills/self-improvement-curator/SKILL.md</path>
 </skill>
 

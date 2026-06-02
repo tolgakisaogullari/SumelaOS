@@ -41,7 +41,7 @@ Frontmatter holds the scannable metadata; the body holds the human-readable pros
 ---
 id: IMP-20260414-a3f8
 detected: 2026-04-14
-signal_type: correction          # correction | confirmation | decision | friction | challenge
+signal_type: correction          # correction | confirmation | decision | friction | challenge | resolution | preference
 scope: rule                      # rule | skill | wiki | schema | active-context
 target: .sumela/rules/backend_standards.md
 provider_context: claude-opus-4-8

@@ -1,6 +1,6 @@
 ---
 name: self-improvement-curator
-description: "Use after every user turn to capture correction, confirmation, decision, friction, or challenge signals; or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'pending önerileri incele', or asks to review captured learnings."
+description: "Use after every user turn to capture correction, confirmation, decision, friction, challenge, resolution, or preference signals (resolution = bugs the agent fixes itself; preference = standing user instructions); or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'pending önerileri incele', or asks to review captured learnings."
 ---
 
 <purpose>
@@ -34,7 +34,7 @@ The full set of `_improvement-queue/IMP-*.md` entries is scanned ONLY when `/evo
 </session_start_protocol>
 
 <signal_capture_workflow>
-During every user turn, scan for these five signal types. Capture is silent — you do NOT announce that you're capturing unless asked.
+During every user turn — and after you independently resolve a bug or problem — scan for these seven signal types. Capture is silent — you do NOT announce that you're capturing unless asked.
 
 **Signal types** (full definitions in `_SCHEMA.md` Section 15.4):
 
@@ -53,6 +53,24 @@ During every user turn, scan for these five signal types. Capture is silent — 
 4. **`friction`** — The same mistake or question repeats within or across sessions. Capture: the pattern, the friction it caused.
 
 5. **`challenge`** — You observe concrete evidence (code, logs, behavior) that contradicts an existing `applied` entry. Capture: which IMP-ID is challenged, what the contradicting evidence is.
+
+6. **`resolution`** — You autonomously diagnosed and fixed a bug, or worked a non-trivial problem through to a working solution, **without the user pointing it out**. The agent flags its OWN learning here; capture stays silent. This is the only signal type that originates from the agent's own problem-solving rather than a user turn.
+
+   **Generalize the lesson — capture the CLASS of problem, never the one-off instance.** The `proposed_change` must read as a guard that prevents a DIFFERENT future occurrence of the same class, not a note about this specific symptom:
+   - ✗ instance (useless): *"OrderService DI konteynerine register edilmemişti, ekledim."*
+   - ✓ class (reusable): *"Yeni bir servis oluşturulduğunda DI konteynerine register edilmeli — aksi halde runtime'da resolve hatası alınır."*
+
+   Generalization test: *"Bu cümle, aynı sınıftan FARKLI bir vakayı (başka bir servis, başka bir modül) gelecekte önler mi?"* If no, it is too specific — generalize it or skip it. Strip instance-specific identifiers (the concrete service/file/value) from `proposed_change`; keep them only in `evidence` as the triggering example.
+
+   - **Confidence:** `medium` by default (concrete evidence — the error + the fix diff — but the user didn't weigh in, so it MUST be captured); escalate to `high` if the same class already cost time in a prior session (it is then also `friction`) or the root cause was non-obvious.
+   - **Scope:** usually `rule` (a standard the agent should follow going forward — append to the most relevant `.sumela/rules/<category>.md`). Use `wiki` only when the lesson is a project-specific architectural fact, not a general practice.
+
+7. **`preference`** — The user volunteers a durable, forward-looking standing instruction about how you should work, **without reacting to a specific mistake**: *"bundan sonra hep strict mode kullan"*, *"yorumları minimal tut"*, *"PR açıklamalarını şu formatta yaz"*, *"deploy deyince staging anla"*. Capture the standing rule and the scope it applies to.
+
+   **Distinct from `correction`:** `correction` is REACTIVE — the user rejects a specific output, so an error occurred. `preference` is PROACTIVE — a standing rule offered with no triggering mistake. Test: *if the user is fixing something you just did → `correction`; if they are setting a rule for FUTURE work independent of any specific output → `preference`.* (Negative-reactive phrasings like "bir daha böyle yapma" / "şunu kullanma" stay `correction`.)
+
+   - **Confidence:** an explicit standing instruction → `high` (MUST capture); a preference merely inferred from one ambiguous remark → `medium`.
+   - **Scope:** usually `rule` (a behavioral standard — append to the relevant `.sumela/rules/<category>.md`); use `active-context` if it is sprint-scoped rather than durable. If unsure, pick the closest scope and let `/evolve` reclassify.
 
 **Confidence assignment (CRITICAL — anti-silence rule):**
 
@@ -209,6 +227,7 @@ Hook signal capture into specific skill workflows:
 |---|---|
 | `brainstorming` / `idea-explore` (ULTRATHINK depth) | Architectural decisions confirmed by the user → `decision` signal at `high` confidence. |
 | `systematic-debugging` | A bug pattern repeated 2+ times across sessions → `friction` signal. |
+| `systematic-debugging` (root cause fixed) | A bug diagnosed and fixed to a working state → `resolution` signal capturing the GENERALIZED root-cause guard (the class, not the instance). |
 | `requesting-code-review` / `receiving-code-review` | A reviewer (subagent or user) rejects an approach → `correction` signal. |
 | `finishing-a-development-branch` | Before final commit, remind the user once: *"Branch kapanışı önce /evolve açmak ister misin?"* Optional, never blocking. |
 </superpowers_integration>

@@ -543,7 +543,7 @@ başlıkları altında) yaşar; aşağıdaki alanlar frontmatter'dadır:
 |---|---|---|
 | `id` | `IMP-YYYYMMDD-<short>` | Dosya adının kök adı. Sayaç yok, asla yeniden kullanma. |
 | `detected` | `YYYY-MM-DD` | Sinyalin yakalandığı tarih |
-| `signal_type` | enum | `correction` \| `confirmation` \| `decision` \| `friction` \| `challenge` |
+| `signal_type` | enum | `correction` \| `confirmation` \| `decision` \| `friction` \| `challenge` \| `resolution` \| `preference` |
 | `scope` | enum | `rule` \| `skill` \| `wiki` \| `schema` \| `active-context` |
 | `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.sumela/rules/<topic>.md` (portable, IDE-agnostic). |
 | `provider_context` | string | Sinyali yakalayan model (`claude-opus-4-8`, `claude-sonnet-4-6`, vs.) |
@@ -567,6 +567,8 @@ başlıkları altında) yaşar; aşağıdaki alanlar frontmatter'dadır:
 | `decision` | Brainstorming/ULTRATHINK sırasında mimari karar alındığında |
 | `friction` | Aynı hata/soru 2+ kez tekrar ettiğinde (pattern tespiti) |
 | `challenge` | Mevcut `applied` entry ile çelişen yeni kanıt bulunduğunda |
+| `resolution` | Agent bir bug'ı/sorunu **kendisi** teşhis edip çözdüğünde — instance değil, GENELLEŞTİRİLMİŞ ders yakalanır (ör. "X servisi register edilmemişti" değil, "yeni servisler DI'a register edilmeli") |
+| `preference` | Kullanıcı bir hataya tepki olmadan, ileriye dönük kalıcı bir çalışma kuralı verdiğinde ("bundan sonra hep X yap", "yorumları minimal tut") — reaktif `correction`'dan farklı: proaktif duruş |
 
 ### 15.5 Confidence Thresholds (Sessiz Kalmayı Önlemek İçin)
 
