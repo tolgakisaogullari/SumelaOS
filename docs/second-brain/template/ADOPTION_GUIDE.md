@@ -213,6 +213,7 @@ Fastest path — re-run setup; it wires everything idempotently and won't overwr
 
 ```bash
 bash scripts/setup.sh        # or: powershell scripts/setup.ps1
+bash scripts/status.sh       # confirm everything wired up (read-only health check)
 ```
 
 Or do the equivalent by hand:
@@ -266,6 +267,16 @@ bash scripts/update.sh              # apply (diff + consent per changed core fil
 ```
 
 It refreshes the framework **core** and never touches your **overlay** (AGENTS.md, stack rules, wiki, registries, governance/CI choices, `.sumela/local.md`). See [Upgrading SumelaOS](#upgrading-sumelaos-core-vs-overlay).
+
+### C.6. Check Health Anytime
+
+One read-only command tells you whether your install is healthy and what (if anything) needs attention. It changes nothing — every flagged item lists the single command that fixes it (`update.sh`, `setup`, or `/evolve`):
+
+```bash
+bash scripts/status.sh        # or: pwsh scripts/status.ps1
+```
+
+It reports framework version + governance mode, structure validity, skill-registry drift, IDE-mirror drift, pending `_improvement-queue/` signals, whether git hooks are wired, and which memory plugins are installed. Exit `0` = healthy, `1` = at least one item needs attention. Good first thing to run after cloning, after a pull, or whenever something feels off.
 
 ---
 

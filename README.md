@@ -181,7 +181,9 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 │   ├── setup.sh / setup.ps1        # Interactive setup
 │   ├── bootstrap.sh / bootstrap.ps1 # One-command install
 │   ├── validate-structure.sh       # Structure validation (CI + pre-commit run this)
+│   ├── status.sh / status.ps1      # Read-only health report (version, drift, queue, hooks)
 │   ├── update.sh / update.ps1      # Refresh framework core (keeps your overlay)
+│   ├── reconcile-registry.py       # Auto-register on-disk skills into SKILL_REGISTRY.md
 │   ├── sync-mirrors.sh / .ps1      # Keep verbatim IDE mirrors in sync
 │   └── auto-update-memory.py       # Memory-stack maintenance orchestrator
 ├── .github/workflows/
