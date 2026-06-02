@@ -120,7 +120,15 @@ else
   info "not a git repository — hooks skipped"
 fi
 
-# --- 7. Memory plugins ------------------------------------------------------
+# --- 7. Secret scanning -----------------------------------------------------
+section "Secret scanning"
+if command -v gitleaks >/dev/null 2>&1; then
+  ok "gitleaks installed — pre-commit scans staged changes for secrets"
+else
+  info "no secret scanner — install gitleaks to auto-scan commits (see .sumela/rules/security_protocol.md)"
+fi
+
+# --- 8. Memory plugins ------------------------------------------------------
 section "Memory plugins"
 if [ -d "$ROOT/.sumela/memory-plugins" ]; then
   found=""

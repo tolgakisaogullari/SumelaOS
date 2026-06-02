@@ -114,7 +114,15 @@ if ($isGit) {
     Info "not a git repository — hooks skipped"
 }
 
-# --- 7. Memory plugins ------------------------------------------------------
+# --- 7. Secret scanning -----------------------------------------------------
+Section "Secret scanning"
+if (Get-Command gitleaks -ErrorAction SilentlyContinue) {
+    Ok "gitleaks installed — pre-commit scans staged changes for secrets"
+} else {
+    Info "no secret scanner — install gitleaks to auto-scan commits (see .sumela/rules/security_protocol.md)"
+}
+
+# --- 8. Memory plugins ------------------------------------------------------
 Section "Memory plugins"
 $plugDir = Join-Path $root ".sumela/memory-plugins"
 if (Test-Path $plugDir) {

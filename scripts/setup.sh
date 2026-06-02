@@ -628,6 +628,30 @@ else
   ok ".gitignore SumelaOS block added"
 fi
 
+# Secret-file baseline — never commit credentials. Idempotent via its own marker
+# (not a single content line) so all patterns land even when the project already
+# ignored `.env`. The pre-commit hook adds a gitleaks scan on top if it's installed.
+SECRET_MARKER="# SumelaOS — common secret files"
+if [ -f .gitignore ] && grep -qF "$SECRET_MARKER" .gitignore; then
+  ok ".gitignore already covers secret files"
+else
+  {
+    [ -s .gitignore ] && echo ""
+    echo "$SECRET_MARKER (never commit; see .sumela/rules/security_protocol.md)"
+    echo ".env"
+    echo ".env.*"
+    echo "!.env.example"
+    echo "!.env.*.example"
+    echo "*.pem"
+    echo "*.key"
+    echo "*.p12"
+    echo "*.pfx"
+    echo "*.secret"
+    echo "secrets.json"
+  } >> .gitignore
+  ok ".gitignore secret-file baseline added"
+fi
+
 # =============================================================================
 # 7. REGISTER MEMORY PLUGINS
 # =============================================================================

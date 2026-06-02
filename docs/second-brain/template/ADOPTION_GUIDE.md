@@ -356,7 +356,7 @@ If any expected file is missing, the agent flags the gap and offers to create it
 The structure contract is enforced automatically, not just by convention:
 
 - **CI (opt-in):** `setup.sh --ci` / `setup.ps1 -Ci` (or answering `y` at the setup prompt) adds `.github/workflows/sumela-validate.yml`, which runs `bash scripts/validate-structure.sh --check-placeholders` (+ shell syntax) on every push/PR. It is **not** created by default — enable it only if you want GitHub Actions enforcement (the pre-commit hook below works regardless).
-- **Pre-commit:** when `core.hooksPath` is wired (setup does this), `.sumela/git-hooks/pre-commit` runs the same validation locally before a commit that touches the agent-control surface — plus an **IDE-mirror drift check** (`sync-mirrors.sh --check`, a no-op unless you maintain mirrors). Bypass an individual commit with `git commit --no-verify`.
+- **Pre-commit:** when `core.hooksPath` is wired (setup does this), `.sumela/git-hooks/pre-commit` runs the same validation locally before a commit that touches the agent-control surface — plus an **IDE-mirror drift check** (`sync-mirrors.sh --check`, a no-op unless you maintain mirrors) and, **if [gitleaks](https://github.com/gitleaks/gitleaks) is installed, an automatic secret scan** of your staged changes that blocks on a finding (no scanner installed → silent; `status.sh` recommends one). Bypass an individual commit with `git commit --no-verify`; see `.sumela/rules/security_protocol.md` for secret governance. Disable just the secret scan with `SUMELA_DISABLE_SECRET_SCAN=1`.
 
 **Not on GitHub Actions?** The check is just one script — wire it into your CI:
 

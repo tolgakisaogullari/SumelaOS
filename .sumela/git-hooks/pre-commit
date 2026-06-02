@@ -16,6 +16,33 @@ cd "$repo" || exit 0
 staged="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)"
 rc=0
 
+# Secret scan — opt-in BY PRESENCE (we recommend a scanner, never reinvent one or
+# force a dependency). If gitleaks is installed, scan the staged changes and BLOCK
+# on a finding; if it isn't, do nothing (no per-commit nag — `status.sh` surfaces
+# the one-time recommendation instead). Disable with SUMELA_DISABLE_SECRET_SCAN=1.
+if [ -z "${SUMELA_DISABLE_SECRET_SCAN:-}" ] && command -v gitleaks >/dev/null 2>&1; then
+  # gitleaks deprecated `protect` in v8.19 in favour of `git`; `protect` still works
+  # across 8.x, so try it first and fall back to the modern form if this build has
+  # dropped it. Both scan the STAGED index — the correct pre-commit scope.
+  gl_out="$(gitleaks protect --staged --no-banner 2>&1)"; gl_rc=$?
+  case "$gl_out" in *"unknown command"*|*"unknown flag"*)
+    gl_out="$(gitleaks git --staged --no-banner 2>&1)"; gl_rc=$? ;;
+  esac
+  if [ "$gl_rc" -ne 0 ]; then
+    case "$gl_out" in
+      *"unknown command"*|*"unknown flag"*|*"unknown shorthand"*|*"Usage:"*|*"Error:"*)
+        # A tool/version/config failure is NOT a secret — warn, never block (stay light).
+        echo "sumela: secret scan skipped — gitleaks present but its command failed (version mismatch?):" >&2
+        printf '%s\n' "$gl_out" | tr '\n' ' ' | cut -c1-200 | sed 's/^/        /' >&2 ;;
+      *)
+        echo "sumela: gitleaks flagged a potential secret in your staged changes." >&2
+        echo "        Review:  gitleaks git --staged --verbose   (older gitleaks: gitleaks protect --staged --verbose)" >&2
+        echo "        Remove the secret, or bypass this one commit with 'git commit --no-verify'." >&2
+        rc=1 ;;
+    esac
+  fi
+fi
+
 # IDE mirror drift — checked ALWAYS (cheap; a no-op unless .sumela/mirrors.conf lists
 # mirrors). Run unconditionally because mirror files (e.g. .claude/agents/*) don't
 # match the agent-surface scope below, so scoping would miss a mirror-only commit.

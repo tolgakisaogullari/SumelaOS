@@ -13,6 +13,12 @@
     * Use strong **Guard Clauses** to enforce business invariants at the service layer.
 * **Security vs. Convenience:** If a requested feature introduces a security gap (e.g., exposing sensitive user IDs or bypassing Rate Limits), you **MUST** proactively secure it or warn the user immediately with a technical risk assessment.
 
+## 🔑 SECRET GOVERNANCE (CREDENTIALS NEVER ENTER GIT)
+* **Prevention first:** secrets (API keys, tokens, passwords, private keys, connection strings) belong in environment variables or a secrets manager — never in committed source. The setup script seeds `.gitignore` with the common offenders (`.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.secret`, `secrets.json`); keep a committed `.env.example` (no real values) as the documented template.
+* **Automated scanning — use an existing scanner, do not hand-roll one.** The recommended tool is **[gitleaks](https://github.com/gitleaks/gitleaks)**. If it is installed, SumelaOS's pre-commit hook automatically scans your staged changes on every commit (`gitleaks git --staged`, or the legacy `gitleaks protect --staged` on older builds) and **blocks** when a secret is detected (bypass a single commit with `git commit --no-verify`; disable with `SUMELA_DISABLE_SECRET_SCAN=1`). A tool/version error is reported but never blocks; with no scanner installed the hook stays silent and `scripts/status.sh` surfaces the recommendation. Equivalent alternatives: [detect-secrets](https://github.com/Yelp/detect-secrets) (baseline-driven) or [trufflehog](https://github.com/trufflesecurity/trufflehog) (verified-secret scanning) — standardize on whichever your team prefers.
+* **CI defense-in-depth (team mode):** run the same scanner in CI on the PR diff so a local `--no-verify` bypass can't land a secret unnoticed (e.g. `gitleaks/gitleaks-action`).
+* **If a secret was already committed:** rotate it immediately (assume it is compromised the moment it reaches a remote), then purge it from history with `git filter-repo` or BFG — a later removal commit is **not** enough, the value still lives in the old commit.
+
 ## 🔐 AUTHENTICATION & DATA INTEGRITY
 * **JWT & Session Security:** Ensure strict validation of JWT claims. Use `[Authorize]` attributes precisely and implement Role-Based Access Control (RBAC) where necessary.
 * **Rate Limiting Enforcement:** Adhere to the `Rate Limiting` policies defined in project configuration. Ensure heavy queries (e.g., aggregated reports, leaderboards) are protected against DDoS-like patterns.
