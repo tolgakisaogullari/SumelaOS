@@ -14,13 +14,19 @@
 #                       never fail a git operation (the data stays in git)
 #   * path-scoped     — fires only when files under the summaries dir changed
 #
-# This file also provides sumela_graph_sync (below): a best-effort, non-blocking
-# refresh of the LOCAL graphify code graph after a pull, so dependency/impact
-# queries reflect the code that just arrived. It writes ONLY the gitignored graph
-# dir (never the tracked tree).
+# This file also provides three more best-effort, non-blocking pull-time refreshers
+# of LOCAL derived caches (so a teammate's pulled work becomes searchable/queryable
+# on your machine) — none of which touch the tracked tree:
+#   * sumela_graph_sync — graphify code graph (gitignored graph dir)
+#   * sumela_wiki_sync  — Qdrant `wiki_pages` collection (re-ingest changed wiki pages)
+#   * sumela_code_sync  — Qdrant `code_chunks` collection (OPT-IN; whole-tree re-embed
+#                         is heavy, and graph-sync already covers structural code)
 #
-# Opt out per developer: export SUMELA_DISABLE_MEMORY_SYNC=1 (summaries) and/or
-#                        export SUMELA_DISABLE_GRAPH_SYNC=1  (code graph)
+# Opt out / in per developer:
+#   export SUMELA_DISABLE_MEMORY_SYNC=1   # session summaries -> chat_history (default on)
+#   export SUMELA_DISABLE_GRAPH_SYNC=1    # graphify code graph              (default on)
+#   export SUMELA_DISABLE_WIKI_SYNC=1     # Qdrant wiki_pages                (default on)
+#   export SUMELA_PULL_CODE_REINGEST=1    # Qdrant code_chunks               (OPT-IN; off)
 # Override paths/endpoints: SUMELA_SUMMARIES_DIR, WIKI_PATH, QDRANT_HOST, QDRANT_PORT
 
 # Git's well-known empty-tree object (lets us diff a fresh clone's HEAD against
@@ -220,5 +226,93 @@ sumela_graph_sync() {
     echo "===== graph-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &
 
+  return 0
+}
+
+# Is the local Qdrant reachable? (cheap pre-check so we don't background an ingest
+# that would just fail). Returns 0 if readyz responds within 2s, else 1.
+_sumela_qdrant_up() {
+  local qhost="${QDRANT_HOST:-localhost}" qport="${QDRANT_PORT:-6333}"
+  command -v curl >/dev/null 2>&1 || return 1
+  curl -fsS --max-time 2 "http://${qhost}:${qport}/readyz" >/dev/null 2>&1
+}
+
+# Refresh the Qdrant `wiki_pages` collection after a pull, so semantic search over
+# curated wiki pages reflects teammates' just-pulled updates. The tracked markdown
+# is already current (git), but its LOCAL embedding is not — this re-ingests it.
+# Same contract: incremental (only when a curated page changed — session-summaries
+# and the underscore-special/derived files are excluded), non-blocking, best-effort,
+# and it writes ONLY to Qdrant (a local cache), never the tracked tree.
+sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
+  local from="$1" to="$2"
+  [ -n "${SUMELA_DISABLE_WIKI_SYNC:-}" ] && return 0
+
+  local repo; repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -n "$repo" ] || return 0
+  local install="${SUMELA_INSTALL_ROOT:-$repo}"
+  local ingest="$install/.sumela/memory-plugins/qdrant-session-memory/scripts/ingest-wiki-to-qdrant.py"
+  [ -f "$ingest" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  local install_rel; install_rel="$(git -C "$install" rev-parse --show-prefix 2>/dev/null)"; install_rel="${install_rel%/}"
+  local scope="${install_rel:+$install_rel/}"
+  local wikidir="${WIKI_PATH:-docs/second-brain/wiki}"
+
+  # Did a CURATED wiki page change? Drop session-summaries (-> chat_history, handled by
+  # memory-sync) and the underscore-special/derived files (_LOG/_INDEX/_SEARCH_INDEX/
+  # _SCHEMA) the ingest script itself excludes — so e.g. a union-merged _LOG.md alone
+  # never triggers a pointless re-ingest.
+  local changed
+  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
+    | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$' | head -1)"
+  [ -n "$changed" ] || return 0
+
+  _sumela_qdrant_up || { echo "sumela: wiki_pages sync skipped (Qdrant not reachable)"; return 0; }
+
+  local log="$install/.sumela/.memory-sync.log"
+  echo "sumela: curated wiki page(s) changed in this pull — re-ingesting into Qdrant wiki_pages in background (log: .sumela/.memory-sync.log)"
+  (
+    cd "$install" || exit 0
+    echo "===== wiki-sync @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="
+    python3 "$ingest" || echo "WARN: wiki ingest failed"
+    echo "===== wiki-sync: done ====="
+  ) >>"$log" 2>&1 </dev/null &
+  return 0
+}
+
+# Refresh the Qdrant `code_chunks` collection after a pull. OPT-IN only — the script
+# re-embeds the WHOLE source tree (Ollama), which is heavy to run on every pull, and
+# the structural code intelligence (graphify graph) is already refreshed by
+# sumela_graph_sync. Enable per developer with: export SUMELA_PULL_CODE_REINGEST=1
+sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
+  local from="$1" to="$2"
+  [ -n "${SUMELA_PULL_CODE_REINGEST:-}" ] || return 0   # OFF unless explicitly enabled
+
+  local repo; repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -n "$repo" ] || return 0
+  local install="${SUMELA_INSTALL_ROOT:-$repo}"
+  local ingest="$install/.sumela/memory-plugins/qdrant-session-memory/scripts/ingest-code-to-qdrant.py"
+  [ -f "$ingest" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  local install_rel; install_rel="$(git -C "$install" rev-parse --show-prefix 2>/dev/null)"; install_rel="${install_rel%/}"
+  local scope="${install_rel:+$install_rel/}"
+
+  # Same gate as graph-sync: only when actual CODE changed (exclude docs/ + .sumela/).
+  local changed
+  changed="$(git -C "$repo" diff --name-only "$from" "$to" -- \
+      "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null | head -1)"
+  [ -n "$changed" ] || return 0
+
+  _sumela_qdrant_up || { echo "sumela: code_chunks sync skipped (Qdrant not reachable)"; return 0; }
+
+  local log="$install/.sumela/.memory-sync.log"
+  echo "sumela: code changed in this pull — re-ingesting into Qdrant code_chunks in background (opt-in; log: .sumela/.memory-sync.log)"
+  (
+    cd "$install" || exit 0
+    echo "===== code-sync @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="
+    python3 "$ingest" || echo "WARN: code ingest failed"
+    echo "===== code-sync: done ====="
+  ) >>"$log" 2>&1 </dev/null &
   return 0
 }

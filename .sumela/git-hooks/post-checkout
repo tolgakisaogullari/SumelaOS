@@ -21,6 +21,8 @@ case "$prev" in
   *)      prev="$SUMELA_EMPTY_TREE" ;;
 esac
 
-sumela_memory_sync "$prev" "$new"
-sumela_graph_sync  "$prev" "$new"
+sumela_memory_sync "$prev" "$new"   # Qdrant chat_history (session summaries)
+sumela_wiki_sync   "$prev" "$new"   # Qdrant wiki_pages   (curated wiki)
+sumela_code_sync   "$prev" "$new"   # Qdrant code_chunks  (opt-in)
+sumela_graph_sync  "$prev" "$new"   # graphify code graph
 exit 0

@@ -45,6 +45,16 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   (a new graph-only mode that writes ONLY the gitignored graph dir — no wiki sync,
   no `_LOG.md` append, so a pull never dirties the tree). Self-gating, non-blocking,
   opt-out with `SUMELA_DISABLE_GRAPH_SYNC=1`.
+- **Pull-time Qdrant content refresh** — the pull hooks also re-ingest the Qdrant
+  semantic collections whose embeddings would otherwise lag the (git-current) tracked
+  files: `sumela_wiki_sync` re-ingests `wiki_pages` when a CURATED wiki page changed
+  (session-summaries and underscore-special files like `_LOG.md` are excluded, so a
+  union-merged log alone never triggers it) — default on, opt-out
+  `SUMELA_DISABLE_WIKI_SYNC=1`; `sumela_code_sync` re-ingests `code_chunks` when code
+  changed — OPT-IN (`SUMELA_PULL_CODE_REINGEST=1`) because the script re-embeds the
+  whole tree (heavy) and graph-sync already covers structural code. Both are
+  background, best-effort, gate on a reachable Qdrant, and write only the Qdrant
+  cache — never the tracked tree.
 - **Richer memory-sync log** — the pull-time summary ingest now reports WHO (git
   author) and WHICH tasks (filename + `session_topics`) each arriving summary
   belongs to, inline (up to 10) and in `.sumela/.graph-sync.log`/`.memory-sync.log`.
