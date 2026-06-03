@@ -24,9 +24,10 @@ AGENTS.md
 RULE_REGISTRY.md
 docs/second-brain/wiki/
 .claude/
-# Memory-sync / graph-sync hook local logs (per-developer)
+# Memory-sync / graph-sync hook local logs + state (per-developer)
 .sumela/.memory-sync.log
 .sumela/.graph-sync.log
+.sumela/.code-chunks-synced
 
 # Per-developer overrides (personal; .example stays tracked)
 .sumela/local.md

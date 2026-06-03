@@ -93,8 +93,9 @@ These triggers require an explicit user query:
 | `setup-qdrant.py` | Create Qdrant collections | Once during setup |
 | `session-ingest.py` | Ingest session summary | After each context-handoff |
 | `query-qdrant.py` | Semantic search over sessions | On-demand (proactive + reactive) |
-| `ingest-code-to-qdrant.py` | Ingest source code files | After significant code changes; on pull when code changed IF opt-in `SUMELA_PULL_CODE_REINGEST=1` (heavy — whole-tree re-embed) |
+| `ingest-code-to-qdrant.py` | Ingest source code files | After significant code changes; on pull when code is stale the hook PROMPTS (interactive) / notices (non-interactive) — force with `SUMELA_PULL_CODE_REINGEST=1`, tune `SUMELA_CODE_REINGEST_DAYS` (heavy — whole-tree re-embed) |
 | `ingest-wiki-to-qdrant.py` | Ingest wiki pages | After wiki updates; AUTO on pull when a curated page changed (post-merge/post-checkout `sumela_wiki_sync`) |
+| `delete-from-qdrant.py` | Remove a deleted file's points by payload key | Auto on pull for wiki pages / code files removed upstream (orphan pruning) |
 | `lib/memory_ingest.py` | Shared helpers (chunk, embed, ID) | Used by other scripts |
 
 ## Prerequisites

@@ -45,16 +45,23 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   (a new graph-only mode that writes ONLY the gitignored graph dir — no wiki sync,
   no `_LOG.md` append, so a pull never dirties the tree). Self-gating, non-blocking,
   opt-out with `SUMELA_DISABLE_GRAPH_SYNC=1`.
-- **Pull-time Qdrant content refresh** — the pull hooks also re-ingest the Qdrant
-  semantic collections whose embeddings would otherwise lag the (git-current) tracked
-  files: `sumela_wiki_sync` re-ingests `wiki_pages` when a CURATED wiki page changed
-  (session-summaries and underscore-special files like `_LOG.md` are excluded, so a
-  union-merged log alone never triggers it) — default on, opt-out
-  `SUMELA_DISABLE_WIKI_SYNC=1`; `sumela_code_sync` re-ingests `code_chunks` when code
-  changed — OPT-IN (`SUMELA_PULL_CODE_REINGEST=1`) because the script re-embeds the
-  whole tree (heavy) and graph-sync already covers structural code. Both are
-  background, best-effort, gate on a reachable Qdrant, and write only the Qdrant
-  cache — never the tracked tree.
+- **Pull-time Qdrant content refresh** — the pull hooks also keep the Qdrant semantic
+  collections (whose embeddings would otherwise lag the git-current tracked files) in
+  sync: `sumela_wiki_sync` re-ingests `wiki_pages` when a CURATED page changed
+  (session-summaries + underscore-special files like `_LOG.md` excluded, so a
+  union-merged log alone never triggers it; default on, opt-out
+  `SUMELA_DISABLE_WIKI_SYNC=1`). `sumela_code_sync` keeps `code_chunks` honest: it
+  PRUNES orphans for removed code files cheaply on every pull, but the heavy whole-tree
+  re-embed is no longer all-or-nothing — when code_chunks is STALE
+  (> `SUMELA_CODE_REINGEST_DAYS`, default 14) it PROMPTS for approval on an interactive
+  pull (default No, 30s timeout) or prints a non-blocking notice otherwise;
+  `SUMELA_PULL_CODE_REINGEST=1` forces it, `SUMELA_DISABLE_CODE_SYNC=1` turns it off.
+- **Qdrant orphan pruning** — new `delete-from-qdrant.py` (delete points by a payload
+  key). `wiki_sync`/`code_sync` call it for pages/files DELETED upstream, so a removed
+  wiki page or source file stops surfacing in semantic search. `chat_history` is
+  deliberately exempt — a removed session summary does not retract a past decision.
+  All syncs remain background, best-effort, Qdrant-reachability-gated, and write only
+  the Qdrant cache — never the tracked tree.
 - **Richer memory-sync log** — the pull-time summary ingest now reports WHO (git
   author) and WHICH tasks (filename + `session_topics`) each arriving summary
   belongs to, inline (up to 10) and in `.sumela/.graph-sync.log`/`.memory-sync.log`.
