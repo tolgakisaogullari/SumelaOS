@@ -901,7 +901,7 @@ echo ""
 info "Running structure validation..."
 echo ""
 
-if bash scripts/validate-structure.sh --check-placeholders; then
+if bash scripts/validate-structure.sh --check-placeholders --post-setup; then
   echo ""
   ok "Validation passed"
 else

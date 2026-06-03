@@ -827,7 +827,7 @@ try {
 }
 
 if ($bashAvailable) {
-    & bash scripts/validate-structure.sh --check-placeholders
+    & bash scripts/validate-structure.sh --check-placeholders --post-setup
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
         Write-Ok "Validation passed"
@@ -838,7 +838,7 @@ if ($bashAvailable) {
     }
 }
 else {
-    Write-Warn "bash not available — skipping validation. Run manually: bash scripts/validate-structure.sh --check-placeholders"
+    Write-Warn "bash not available — skipping validation. Run manually: bash scripts/validate-structure.sh --check-placeholders --post-setup"
 }
 
 # =============================================================================

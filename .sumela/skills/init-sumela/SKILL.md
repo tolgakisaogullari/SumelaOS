@@ -402,8 +402,14 @@ The CI workflow is optional (not every team uses GitHub Actions). ASK the user:
 ### Step 4.1: Run Validation
 
 ```bash
-bash scripts/validate-structure.sh
+bash scripts/validate-structure.sh --post-setup
 ```
+
+`--post-setup` adds the hygiene guard: it PROVES this run actually wired the git
+hooks (`core.hooksPath`), seeded the `.gitignore` per-developer/runtime + secret
+baselines, and added the `.gitattributes` union-merge rule — so a half-finished
+init cannot report success. If any of those FAIL, go back and complete the
+matching Step 3.6b / 3.7 action, then re-run.
 
 All checks must pass.
 

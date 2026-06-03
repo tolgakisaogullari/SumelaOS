@@ -6,19 +6,28 @@
 # rule templates, and memory plugin structures exist. Optionally checks for
 # unreplaced {{placeholders}} in generated files.
 #
-# Usage:   bash scripts/validate-structure.sh [--check-placeholders]
+# Usage:   bash scripts/validate-structure.sh [--check-placeholders] [--post-setup]
+#          --post-setup: extra hygiene guard run by setup.sh / setup.ps1 / /initSumela
+#                        right after a setup (verifies hooks + gitignore + gitattributes
+#                        landed). NOT used by framework CI / pre-commit.
 # Exit:    0 = all pass, 1 = any fail
 # -----------------------------------------------------------------------------
 
 set -euo pipefail
 
 CHECK_PLACEHOLDERS=false
+POST_SETUP=false
 FAILURES=0
 PASSES=0
 
-if [[ "${1:-}" == "--check-placeholders" ]]; then
-  CHECK_PLACEHOLDERS=true
-fi
+# Parse all flags (order-independent) so callers can combine them, e.g.
+# `validate-structure.sh --check-placeholders --post-setup`.
+for arg in "$@"; do
+  case "$arg" in
+    --check-placeholders) CHECK_PLACEHOLDERS=true ;;
+    --post-setup)         POST_SETUP=true ;;
+  esac
+done
 
 # --- Colors (fallback to plain if no tput / non-terminal) ---
 if command -v tput &>/dev/null && [ -t 1 ]; then
@@ -268,6 +277,51 @@ if [ -n "$MARKER_LINE" ] && command -v python3 &>/dev/null && [ -f scripts/recon
     pass "README skill count in sync (workflows=$real_wf, loadable=$real_load)"
   else
     fail "README skill count DRIFTED — marker says workflows=$doc_wf/loadable=$doc_load, on-disk is workflows=$real_wf/loadable=$real_load (fix README.md marker + prose)"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# 10. Post-setup hygiene guard (ONLY with --post-setup). Run by setup.sh /
+#     setup.ps1 / `/initSumela` right after a setup to PROVE the repo-hygiene and
+#     hook-wiring steps actually landed — so a half-finished setup cannot pass
+#     silently. Gated behind the flag because the framework SOURCE repo (and a
+#     plain CI checkout) legitimately lack the generated overlay; default runs
+#     (CI, pre-commit) never execute this and are unaffected.
+# -----------------------------------------------------------------------------
+if [ "$POST_SETUP" = true ]; then
+  # .gitignore baselines — setup writes both unconditionally, so absence = real gap.
+  if [ -f .gitignore ] && grep -qxF ".sumela/local.md" .gitignore; then
+    pass "post-setup: .gitignore per-developer/runtime baseline present"
+  else
+    fail "post-setup: .gitignore per-developer/runtime baseline missing (.sumela/local.md not ignored) — re-run setup"
+  fi
+  if [ -f .gitignore ] && grep -qF "# SumelaOS — common secret files" .gitignore; then
+    pass "post-setup: .gitignore secret baseline present"
+  else
+    fail "post-setup: .gitignore secret baseline missing — re-run setup"
+  fi
+  # .gitattributes union-merge for the append-only log.
+  if [ -f .gitattributes ] && grep -qF "docs/second-brain/wiki/_LOG.md merge=union" .gitattributes; then
+    pass "post-setup: .gitattributes union-merge present"
+  else
+    fail "post-setup: .gitattributes union-merge rule missing — re-run setup"
+  fi
+  # Git hooks wired. Only meaningful in a git repo; a non-SumelaOS hooksPath may be
+  # an intentional override (setup.sh does not clobber one), so that case WARNs.
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    HP="$(git config --get core.hooksPath 2>/dev/null || true)"
+    if [ -z "$HP" ]; then
+      fail "post-setup: git hooks not wired (core.hooksPath unset) — run: git config core.hooksPath .sumela/git-hooks"
+    elif printf '%s' "$HP" | grep -qE '\.sumela[/-]'; then
+      # Matches both the single install (.sumela/git-hooks) and the monorepo
+      # dispatcher (.sumela-hooks); a stray path that merely contains "sumela"
+      # (e.g. /home/sumela/.githooks) does NOT match.
+      pass "post-setup: git hooks wired (core.hooksPath = $HP)"
+    else
+      warn "post-setup: core.hooksPath = '$HP' (not a SumelaOS path) — OK if you intentionally use your own hooks, else wire .sumela/git-hooks"
+    fi
+  else
+    warn "post-setup: not a git repository — skipping hook-wiring check"
   fi
 fi
 

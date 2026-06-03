@@ -80,8 +80,8 @@ fi
 
 echo ""
 echo "Structure + registry validation"
-if ( cd "$WORK" && bash scripts/validate-structure.sh --check-placeholders ) >"$WORK/validate.log" 2>&1; then
-  ok "validate-structure.sh passed"
+if ( cd "$WORK" && bash scripts/validate-structure.sh --check-placeholders --post-setup ) >"$WORK/validate.log" 2>&1; then
+  ok "validate-structure.sh passed (incl. --post-setup: hooks + gitignore + gitattributes landed)"
 else
   bad "validate-structure.sh failed"; sed 's/^/    /' "$WORK/validate.log" | tail -20
 fi
