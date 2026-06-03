@@ -26,6 +26,10 @@ Like the monks who built Sumela on impossible ground, we build agent workflows o
 
 ## Quick Start
 
+**Prerequisites.** The core framework needs only **git** and any AI coding agent — nothing else. The optional memory layer adds: **Python 3.10+** (both plugins), **Docker + Ollama** (Qdrant session memory), and the **graphify** CLI (code graph). Setup installs the safe deps and *confirms* each invasive step, but it cannot install Docker/Ollama for you — have those present first if you want the Qdrant plugin. Decline the plugins and there are no extra prerequisites.
+
+> Setup is automatic in the sense that it leaves **no manual file-editing homework** — it does ask a few setup questions (3 languages, governance mode, which plugins/IDEs), each with a sensible default.
+
 ### New Projects (Template)
 
 ```bash
@@ -49,12 +53,12 @@ Prefer the bundled bootstrap — it clones the repo, copies .sumela/, scripts/, 
   • Windows:      git clone --depth 1 https://github.com/tolgakisaogullari/SumelaOS.git "$env:TEMP\SumelaOS"; pwsh "$env:TEMP\SumelaOS\scripts\bootstrap.ps1"; Remove-Item "$env:TEMP\SumelaOS" -Recurse -Force
 If you cannot run a script, do it manually: clone the repo to a temp dir, then copy into this project's root — .sumela/, scripts/, AGENTS.md.template, ALL IDE pointer templates (CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/, .opencode/), and docs/second-brain/template/ (as docs/second-brain/template/). Then delete the temp clone. Do NOT copy framework-meta files (.git/, .github/, tests/, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE).
 
-STEP 2 — Run /initSumela. In a single pass it:
+STEP 2 — Run /initSumela. In a fresh project your IDE may NOT yet register this as a slash command (it lives in .sumela/skills/, and AGENTS.md does not exist yet — /initSumela generates it), so if "/initSumela" does not resolve, just READ and FOLLOW .sumela/skills/init-sumela/SKILL.md directly. In a single pass it:
   • auto-detects the stack, architecture, and code conventions;
   • asks the three languages (interaction / code naming / documentation) and the governance mode (solo | team);
   • asks which optional memory plugins to install (Qdrant, Graphify) — if you opt in, it then runs scripts/setup-memory.sh to bring the runtime up: auto-installs the safe deps and CONFIRMS each invasive step (start Qdrant via Docker, pull the Ollama model, install the graphify CLI), so you do no manual setup; if you decline, it installs and runs nothing for them;
   • generates AGENTS.md, the rules, RULE_REGISTRY.md, the wiki, and the IDE pointers;
-  • wires the git hooks (core.hooksPath), seeds the .gitignore secret baseline and the .gitattributes union-merge;
+  • wires the git hooks (core.hooksPath), seeds the .gitignore per-developer/runtime + secret baselines and the .gitattributes union-merge;
   • (team mode) sets up CODEOWNERS, and optionally adds the CI validation workflow.
 
 Just run /initSumela and answer its prompts — do not re-ask what it already asks.
@@ -64,7 +68,7 @@ The agent will:
 1. Copy the framework into your project (bootstrap, or a complete manual copy)
 2. Auto-detect your tech stack, architecture, and code conventions
 3. Ask your languages, governance mode, and optional memory plugins (Qdrant, Graphify)
-4. Generate AGENTS.md, rules, registries, wiki, and IDE pointers — then wire git hooks, seed the secret/union-merge baselines, and (team mode) CODEOWNERS + optional CI
+4. Generate AGENTS.md, rules, registries, wiki, and IDE pointers — then wire git hooks, seed the per-developer/runtime + secret .gitignore baselines and the .gitattributes union-merge, and (team mode) CODEOWNERS + optional CI
 
 ### Alternative: One-Command Bootstrap
 
@@ -78,7 +82,7 @@ pwsh $env:TEMP\SumelaOS\scripts\bootstrap.ps1   # copies .sumela/, scripts/, all
 Remove-Item $env:TEMP\SumelaOS -Recurse -Force
 ```
 
-Then run `/initSumela` in your AI assistant.
+Then run `/initSumela` in your AI assistant (if it doesn't resolve as a slash command in a fresh project, tell the agent to read and follow `.sumela/skills/init-sumela/SKILL.md`).
 
 ### Adding the memory layer later
 

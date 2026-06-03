@@ -38,5 +38,7 @@ Write-Host ""
 Write-Host "SumelaOS installed! Next steps:" -ForegroundColor Green
 Write-Host ""
 Write-Host "  1. In your AI coding assistant, run:  /initSumela"
+Write-Host "     (If it isn't a slash command yet, tell the agent to read and follow"
+Write-Host "      .sumela/skills/init-sumela/SKILL.md - AGENTS.md doesn't exist until it runs.)"
 Write-Host "  2. Or run setup manually:             pwsh scripts/setup.ps1"
 Write-Host ""

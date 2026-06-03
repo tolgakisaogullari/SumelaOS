@@ -301,18 +301,32 @@ Ask user which IDEs they use. Generate pointer files for selected IDEs.
 
 Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
 
-### Step 3.6b: Repo hygiene — secret baseline + union-merge (parity with `setup.sh`)
+### Step 3.6b: Repo hygiene — gitignore baselines + union-merge (parity with `setup.sh`)
 
-`setup.sh` makes these two idempotent, marker-guarded edits; the brownfield path MUST make them too, otherwise team-safe merge and secret governance silently never activate on this install route. Use a marker comment so a re-run never duplicates the block.
+`setup.sh` makes these idempotent, marker-guarded edits; the brownfield path MUST make them too, otherwise team-safe merge, per-developer privacy, and secret governance silently never activate on this install route. Use a marker comment (or a stable entry line) so a re-run never duplicates the block.
 
 1. **`.gitattributes` union-merge** for the append-only log (kills merge conflicts when teammates append to the shared `_LOG.md` concurrently). If the line is not already present, append:
 
    ```
-   # SumelaOS — union-merge the append-only second-brain log (conflict-free concurrent appends)
+   # SumelaOS — append-only ledger: concurrent log appends combine instead of conflicting
    docs/second-brain/wiki/_LOG.md merge=union
    ```
 
-2. **`.gitignore` secret baseline** — never commit credentials. If the marker is absent, append:
+2. **`.gitignore` per-developer / runtime artifacts** — never commit a developer's local override or plugin runtime output. If `.sumela/local.md` is not already an ignored line, append (guard on the `.sumela/local.md` line, not the comment):
+
+   ```
+   # SumelaOS — per-developer / runtime artifacts (never commit)
+   .sumela/local.md
+   .sumela/.memory-sync.log
+   .sumela/.graph-sync.log
+   .sumela/.code-chunks-synced
+   .superpowers/
+   **/scripts/.superpowers/
+   graphify-out/
+   qdrant-storage/
+   ```
+
+3. **`.gitignore` secret baseline** — never commit credentials. If the marker is absent, append:
 
    ```
    # SumelaOS — common secret files (never commit; see .sumela/rules/security_protocol.md)

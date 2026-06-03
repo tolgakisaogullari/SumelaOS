@@ -298,6 +298,7 @@ All pointer files use the identical template from Section 3.3 above. Updates go 
 - `.kilocode/*` should be ignored EXCEPT `!.kilocode/rules.md`
 - `.cursor/` generally tracked (rules are shared)
 - `.trae/` generally tracked (rules are shared)
+- SumelaOS setup (`setup.sh` / `setup.ps1` / `/initSumela`) seeds two managed blocks idempotently — don't hand-maintain them: a **per-developer/runtime** block (`.sumela/local.md`, the sync logs, `graphify-out/`, `qdrant-storage/`) and a **secret baseline** (`.env`, `*.pem`, `*.key`, … with `!.env.example` kept). The append-only `_LOG.md` also gets a `.gitattributes merge=union` rule.
 
 ---
 
