@@ -108,7 +108,7 @@ ingested_date: 2026-04-08
 
 **Rules:**
 - Lowercase only, separated by hyphens (`kebab-case`)
-- NO Turkish characters (ı→i, ş→s, ç→c, ğ→g, ö→o, ü→u)
+- ASCII only — transliterate non-ASCII letters (e.g. Turkish ı→i, ş→s, ç→c, ğ→g, ö→o, ü→u; German ä→a, ß→ss; French é→e)
 - NO spaces
 - In dated files, the date ALWAYS comes first
 

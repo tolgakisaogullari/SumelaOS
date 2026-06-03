@@ -207,9 +207,9 @@ These rules are ABSOLUTE. Violating them breaks user trust in the self-improveme
 7. **NEVER let confidence thresholds silence the loop.** If `low` is tempting, escalate to `medium` and let the user decide.
 </safety_invariants>
 
-<turkish_user_communication>
-Per project identity rules, all user-facing text is in Turkish. When surfacing pending count at session start or presenting review options in `/evolve`, use Turkish. Internal entry fields (`proposed_change`, `evidence`) may be in English or Turkish — mirror whatever language the user used.
-</turkish_user_communication>
+<user_communication_language>
+All user-facing text uses the project's configured **interaction language** (per `AGENTS.md` Section 2, overridable per-developer via `.sumela/local.md` — resolved at `sumela-prompt.md` session bootstrap; defaults to English). When surfacing the pending count at session start or presenting review options in `/evolve`, use that language. Internal entry fields (`proposed_change`, `evidence`) may be in any language — mirror whatever language the user used.
+</user_communication_language>
 
 <re_validation_pulse>
 When this skill is loaded for signal capture or `/evolve`, randomly select ONE applied entry whose `last_validated` is older than 90 days. During the session, passively watch for concrete evidence (code, log, file ref) that contradicts that entry's `proposed_change`. If you observe such evidence, automatically open a `challenge` signal — do NOT modify the original entry directly.

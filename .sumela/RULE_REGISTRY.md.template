@@ -71,7 +71,7 @@ Stack detection is hybrid:
 
 <rule activation="universal" applies_phases="all">
 <name>identity_and_behavior</name>
-<description>Use at every phase — defines language protocol (Turkish chat, English code), validation protocol (build check after refactoring), Zero-Fluff communication discipline, ULTRATHINK trigger, per-task user-approval gate.</description>
+<description>Use at every phase — defines the 3-layer language protocol (interaction / code-naming / code-documentation, per AGENTS.md Section 2), validation protocol (build check after refactoring), Zero-Fluff communication discipline, ULTRATHINK trigger, per-task user-approval gate.</description>
 <path>.sumela/rules/identity_and_behavior.md</path>
 </rule>
 

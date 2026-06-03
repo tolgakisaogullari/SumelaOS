@@ -107,7 +107,7 @@ STEP 1B — Tier-2 query (Graphify code graph, MANDATORY for FAMILY B):
   RULE: For any "who calls / calls who / impact / dependency" question, run `query-graph.py` FIRST. Resort to the secondary tools only when you need cluster information or transitive paths between two known specific nodes.
 
 STEP 2 — Evaluate result(s):
-  - Tier-1 hit (top score ≥ 0.5): read the matching `wiki/session-summaries/<file>.md` referenced by `session_id`. Cite explicitly: *"Kaynak: session 2026-XX-XX (Qdrant score 0.XX)"*.
+  - Tier-1 hit (top score ≥ 0.5): read the matching `wiki/session-summaries/<file>.md` referenced by `session_id`. Cite explicitly (in the interaction language): *"Source: session 2026-XX-XX (Qdrant score 0.XX)"*.
   - Tier-2 hit (subgraph returned with relevant nodes): cite file/line refs from the subgraph (e.g., *"Graphify graph: <source_file>:L<line>"*). Read the cited file ONLY if the graph alone does not answer.
   - Hybrid hit (both tiers returned useful content): synthesize the answer using both, citing each tier separately.
   - All tiers low / empty: continue to STEP 3.

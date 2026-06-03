@@ -46,5 +46,5 @@ Execute these steps strictly in order. This is the inline/fallback execution pat
 - NO GUESSING: If blocked by a failing test, missing dependency, unclear instruction, or stale plan state, STOP IMMEDIATELY and ask the user.
 - REVISIT REVIEW WHEN NEEDED: Return to plan review if the user updates the plan, critical context changes, or the implementation approach needs rethinking.
 - STRICT ADHERENCE: Never skip verification steps.
-- USER VISIBILITY: Follow the project communication protocol. Give concise Turkish progress updates and task-boundary choices; do not hide material decisions behind "silent" execution.
+- USER VISIBILITY: Follow the project communication protocol. Give concise progress updates and task-boundary choices in the project's configured interaction language (per `AGENTS.md` Section 2 / `.sumela/local.md`); do not hide material decisions behind "silent" execution.
 </execution_constraints>
