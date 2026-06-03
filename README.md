@@ -55,6 +55,7 @@ If you cannot run a script, do it manually: clone the repo to a temp dir, then c
 
 STEP 2 — Run /initSumela. In a fresh project your IDE may NOT yet register this as a slash command (it lives in .sumela/skills/, and AGENTS.md does not exist yet — /initSumela generates it), so if "/initSumela" does not resolve, just READ and FOLLOW .sumela/skills/init-sumela/SKILL.md directly. In a single pass it:
   • auto-detects the stack, architecture, and code conventions;
+  • if you ALREADY have agent config (an AGENTS.md, custom skills/rules, or a docs/second-brain/), runs a NON-DESTRUCTIVE merge: it quarantines your originals to .sumela/_migration/<date>/, proposes a plan, and folds the useful parts into the SumelaOS structure after you approve — it never overwrites your work, and never touches your general docs/;
   • asks the three languages (interaction / code naming / documentation) and the governance mode (solo | team);
   • asks which optional memory plugins to install (Qdrant, Graphify) — if you opt in, it then runs scripts/setup-memory.sh to bring the runtime up: auto-installs the safe deps and CONFIRMS each invasive step (start Qdrant via Docker, pull the Ollama model, install the graphify CLI), so you do no manual setup; if you decline, it installs and runs nothing for them;
   • generates AGENTS.md, the rules, RULE_REGISTRY.md, the wiki, and the IDE pointers;

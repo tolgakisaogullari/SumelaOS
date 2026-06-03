@@ -383,6 +383,14 @@ export TMPL_NAMING_CONVENTIONS="# Define your naming conventions here"
 export TMPL_TECHNICAL_CONSTRAINTS="# Define your technical constraints here"
 export TMPL_PROJECT_SPECIFIC_SECURITY="$PROJECT_SECURITY"
 
+# Non-destructive guard: setup.sh is the deterministic (greenfield-oriented) path and
+# does NOT do the brownfield merge that /initSumela does. If the user already has an
+# AGENTS.md, back it up rather than silently clobbering it, and point them at the merge.
+if [ -f AGENTS.md ] && ! grep -qF "SumelaOS" AGENTS.md 2>/dev/null; then
+  AGENTS_BAK="AGENTS.md.bak"; [ -e "$AGENTS_BAK" ] && AGENTS_BAK="AGENTS.md.bak.$(date +%Y%m%d%H%M%S)"
+  cp AGENTS.md "$AGENTS_BAK"
+  warn "Existing AGENTS.md detected — backed up to $AGENTS_BAK (gitignored). For a proper merge of your existing config, use the /initSumela agent flow (brownfield merge) instead of setup.sh."
+fi
 render_template AGENTS.md.template AGENTS.md
 
 ok "AGENTS.md generated"
@@ -628,9 +636,19 @@ else
     echo "**/scripts/.superpowers/"
     echo "graphify-out/"             # Graphify plugin output
     echo "qdrant-storage/"           # Qdrant plugin storage
+    echo ".sumela/_migration/"       # brownfield migration quarantine (may hold legacy secrets — never commit)
+    echo "AGENTS.md.bak*"            # setup backup(s) of a pre-existing AGENTS.md (may hold legacy secrets)
   } >> .gitignore
   ok ".gitignore SumelaOS block added"
 fi
+
+# Independent line-guards for entries added AFTER the block first shipped: the block
+# above is skipped wholesale when `.sumela/local.md` is already present (an upgraded
+# project), so newer lines would never land. Append each individually if missing —
+# this keeps the secret-bearing quarantine + AGENTS backup ignored on the upgrade path.
+for _ln in ".sumela/_migration/" "AGENTS.md.bak*"; do
+  grep -qxF "$_ln" .gitignore 2>/dev/null || printf '%s\n' "$_ln" >> .gitignore
+done
 
 # Secret-file baseline — never commit credentials. Idempotent via its own marker
 # (not a single content line) so all patterns land even when the project already

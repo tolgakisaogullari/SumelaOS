@@ -1,6 +1,6 @@
 # OPERATIONAL EXCELLENCE & MAINTENANCE (IRON LAWS)
 
-> **Universal rule** — applies to all stacks. Later sections may contain stack-specific guidance; adapt to your technology choices.
+> **Cross-cutting operational rule** — applies to all stacks, but is phase-conditional (loaded per its `applies_phases` in `RULE_REGISTRY.md`, not in every phase like the truly universal rules). Later sections may contain stack-specific guidance; adapt to your technology choices.
 
 ## 📊 OBSERVABILITY & STRUCTURED LOGGING
 * **Structured Logging (Serilog):** Do not use plain string logs. Every log entry must be structured with properties (e.g., `Log.Information("User {UserId} created entity {EntityId}", userId, entityId)`).

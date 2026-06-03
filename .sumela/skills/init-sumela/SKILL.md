@@ -87,24 +87,35 @@ Scan for:
 - **Formatter config**: `prettier`, `black`, `gofmt`, `rustfmt`
 - **Type checking**: `tsconfig.json`, `strict` mode, nullable reference types
 
+### Step 1.6: Pre-existing Agent-Artifact Detection (read-only)
+
+The project may ALREADY have agent configuration from prior tooling. Detect it now (do NOT modify anything yet) so PHASE 2c can plan a non-destructive merge. Scan for and record each hit:
+
+- **Existing `AGENTS.md`** at the repo root (the most common collision).
+- **Existing skill files**: `.claude/skills/**/*.md`, `.cursor/rules/**`, `.kilocode/rules*`, `.trae/rules/**`, a pre-existing `.sumela/skills/**`, or any directory the user names. Read each skill's intent (name + what it does).
+- **Existing rule / coding-standard files**: `CONVENTIONS.md`, `STANDARDS.md`, `.editorconfig`-adjacent docs, a pre-existing `.sumela/rules/**`, or rules embedded in their `AGENTS.md`.
+- **Existing `docs/second-brain/`** — ONLY this subpath. Do NOT treat the user's general `docs/` as ours; it is almost always their own project documentation and is classified UNRELATED (never touched).
+
+Classify each hit as: **COLLIDES** (same path/name as something we install), **CUSTOM** (project-specific, no collision — valuable, import candidate), or **UNRELATED** (not an agent artifact → leave untouched). If NOTHING is found, skip PHASE 2c entirely (clean greenfield adoption). If anything is found, PHASE 2c runs.
+
 ## PHASE 2 — Analysis Report (user-facing)
 
-Present the detected configuration to the user for confirmation. Format:
+Present the detected configuration to the user for confirmation. Render this report in the project's configured interaction language (the example below is the English reference; if the language isn't resolved yet, use English). Format:
 
 ```
-## 🔍 Proje Analizi
+## 🔍 Project Analysis
 
-### Tespit Edilen Stack
-| Katman | Teknoloji | Detay |
+### Detected Stack
+| Layer | Technology | Detail |
 |---|---|---|
 | Backend | .NET 10 / C# 14 | ASP.NET Core, EF Core, RabbitMQ |
 | Frontend | React 19 / Vite | Tailwind CSS, Shadcn UI |
 | Mobile | React Native / Expo | Expo SDK 54, NativeWind v4 |
 
-### Mimari Pattern
+### Architecture Pattern
 Clean Architecture + DDD (light) + CQRS-leaning
 
-### Tespit Edilen Konvansiyonlar
+### Detected Conventions
 - Naming: PascalCase (classes), camelCase (methods)
 - Error handling: Global exception middleware
 - Validation: FluentValidation at boundaries
@@ -245,9 +256,88 @@ configured `interaction_language` — the wording below is the English reference
 
 **IMPORTANT:** If the user declined a plugin (choice 2/3/4), do NOT copy its scripts, do NOT register it in SKILL_REGISTRY.md, do NOT run any of its scripts, and do NOT include it in `MEM_PLUGINS`. Never reference an unavailable plugin in generated files.
 
+## PHASE 2c — Brownfield Merge (ONLY if Step 1.6 found pre-existing artifacts)
+
+Skip this entire phase on a clean greenfield project. When existing agent artifacts were detected, run a **non-destructive, propose-and-approve** merge. Governing principles (do NOT violate):
+
+- **Never destroy.** Every original we will replace or fold is first COPIED into a quarantine dir (PHASE 3 Step 3.0) — nothing is overwritten before it is preserved.
+- **Scope tightly.** Only ever touch `AGENTS.md`, `.sumela/**`, and `docs/second-brain/**`. NEVER rename, move, or delete the user's general `docs/`, `.claude/`, source, or any UNRELATED file.
+- **Integrate, don't dump.** Fold useful content into the matching structured section with a provenance note; do not paste whole legacy files into ours.
+- **Propose, then apply.** Present the plan below and get per-item approval BEFORE any write.
+
+### Step 2c.1 — Decompose monolithic / mixed config files
+
+Real-world agent config is often ONE sprawling file (`AGENTS.md`, `CLAUDE.md`, `.clinerules`, `.cursor/rules/*`, `.kilocode/rules*`, …) that JUMBLES everything together — project metadata, reusable procedures (skills), and standing constraints (rules) all inline. Do NOT migrate such a file as a single blob. PARSE it and classify each content block, then route each to its correct home so our structure stays clean and our contract stays intact:
+
+- **Skill-like block** — a reusable procedure/workflow ("when starting a feature do A→B→C", a debugging routine, a release checklist) → destined for `.sumela/skills/<name>/SKILL.md` (+ registry entry).
+- **Rule-like block** — a standing constraint/convention → if it is **stack-specific** ("use camelCase in TS", "no console.log in prod") it goes to the matching `.sumela/rules/<stack>_standards.md`; if it is **project-wide / cross-cutting** (e.g., "every PR links an issue", a documentation policy, a dependency-update cadence) it goes to `.sumela/rules/operational_excellence_maintenance.md` (the non-stack operational rule), NOT a stack file. (Commit/branch/PR-review policy usually belongs in the built-in `git_workflow_mandatory_review_protocol` rule — check there first before creating a duplicate.) NEVER into a universal rule (`engineering_philosophy`, `identity_and_behavior`, …). Each gets a RULE_REGISTRY entry (see Step 2c.3 for the metadata contract).
+- **Project config / metadata** — stack, build/test/lint commands, architecture, languages, security notes → folded into the generated `AGENTS.md` structured sections.
+- **Reference content** — examples/snippets, a domain glossary, a TODO / known-issues list → offer to migrate into the **wiki** (`docs/second-brain/`), not quarantine-and-forget (this content is usually worth keeping searchable).
+- **IDE/tool boilerplate** — "read this file first", tool-specific pointer cruft → discard (meaning: NOT folded into our structure; the whole original still survives in quarantine, so nothing is truly deleted). Our pointer system replaces it.
+- **Ambiguous / cannot classify confidently** → preserve in quarantine and list under "needs manual review". NEVER guess a destination.
+
+The ORIGINAL file is preserved whole in quarantine regardless of how its blocks were split. Surface the decomposition in the plan below so the user sees exactly where each block lands.
+
+### Step 2c.2 — Present the Migration Plan (user-facing) and WAIT for approval
+
+One row per detected artifact AND per decomposed block:
+
+```
+## 🔀 Migration Plan (existing agent config detected)
+
+| Item | Found at | Class | Proposed action |
+|---|---|---|---|
+| AGENTS.md §"Release flow" | ./AGENTS.md | CUSTOM (skill-like) | Extract to .sumela/skills/release-flow/SKILL.md + register |
+| AGENTS.md §"Coding rules"  | ./AGENTS.md | CUSTOM (rule-like)  | Fold into .sumela/rules/backend_standards.md + RULE_REGISTRY row |
+| AGENTS.md §"Stack/commands"| ./AGENTS.md | CONFIG             | Fold into generated AGENTS.md sections |
+| AGENTS.md §"Read this file" | ./AGENTS.md | BOILERPLATE        | Discard (replaced by our pointer) |
+| custom skill `foo`         | .claude/skills/foo | CUSTOM       | Import to .sumela/skills/foo/SKILL.md (normalized) + register |
+| skill `brainstorming`      | .cursor/.../  | COLLIDES (built-in) | Keep OURS; quarantine theirs; merge only unique steps if you ask |
+| CONVENTIONS.md             | ./CONVENTIONS.md | CUSTOM (rule) | Fold into .sumela/rules/<stack>_standards.md + RULE_REGISTRY row |
+| docs/second-brain/         | ./docs/second-brain | COLLIDES  | Rename to docs/second-brain-legacy/, install ours, migrate pages |
+| docs/ (general)            | ./docs        | UNRELATED          | Left untouched |
+| <can't classify>           | ./AGENTS.md   | AMBIGUOUS          | Quarantine + flag for manual review |
+
+For each row: (1) apply as proposed, (2) skip (leave as-is), (3) modify the action.
+```
+
+**WAIT for approval.** Resolve each row before proceeding. Conflicts (e.g., a legacy directive that contradicts the runtime contract / `sumela-prompt` authority hierarchy) are surfaced for an explicit user decision — never silently merged or silently dropped.
+
+### Step 2c.3 — Collision, format & STRUCTURAL-INTEGRITY rules (do NOT break our structure)
+
+Every import MUST conform to our contracts. An import that would break our structure is normalized first or preserved-only — NEVER force-fit:
+
+- **Skill imports** must become a VALID `.sumela/skills/<name>/SKILL.md`: proper frontmatter (`name` = unique kebab-case, `description`) + body in our shape; then registered with a correct `<skill>` entry — run `reconcile-registry.py` (it adds on-disk skills verbatim) or hand-write a matching `<path>`. An import MUST NOT collide with a built-in name (keep ours), alter the registry's pseudo-XML structure, or claim authority over `sumela-prompt.md`.
+- **Rule imports** must become a VALID `.sumela/rules/<name>.md` AND get a RULE_REGISTRY entry WITH phase / stack / activation metadata — `reconcile-registry.py` does NOT handle rules, so add the matrix row by hand. The `stack=` value MUST be one of the generated `<stack_scopes>` (Step 3.2): if a rule targets a stack not in scope, either register it under an existing scope or EXTEND `<stack_scopes>` first — otherwise the matrix row is invalid. Project-wide (non-stack) rules need no `stack=` and live in `operational_excellence_maintenance.md` — but note that rule's matrix row has a LIMITED `applies_phases` (planning/branch_finish/shipping by default): if the imported rule must apply in other phases (e.g., code_review, debugging), WIDEN that row's `applies_phases` accordingly, or it won't load when relevant. Project-specific conventions only; the universal rules are off-limits.
+- **Skill name clash with a built-in** (one of the 21): NEVER overwrite ours. Quarantine theirs; offer to merge only genuinely-unique steps, or keep theirs as `<name>-legacy`.
+- **Cannot normalize without guessing** (unknown execution model, contradictory directives): preserve-only + flag; do not jam it into our format.
+- **PROVE integrity after import**: once imports are applied, `python3 scripts/reconcile-registry.py --check` AND `bash scripts/validate-structure.sh --post-setup` MUST pass. These prove the SKILL side and repo-hygiene side are intact. NOTE they do NOT deep-validate RULE_REGISTRY rows (reconcile skips rules), so for each imported rule ALSO eyeball that its matrix row is well-formed (valid `stack=`/`activation=`, a real phase). If anything fails, fix or revert the offending import before continuing.
+
 ## PHASE 3 — File Generation (after confirmation)
 
-Generate all configuration files. Present a checklist:
+Generate all configuration files (Steps 3.1–3.9 below), presenting a checklist as you go. If PHASE 2c ran, do Step 3.0 FIRST.
+
+### Step 3.0: Quarantine originals (ONLY if PHASE 2c ran)
+
+Before generating/overwriting anything, COPY every original the approved plan will replace or fold into a dated quarantine dir, preserving relative structure:
+
+```
+.sumela/_migration/<YYYY-MM-DD>/   (use `date +%Y-%m-%d`)
+  ├── AGENTS.legacy.md
+  ├── rules/...            (originals)
+  ├── skills/...           (originals)
+  └── MIGRATION_REPORT.md  (written in PHASE 4)
+```
+
+Compute the date ONCE (`date +%Y-%m-%d`) and reuse it for both the quarantine dir and the PHASE 4 report so a run crossing midnight cannot split them. If the dated dir already exists (a same-day re-run), append a `-NN` counter rather than copying onto a prior quarantine — the safety net must never clobber itself.
+
+BEFORE copying anything in, ENSURE `.gitignore` ignores `.sumela/_migration/` — append that exact line if it is missing. Do NOT assume the Step 3.6b block covers it: that block is guarded on `.sumela/local.md`, so a project that adopted SumelaOS before this line existed already has the block and would SKIP it, leaving the quarantine (and its possible legacy secrets) git-trackable. This independent check is what actually guarantees the next bullet.
+
+Copy (not move) so the originals stay in place until their in-place replacement is actually written. **The quarantine dir is in `.gitignore` (ensured just above), so it stays LOCAL and the PHASE 4 commit never stages it** — it may hold secrets from a legacy config; the user reviews it and deletes it when satisfied. (This resolves the otherwise-contradictory "don't auto-commit" note vs. the PHASE 4 `git add` step.)
+
+For an existing `docs/second-brain/`, preserve ONLY the user's content: move their `wiki/`, `raw_sources/`, `artifacts/`, and any loose `*.md` into `docs/second-brain-legacy/`, but LEAVE `docs/second-brain/template/` in place — Step 3.6 copies FROM that template, so sweeping it into legacy would starve the copy. Then materialize our `wiki/` etc. from the template and migrate useful legacy pages across.
+
+Then proceed with the generation steps below, folding/importing per the approved plan and adding a provenance note to each integrated piece (e.g., a trailing `<!-- migrated from <legacy path> on <date> -->`).
 
 ### Step 3.1: Generate AGENTS.md
 
@@ -324,7 +414,11 @@ Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
    **/scripts/.superpowers/
    graphify-out/
    qdrant-storage/
+   .sumela/_migration/
+   AGENTS.md.bak*
    ```
+
+   UPGRADE NOTE: this whole block is guarded on the `.sumela/local.md` line, so a project that adopted SumelaOS earlier already has the block and will SKIP it — meaning newer entries (`.sumela/_migration/`, `AGENTS.md.bak*`) would never land. For those two secret-bearing entries, ALSO append each individually if the exact line is missing (independent of the block), so the upgrade path is covered. (This mirrors the independent guards in `setup.sh` / `setup.ps1` §6c.)
 
 3. **`.gitignore` secret baseline** — never commit credentials. If the marker is absent, append:
 
@@ -413,6 +507,15 @@ matching Step 3.6b / 3.7 action, then re-run.
 
 All checks must pass.
 
+### Step 4.1b: Write the Migration Report (ONLY if PHASE 2c ran)
+
+Write `.sumela/_migration/<YYYY-MM-DD>/MIGRATION_REPORT.md` recording, for full auditability:
+- **Imported / folded** — each piece, its legacy source, and its new home (e.g., "custom skill `foo` → `.sumela/skills/foo/`"; "deploy commands from legacy AGENTS.md → AGENTS.md §Commands").
+- **Preserved only (needs manual review)** — anything quarantined but NOT auto-integrated (e.g., an ambiguous skill, a conflicting directive the user deferred).
+- **Left untouched** — UNRELATED artifacts (general `docs/`, source) confirmed not modified.
+- **Collisions resolved** — every name clash and how it was settled.
+- A closing note: *"Originals are preserved here. Review for secrets before committing this folder; delete it once you've confirmed the migration."*
+
 ### Step 4.2: Present Summary
 
 ```
@@ -462,8 +565,7 @@ After successful init, append this entry to `.sumela/SKILL_REGISTRY.md`:
 - **No manifest files found** (no package.json, *.csproj, etc.): Ask user to describe the stack manually.
 - **Ambiguous architecture** (could be multiple patterns): Present options and ask user to choose.
 - **Multiple stacks detected** (monorepo with backend + frontend + mobile): Generate rules for all detected stacks.
-- **Existing AGENTS.md**: Warn user and ask whether to overwrite or merge.
-- **Existing .sumela/**: Warn user and ask whether to overwrite, merge, or abort.
+- **Existing AGENTS.md / skills / rules / `docs/second-brain/`**: do NOT improvise overwrite-or-merge — run the **PHASE 2c Brownfield Merge** protocol (detect → classify → quarantine → propose plan → per-item approve → fold/import with provenance → migration report). Originals go to `.sumela/_migration/<date>/`; nothing is destroyed.
 - **Validation fails**: Show specific failures and offer to fix.
 </error_handling>
 
@@ -474,4 +576,5 @@ After successful init, append this entry to `.sumela/SKILL_REGISTRY.md`:
 - ALWAYS run validation after generation
 - Generated files must be valid markdown with proper frontmatter
 - No project-specific content in universal rules (engineering_philosophy, identity_and_behavior, etc.)
+- BROWNFIELD (existing agent artifacts): NEVER overwrite a built-in skill or a universal rule with imported content; NEVER touch the user's general `docs/` (only `docs/second-brain/`); ALWAYS quarantine an original before replacing/folding it; ALWAYS get per-item approval before integrating (PHASE 2c).
 </constraints>

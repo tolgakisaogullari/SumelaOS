@@ -32,6 +32,10 @@ docs/second-brain/wiki/
 # Per-developer overrides (personal; .example stays tracked)
 .sumela/local.md
 
+# Brownfield migration quarantine + AGENTS.md backup (may hold legacy secrets — never commit)
+.sumela/_migration/
+AGENTS.md.bak*
+
 # Common secret files (never commit; see .sumela/rules/security_protocol.md)
 .env
 .env.*

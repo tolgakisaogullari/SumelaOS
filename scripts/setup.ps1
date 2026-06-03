@@ -316,6 +316,16 @@ if ($StackArray -contains "backend") {
     $ProjectSecurity = "`n- Skill path: ``.sumela/rules/backend_standards.md`` — backend-specific security patterns."
 }
 
+# Non-destructive guard: setup.ps1 is the deterministic (greenfield-oriented) path and
+# does NOT do the brownfield merge /initSumela does. Back up a pre-existing AGENTS.md
+# rather than silently clobbering it, and point the user at the merge flow.
+if ((Test-Path "AGENTS.md") -and -not (Select-String -Path "AGENTS.md" -Pattern "SumelaOS" -Quiet)) {
+    $agentsBak = "AGENTS.md.bak"
+    if (Test-Path $agentsBak) { $agentsBak = "AGENTS.md.bak.$(Get-Date -Format yyyyMMddHHmmss)" }
+    Copy-Item "AGENTS.md" $agentsBak -Force
+    Write-Warn "Existing AGENTS.md detected — backed up to $agentsBak (gitignored). For a proper merge of your existing config, use the /initSumela agent flow (brownfield merge) instead of setup.ps1."
+}
+
 # Perform replacements
 $content = Get-Content "AGENTS.md.template" -Raw
 $content = $content -replace '\{\{project_name\}\}', $ProjectName
@@ -558,7 +568,20 @@ else {
     Add-Content .gitignore "**/scripts/.superpowers/"
     Add-Content .gitignore "graphify-out/"
     Add-Content .gitignore "qdrant-storage/"
+    Add-Content .gitignore ".sumela/_migration/"
+    Add-Content .gitignore "AGENTS.md.bak*"
     Write-Ok ".gitignore SumelaOS block added"
+}
+
+# Independent line-guards for entries added AFTER the block first shipped: the block
+# above is skipped wholesale when `.sumela/local.md` is already present (an upgraded
+# project), so newer lines would never land. Append each individually if missing.
+foreach ($ln in @(".sumela/_migration/", "AGENTS.md.bak*")) {
+    # -SimpleMatch searches the pattern LITERALLY, so pass the raw line (NOT
+    # [regex]::Escape, which would inject backslashes and never match → duplicate
+    # appends every run). Matches the idiom used by the §6c / secret-baseline guards.
+    $present = (Test-Path .gitignore) -and (Select-String -Path .gitignore -Pattern $ln -SimpleMatch -Quiet)
+    if (-not $present) { Add-Content .gitignore $ln }
 }
 
 # Secret-file baseline — never commit credentials. Idempotent via its own marker
