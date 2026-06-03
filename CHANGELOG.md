@@ -34,8 +34,28 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   plugin registered exactly once, no unrendered placeholders, structure + reconcile
   pass) and that a second run is idempotent. Wired into the opt-in CI workflow; this
   is the first FUNCTIONAL test of the self-modifying setup pipeline (was parse-only).
+- **Signal taxonomy expanded** (`self-improvement-curator`) — two new capture types:
+  `resolution` (agent-originated: a bug/problem the agent fixes itself → capture the
+  GENERALIZED class-level lesson, never the one-off instance) and `preference` (a
+  proactive standing user instruction, distinct from a reactive `correction`). Wired
+  in lockstep across the prompt, registries, schema, and queue README.
+- **Pull-time code-graph refresh** — `post-merge`/`post-checkout` now also run
+  `sumela_graph_sync`: when a pull/checkout brings CODE changes, it refreshes the
+  local graphify graph in the background via `auto-update-memory.py --graph-only`
+  (a new graph-only mode that writes ONLY the gitignored graph dir — no wiki sync,
+  no `_LOG.md` append, so a pull never dirties the tree). Self-gating, non-blocking,
+  opt-out with `SUMELA_DISABLE_GRAPH_SYNC=1`.
+- **Richer memory-sync log** — the pull-time summary ingest now reports WHO (git
+  author) and WHICH tasks (filename + `session_topics`) each arriving summary
+  belongs to, inline (up to 10) and in `.sumela/.graph-sync.log`/`.memory-sync.log`.
 
 ### Fixed
+
+- **Existing-project install completeness** — the README agent prompt now delegates
+  the copy to the maintained `bootstrap.sh`/`.ps1` (no more hand-list drift; bootstrap
+  now also copies `docs/second-brain/template/` and the new `.opencode/`), and
+  `/initSumela` gained Step 3.6b (`.gitattributes` union-merge + `.gitignore` secret
+  baseline) so both install paths reach full parity with `setup.sh`.
 
 - **`status.sh` / `status.ps1` hook detection** now recognizes all three wiring forms
   the monorepo work introduced (root, subdir `<rel>/.sumela/git-hooks`, and the

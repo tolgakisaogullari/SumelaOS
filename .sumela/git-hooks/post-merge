@@ -13,4 +13,5 @@ from="$(git rev-parse --verify --quiet ORIG_HEAD 2>/dev/null)"
 [ -n "$from" ] || from="HEAD^"
 
 sumela_memory_sync "$from" "HEAD"
+sumela_graph_sync  "$from" "HEAD"
 exit 0

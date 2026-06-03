@@ -622,6 +622,7 @@ else
     echo "$GITIGNORE_MARKER (never commit)"
     echo ".sumela/local.md"          # per-developer interaction-language override
     echo ".sumela/.memory-sync.log"  # memory-sync hook log
+    echo ".sumela/.graph-sync.log"   # graph-sync hook log
     echo ".superpowers/"             # brainstorming skill runtime state
     echo "**/scripts/.superpowers/"
     echo "graphify-out/"             # Graphify plugin output

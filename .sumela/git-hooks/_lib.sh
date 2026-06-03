@@ -14,7 +14,13 @@
 #                       never fail a git operation (the data stays in git)
 #   * path-scoped     — fires only when files under the summaries dir changed
 #
-# Opt out per developer: export SUMELA_DISABLE_MEMORY_SYNC=1
+# This file also provides sumela_graph_sync (below): a best-effort, non-blocking
+# refresh of the LOCAL graphify code graph after a pull, so dependency/impact
+# queries reflect the code that just arrived. It writes ONLY the gitignored graph
+# dir (never the tracked tree).
+#
+# Opt out per developer: export SUMELA_DISABLE_MEMORY_SYNC=1 (summaries) and/or
+#                        export SUMELA_DISABLE_GRAPH_SYNC=1  (code graph)
 # Override paths/endpoints: SUMELA_SUMMARIES_DIR, WIKI_PATH, QDRANT_HOST, QDRANT_PORT
 
 # Git's well-known empty-tree object (lets us diff a fresh clone's HEAD against
@@ -153,6 +159,65 @@ sumela_memory_sync() {
       python3 "$ingest" "$repo/$f" || echo "WARN: ingest failed for $f"
     done
     echo "===== memory-sync: done ====="
+  ) >>"$log" 2>&1 </dev/null &
+
+  return 0
+}
+
+# Refresh the LOCAL code graph (graphify) after a pull/checkout, so dependency &
+# impact queries reflect the code that just arrived (teammates' work AND your own
+# merged branch). Design contract (mirrors sumela_memory_sync):
+#   * incremental  — only when actual CODE changed in the range (a doc/agent-only
+#                    pull is skipped; the graph is unaffected by docs/ or .sumela/)
+#   * non-blocking — graphify runs in the background; never delays git
+#   * best-effort  — no plugin / no `graphify` CLI / no python3 -> skip silently, exit 0
+#   * clean tree   — runs `auto-update-memory.py --graph-only`, which writes ONLY the
+#                    gitignored graph dir (NO wiki sync, NO _LOG append), so a pull
+#                    NEVER dirties the working tree
+sumela_graph_sync() {
+  # $1 = "from" ref, $2 = "to" ref.
+  local from="$1" to="$2"
+
+  [ -n "${SUMELA_DISABLE_GRAPH_SYNC:-}" ] && return 0
+
+  local repo
+  repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -n "$repo" ] || return 0
+
+  # Resolve the install (may be a monorepo subdir) the same way memory-sync does.
+  local install="${SUMELA_INSTALL_ROOT:-$repo}"
+
+  # Self-gate: graphify plugin + CLI + python3 + the updater must all be present.
+  [ -d "$install/.sumela/memory-plugins/graphify-code-graph" ] || return 0
+  command -v graphify >/dev/null 2>&1 || return 0
+  command -v python3  >/dev/null 2>&1 || return 0
+  local updater="$install/scripts/auto-update-memory.py"
+  [ -f "$updater" ] || return 0
+
+  # Install path within the repo (root-relative; "" at the repo root), for scoping.
+  local install_rel
+  install_rel="$(git -C "$install" rev-parse --show-prefix 2>/dev/null)"
+  install_rel="${install_rel%/}"
+  local scope="${install_rel:+$install_rel/}"
+
+  # Did real CODE change in this range? Limit to this install's subtree and exclude
+  # the agent/wiki layer (docs/, .sumela/) via git pathspec. If nothing else changed,
+  # the graph is unchanged — skip the rebuild.
+  local changed_code
+  changed_code="$(git -C "$repo" diff --name-only "$from" "$to" -- \
+      "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null | head -1)"
+  [ -n "$changed_code" ] || return 0
+
+  local log="$install/.sumela/.graph-sync.log"
+  [ -f "$log" ] && [ "$(wc -c <"$log" 2>/dev/null || echo 0)" -gt 524288 ] && : >"$log"
+  echo "sumela: code changed in this pull — refreshing local code graph (graphify) in background (log: .sumela/.graph-sync.log)"
+
+  # Background + detached so git returns immediately (graphify can be slow on a big repo).
+  (
+    cd "$install" || exit 0
+    echo "===== graph-sync @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="
+    python3 "$updater" --project-root "$install" --graph-only || echo "WARN: graph refresh failed"
+    echo "===== graph-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &
 
   return 0

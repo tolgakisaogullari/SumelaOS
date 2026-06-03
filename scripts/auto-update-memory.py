@@ -21,6 +21,11 @@ Environment:
     QDRANT_HOST      — Qdrant host (default: localhost)
     QDRANT_PORT      — Qdrant port (default: 6333)
 """
+# Defer annotation evaluation so `X | None` hints don't require Python 3.10+ at
+# runtime — the pull/checkout git hook calls this with whatever `python3` a teammate
+# has, and crashing at def-time would silently fail the background graph refresh.
+from __future__ import annotations
+
 import subprocess
 import sys
 import os
@@ -162,6 +167,11 @@ def main():
                         help="Qdrant host (default: localhost or QDRANT_HOST env)")
     parser.add_argument("--qdrant-port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")),
                         help="Qdrant port (default: 6333 or QDRANT_PORT env)")
+    parser.add_argument("--graph-only", action="store_true",
+                        help="Only rebuild the code graph (graphify update). Skips the wiki sync "
+                             "and the _LOG.md append, so it is safe to run from a git pull/checkout "
+                             "hook: it writes ONLY to the gitignored graph dir, never the tracked "
+                             "working tree.")
     args = parser.parse_args()
 
     script_dir = get_script_dir()
@@ -175,6 +185,19 @@ def main():
     if not project_root.exists():
         report_failure("Config", f"Project root not found: {project_root}")
         sys.exit(1)
+
+    # Graph-only mode (used by the pull/checkout git hook): rebuild ONLY the code
+    # graph. Skip wiki sync and _LOG.md append — both write tracked files, which a
+    # git hook must never do (a pull would otherwise leave the tree dirty). The
+    # graph dir is gitignored, so this stays clean.
+    if args.graph_only:
+        g_ok = run_graphify(project_root)
+        print_report([
+            "Status: COMPLETE (graph-only)",
+            f"1. Graphify code graph: {'OK' if g_ok else 'FAIL'}",
+            "(wiki sync + _LOG append skipped — graph-only mode)",
+        ])
+        sys.exit(0 if g_ok else 1)
 
     wiki_path = project_root / args.wiki_path
 

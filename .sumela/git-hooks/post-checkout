@@ -22,4 +22,5 @@ case "$prev" in
 esac
 
 sumela_memory_sync "$prev" "$new"
+sumela_graph_sync  "$prev" "$new"
 exit 0
