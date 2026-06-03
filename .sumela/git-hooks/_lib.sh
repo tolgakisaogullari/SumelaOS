@@ -30,6 +30,40 @@ if [ -z "${SUMELA_INSTALL_ROOT:-}" ]; then
   SUMELA_INSTALL_ROOT="$(cd "$_sumela_lib_dir/../.." 2>/dev/null && pwd)"
 fi
 
+# Best-effort: read a single frontmatter scalar (first match) from a summary file.
+# Only scans the leading `---`…`---` block so body text can't shadow a key.
+# awk (not sed) for portability — BSD/macOS sed mishandles a one-line `{ s///p }`.
+_sumela_fm() {  # $1 = file, $2 = key  → prints the value (may be empty)
+  [ -f "$1" ] || return 0
+  awk -v key="$2" '
+    NR==1 && $0 !~ /^---[[:space:]]*$/ { exit }     # no frontmatter block
+    NR>1  && $0 ~  /^---[[:space:]]*$/ { exit }     # end of frontmatter
+    $0 ~ "^[[:space:]]*" key "[[:space:]]*:" {
+      sub("^[[:space:]]*" key "[[:space:]]*:[[:space:]]*", ""); print; exit
+    }
+  ' "$1" 2>/dev/null
+}
+
+# Build one human-readable "who / when / what" line for a changed summary, so the
+# pull log tells the user WHOSE work and WHICH tasks just became searchable.
+#   who   = git author of the commit that brought this change in (from..to)
+#   when  = frontmatter session_date, else the commit's short date
+#   what  = filename (session id) + frontmatter session_topics
+_sumela_summary_desc() {  # $1=repo $2=from $3=to $4=relpath
+  local repo="$1" from="$2" to="$3" f="$4" full="$1/$4"
+  local id who when topics
+  id="$(basename "$f" .md)"
+  who="$(git -C "$repo" log -1 --format='%an' "$from..$to" -- "$f" 2>/dev/null)"
+  when="$(_sumela_fm "$full" session_date)"
+  [ -z "$when" ] && when="$(git -C "$repo" log -1 --format='%ad' --date=short "$from..$to" -- "$f" 2>/dev/null)"
+  topics="$(_sumela_fm "$full" session_topics | tr -d "[]\"'" )"
+  local line="  • ${who:-unknown}"
+  [ -n "$when" ]   && line="$line  ${when}"
+  line="$line  ${id}"
+  [ -n "$topics" ] && line="$line  [${topics}]"
+  printf '%s\n' "$line"
+}
+
 sumela_memory_sync() {
   # $1 = "from" ref, $2 = "to" ref. Ingests summaries changed in from..to.
   local from="$1" to="$2"
@@ -85,19 +119,37 @@ sumela_memory_sync() {
   local log="$install/.sumela/.memory-sync.log"
   # Keep the per-developer log bounded (truncate past ~512 KB).
   [ -f "$log" ] && [ "$(wc -c <"$log" 2>/dev/null || echo 0)" -gt 524288 ] && : >"$log"
-  echo "sumela: syncing ${count} changed session summary file(s) to local Qdrant in background (log: .sumela/.memory-sync.log)"
+
+  # Describe WHO and WHICH tasks each arriving summary belongs to (best-effort,
+  # cheap for a normal pull). Built once; reused for the inline heads-up and the log.
+  local details
+  details="$(printf '%s\n' "$changed" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    _sumela_summary_desc "$repo" "$from" "$to" "$f"
+  done)"
+
+  # Inline heads-up: header + up to 10 descriptors; the rest (and the ingest
+  # results) go to the background log so git is never delayed.
+  echo "sumela: ${count} session summary file(s) arrived in this pull — ingesting into local Qdrant in background:"
+  printf '%s\n' "$details" | head -10
+  [ "$count" -gt 10 ] && echo "  … and $((count - 10)) more — full list + ingest results: .sumela/.memory-sync.log"
+  [ "$count" -le 10 ] && echo "  (ingest results: .sumela/.memory-sync.log)"
 
   # Background subshell so the git operation returns immediately. stdin/stdout/
   # stderr are detached (to a log) so git does not wait on the descriptors.
   (
     cd "$repo" || exit 0
-    echo "===== memory-sync: ${count} file(s) ====="
+    echo "===== memory-sync: ${count} file(s) @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="
+    echo "Source (who / when / task):"
+    printf '%s\n' "$details"
+    echo "-----"
     printf '%s\n' "$changed" | while IFS= read -r f; do
       [ -n "$f" ] || continue
       if [ ! -f "$repo/$f" ]; then
         echo "WARN: changed summary not found on disk, skipping: $f"
         continue
       fi
+      echo ">>> ingesting: $f"
       python3 "$ingest" "$repo/$f" || echo "WARN: ingest failed for $f"
     done
     echo "===== memory-sync: done ====="
