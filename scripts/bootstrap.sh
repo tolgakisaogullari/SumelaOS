@@ -27,6 +27,8 @@ cp -r "$TEMP_DIR/.cursor" .   2>/dev/null || true
 cp -r "$TEMP_DIR/.kilocode" . 2>/dev/null || true
 cp -r "$TEMP_DIR/.trae" .     2>/dev/null || true
 cp -r "$TEMP_DIR/.opencode" . 2>/dev/null || true
+# Second-brain template (wiki scaffolding) — /initSumela materializes the live wiki from it.
+cp -r "$TEMP_DIR/docs" .      2>/dev/null || true
 
 # Create .gitkeep files for empty directories
 mkdir -p docs/second-brain/template/raw_sources

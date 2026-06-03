@@ -291,6 +291,35 @@ Ask user which IDEs they use. Generate pointer files for selected IDEs.
 
 Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
 
+### Step 3.6b: Repo hygiene — secret baseline + union-merge (parity with `setup.sh`)
+
+`setup.sh` makes these two idempotent, marker-guarded edits; the brownfield path MUST make them too, otherwise team-safe merge and secret governance silently never activate on this install route. Use a marker comment so a re-run never duplicates the block.
+
+1. **`.gitattributes` union-merge** for the append-only log (kills merge conflicts when teammates append to the shared `_LOG.md` concurrently). If the line is not already present, append:
+
+   ```
+   # SumelaOS — union-merge the append-only second-brain log (conflict-free concurrent appends)
+   docs/second-brain/wiki/_LOG.md merge=union
+   ```
+
+2. **`.gitignore` secret baseline** — never commit credentials. If the marker is absent, append:
+
+   ```
+   # SumelaOS — common secret files (never commit; see .sumela/rules/security_protocol.md)
+   .env
+   .env.*
+   !.env.example
+   !.env.*.example
+   *.pem
+   *.key
+   *.p12
+   *.pfx
+   *.secret
+   secrets.json
+   ```
+
+   Do NOT overwrite an existing `.gitignore`/`.gitattributes` — append only if your marker line is missing. (When `gitleaks` is installed, the pre-commit hook adds a staged-diff secret scan on top of this baseline.)
+
 ### Step 3.7: Wire Git Hooks (whenever the project is a git repo)
 
 `core.hooksPath = .sumela/git-hooks` enables two things: the `pre-commit`

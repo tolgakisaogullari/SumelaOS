@@ -15,9 +15,10 @@ try {
     # Essential payload — stop if these don't land (a half-install is worse than none).
     Copy-Item -Path "$TEMP_DIR\.sumela"  -Destination "." -Recurse -Force
     Copy-Item -Path "$TEMP_DIR\scripts"  -Destination "." -Recurse -Force
-    # Optional template / IDE pointer files — best-effort.
+    # Template / IDE pointer files + second-brain template — best-effort.
+    # ("docs" carries docs/second-brain/template/, which /initSumela materializes into the live wiki.)
     foreach ($item in @("AGENTS.md.template", "CLAUDE.md.template", ".clinerules.template",
-                        ".cursor", ".kilocode", ".trae", ".opencode")) {
+                        ".cursor", ".kilocode", ".trae", ".opencode", "docs")) {
         Copy-Item -Path "$TEMP_DIR\$item" -Destination "." -Recurse -Force -ErrorAction SilentlyContinue
     }
 

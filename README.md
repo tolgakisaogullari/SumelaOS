@@ -41,24 +41,30 @@ powershell scripts/setup.ps1 # Windows
 Copy-paste this prompt into your AI coding assistant (Claude Code, Cursor, OpenCode, Cline, etc.) in any existing project:
 
 ```
-Set up the SumelaOS agent framework in this project. Steps:
+Set up the SumelaOS agent framework in this project. Do everything automatically; leave no manual steps.
 
-1. Clone https://github.com/tolgakisaogullari/SumelaOS to a temporary directory
-2. Copy .sumela/, scripts/, and template files (AGENTS.md.template, CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/) to this project's root
-3. Copy docs/second-brain/template/ as docs/second-brain/, create .gitkeep for empty directories
-4. Delete the temporary clone
-5. Run /initSumela — auto-detect the project's stack, architecture, and conventions
-6. Ask language preferences: (a) What language should the agent use to communicate? (b) What language for code names? (c) What language for code comments/docs?
-7. Ask about memory plugins (Qdrant, Graphify) — if the user declines, do not install or run their scripts
+STEP 1 — Copy the framework into this project.
+Prefer the bundled bootstrap — it clones the repo, copies .sumela/, scripts/, EVERY IDE pointer template, and the second-brain template, then cleans up the clone:
+  • macOS/Linux:  curl -sSL https://raw.githubusercontent.com/tolgakisaogullari/SumelaOS/master/scripts/bootstrap.sh | bash
+  • Windows:      git clone --depth 1 https://github.com/tolgakisaogullari/SumelaOS.git "$env:TEMP\SumelaOS"; pwsh "$env:TEMP\SumelaOS\scripts\bootstrap.ps1"; Remove-Item "$env:TEMP\SumelaOS" -Recurse -Force
+If you cannot run a script, do it manually: clone the repo to a temp dir, then copy into this project's root — .sumela/, scripts/, AGENTS.md.template, ALL IDE pointer templates (CLAUDE.md.template, .clinerules.template, .cursor/, .kilocode/, .trae/, .opencode/), and docs/second-brain/template/ (as docs/second-brain/template/). Then delete the temp clone. Do NOT copy framework-meta files (.git/, .github/, tests/, README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE).
 
-Do everything automatically, leave no manual steps.
+STEP 2 — Run /initSumela. In a single pass it:
+  • auto-detects the stack, architecture, and code conventions;
+  • asks the three languages (interaction / code naming / documentation) and the governance mode (solo | team);
+  • asks which optional memory plugins to install (Qdrant, Graphify) — if you decline, it installs and runs nothing for them;
+  • generates AGENTS.md, the rules, RULE_REGISTRY.md, the wiki, and the IDE pointers;
+  • wires the git hooks (core.hooksPath), seeds the .gitignore secret baseline and the .gitattributes union-merge;
+  • (team mode) sets up CODEOWNERS, and optionally adds the CI validation workflow.
+
+Just run /initSumela and answer its prompts — do not re-ask what it already asks.
 ```
 
 The agent will:
-1. Clone the SumelaOS repo and copy files to your project
+1. Copy the framework into your project (bootstrap, or a complete manual copy)
 2. Auto-detect your tech stack, architecture, and code conventions
-3. Ask about optional memory plugins (Qdrant session memory, Graphify code graph)
-4. Generate AGENTS.md, rules, wiki, and IDE pointers based on your project
+3. Ask your languages, governance mode, and optional memory plugins (Qdrant, Graphify)
+4. Generate AGENTS.md, rules, registries, wiki, and IDE pointers — then wire git hooks, seed the secret/union-merge baselines, and (team mode) CODEOWNERS + optional CI
 
 ### Alternative: One-Command Bootstrap
 
@@ -68,8 +74,8 @@ curl -sSL https://raw.githubusercontent.com/tolgakisaogullari/SumelaOS/master/sc
 
 # Windows/PowerShell
 git clone --depth 1 https://github.com/tolgakisaogullari/SumelaOS.git $env:TEMP\SumelaOS
-Copy-Item -Path "$env:TEMP\SumelaOS\.sumela" -Destination "." -Recurse -Force
-Copy-Item -Path "$env:TEMP\SumelaOS\scripts" -Destination "." -Recurse -Force
+pwsh $env:TEMP\SumelaOS\scripts\bootstrap.ps1   # copies .sumela/, scripts/, all IDE templates, second-brain
+Remove-Item $env:TEMP\SumelaOS -Recurse -Force
 ```
 
 Then run `/initSumela` in your AI assistant.
