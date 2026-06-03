@@ -706,6 +706,24 @@ else:
 fi
 
 # =============================================================================
+# 7b-memory. BRING UP THE MEMORY RUNTIME (auto-safe + confirm-invasive)
+# =============================================================================
+# Copying the plugin files isn't enough — the developer would still have to install
+# Qdrant/Ollama/graphify by hand. setup-memory.sh closes that: it auto-installs the
+# cheap/safe deps (pip) and confirms-and-runs the invasive ones (start Qdrant via
+# Docker, pull the Ollama model, install the graphify CLI), leaving no manual homework.
+if [ ${#PLUGINS[@]} -gt 0 ] && [ -f scripts/setup-memory.sh ] && [ -z "${SUMELA_SKIP_MEMORY_SETUP:-}" ]; then
+  MEM_LIST="$(IFS=,; echo "${PLUGINS[*]}")"; MEM_LIST="$(echo "$MEM_LIST" | tr -d ' ')"
+  info "Setting up the memory runtime (auto-installs safe deps; asks before invasive steps)..."
+  if [ "$NON_INTERACTIVE" = true ]; then
+    # CI/automation: never start services silently — print exact commands instead.
+    bash scripts/setup-memory.sh --plugins "$MEM_LIST" --non-interactive || true
+  else
+    bash scripts/setup-memory.sh --plugins "$MEM_LIST" || true
+  fi
+fi
+
+# =============================================================================
 # 7c. INSTALL GIT HOOKS (core.hooksPath — pre-commit validation + memory sync)
 # =============================================================================
 # Wired whenever the project is a git repo: the pre-commit validation hook is

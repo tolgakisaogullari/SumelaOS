@@ -52,7 +52,7 @@ If you cannot run a script, do it manually: clone the repo to a temp dir, then c
 STEP 2 — Run /initSumela. In a single pass it:
   • auto-detects the stack, architecture, and code conventions;
   • asks the three languages (interaction / code naming / documentation) and the governance mode (solo | team);
-  • asks which optional memory plugins to install (Qdrant, Graphify) — if you decline, it installs and runs nothing for them;
+  • asks which optional memory plugins to install (Qdrant, Graphify) — if you opt in, it then runs scripts/setup-memory.sh to bring the runtime up: auto-installs the safe deps and CONFIRMS each invasive step (start Qdrant via Docker, pull the Ollama model, install the graphify CLI), so you do no manual setup; if you decline, it installs and runs nothing for them;
   • generates AGENTS.md, the rules, RULE_REGISTRY.md, the wiki, and the IDE pointers;
   • wires the git hooks (core.hooksPath), seeds the .gitignore secret baseline and the .gitattributes union-merge;
   • (team mode) sets up CODEOWNERS, and optionally adds the CI validation workflow.
@@ -79,6 +79,21 @@ Remove-Item $env:TEMP\SumelaOS -Recurse -Force
 ```
 
 Then run `/initSumela` in your AI assistant.
+
+### Adding the memory layer later
+
+Declined Qdrant/Graphify at first setup and want it now? The plugin files already
+ship with the framework (bootstrap copies them all), so it's one command — it
+registers the plugin and brings its runtime up (auto-safe deps + confirm-and-run
+for Docker/Ollama/graphify):
+
+```bash
+bash scripts/setup-memory.sh --plugins qdrant-session-memory,graphify-code-graph
+# Windows: pwsh scripts/setup-memory.ps1 -Plugins qdrant-session-memory,graphify-code-graph
+```
+
+Or just ask your agent to "add the Qdrant and Graphify memory plugins." Re-running
+it anytime is safe (idempotent).
 
 ## Features
 
@@ -191,6 +206,7 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 │   ├── validate-structure.sh       # Structure validation (CI + pre-commit run this)
 │   ├── status.sh / status.ps1      # Read-only health report (version, drift, queue, hooks)
 │   ├── update.sh / update.ps1      # Refresh framework core (keeps your overlay)
+│   ├── setup-memory.sh / .ps1      # Bring up Qdrant/Ollama/graphify (auto-safe + confirm-invasive)
 │   ├── reconcile-registry.py       # Auto-register on-disk skills into SKILL_REGISTRY.md
 │   ├── sync-shared-rules.py        # Distribute .sumela-shared/rules/ into each install (monorepo)
 │   ├── sync-mirrors.sh / .ps1      # Keep verbatim IDE mirrors in sync

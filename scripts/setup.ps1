@@ -625,6 +625,22 @@ if ($PluginArray.Count -gt 0) {
 }
 
 # =============================================================================
+# 7b-memory. BRING UP THE MEMORY RUNTIME (auto-safe + confirm-invasive)
+# =============================================================================
+# Copying plugin files isn't enough — setup-memory.ps1 auto-installs the cheap deps
+# (pip) and confirms-and-runs the invasive ones (start Qdrant via Docker, pull the
+# Ollama model, install the graphify CLI), leaving no manual homework.
+if ($PluginArray.Count -gt 0 -and (Test-Path "scripts/setup-memory.ps1") -and (-not $env:SUMELA_SKIP_MEMORY_SETUP)) {
+    $memList = ($PluginArray | ForEach-Object { $_.Trim() }) -join ","
+    Write-Info "Setting up the memory runtime (auto-installs safe deps; asks before invasive steps)..."
+    if ($NonInteractive) {
+        & pwsh -File scripts/setup-memory.ps1 -Plugins $memList -NonInteractive
+    } else {
+        & pwsh -File scripts/setup-memory.ps1 -Plugins $memList
+    }
+}
+
+# =============================================================================
 # 7c. INSTALL GIT HOOKS (core.hooksPath — pre-commit validation + memory sync)
 # =============================================================================
 # Wired whenever the project is a git repo: pre-commit validation is useful for

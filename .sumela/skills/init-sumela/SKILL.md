@@ -226,14 +226,24 @@ The framework works without these plugins — Tier-3 (wiki search) and Tier-4 (g
 
 **WAIT for user choice.** Store the selection as `PLUGIN_CHOICE`.
 
-**Conditional logic based on PLUGIN_CHOICE:**
+**Conditional logic based on PLUGIN_CHOICE** (which directories to COPY):
 
-- If "1" (both): Copy both `.sumela/memory-plugins/qdrant-session-memory/` and `.sumela/memory-plugins/graphify-code-graph/` directories. Run `setup-qdrant.py` if Qdrant is available. Run `graphify .` if graphify is installed. Wire git hooks (see Step 3.7).
-- If "2" (qdrant only): Copy only `.sumela/memory-plugins/qdrant-session-memory/`. Run `setup-qdrant.py` if Qdrant is available. Do NOT copy graphify plugin. Wire git hooks (see Step 3.7).
-- If "3" (graphify only): Copy only `.sumela/memory-plugins/graphify-code-graph/`. Run `graphify .` if graphify is installed. Do NOT copy qdrant plugin.
-- If "4" (none): Do NOT copy `.sumela/memory-plugins/` directory at all. Remove memory-plugins references from SKILL_REGISTRY.md in the generated copy.
+- If "1" (both): Copy both `.sumela/memory-plugins/qdrant-session-memory/` and `.sumela/memory-plugins/graphify-code-graph/`. Wire git hooks (see Step 3.7). Set `MEM_PLUGINS=qdrant-session-memory,graphify-code-graph`.
+- If "2" (qdrant only): Copy only `.sumela/memory-plugins/qdrant-session-memory/`. Wire git hooks. Set `MEM_PLUGINS=qdrant-session-memory`.
+- If "3" (graphify only): Copy only `.sumela/memory-plugins/graphify-code-graph/`. Set `MEM_PLUGINS=graphify-code-graph`.
+- If "4" (none): Do NOT copy `.sumela/memory-plugins/` at all. Remove memory-plugins references from SKILL_REGISTRY.md in the generated copy. Set `MEM_PLUGINS=` (skip the bootstrap below).
 
-**IMPORTANT:** If user declines a plugin, do NOT copy its scripts, do NOT register it in SKILL_REGISTRY.md, and do NOT run any of its scripts. The agent should not reference unavailable plugins in generated files.
+**Bring the runtime up automatically (least manual work — do NOT leave the developer to install Qdrant/Ollama/graphify by hand):**
+
+If `MEM_PLUGINS` is non-empty, ask the user ONE consent question (phrase it in the
+configured `interaction_language` — the wording below is the English reference):
+> *"Set up the runtime for the memory layer you chose? I'll install the safe/cheap deps (pip) directly and confirm each invasive step with you (start Qdrant via Docker, pull the Ollama model, install the graphify CLI). [Y/n]"*
+
+- If **yes**: run `bash scripts/setup-memory.sh --plugins "$MEM_PLUGINS"` (PowerShell: `pwsh scripts/setup-memory.ps1 -Plugins "$MEM_PLUGINS"`). The script auto-installs the safe deps and CONFIRMS each invasive action (start Qdrant via Docker, pull the Ollama model, install the graphify CLI), reusing anything already present, then creates the Qdrant collections + builds the initial graph. **Relay its summary to the user** in the configured language; any line it could not auto-do is printed with the EXACT one-time command — surface those, never paraphrase them away.
+  - If you are running non-interactively (cannot relay the script's own prompts), instead run it with `--yes` after the user agreed above, so the invasive steps are auto-confirmed; or `--non-interactive` if the user wants to start the services themselves (it then prints every exact command instead of running it).
+- If **no**: skip the bootstrap; tell the user they can run `bash scripts/setup-memory.sh` anytime — it is idempotent and will confirm each step.
+
+**IMPORTANT:** If the user declined a plugin (choice 2/3/4), do NOT copy its scripts, do NOT register it in SKILL_REGISTRY.md, do NOT run any of its scripts, and do NOT include it in `MEM_PLUGINS`. Never reference an unavailable plugin in generated files.
 
 ## PHASE 3 — File Generation (after confirmation)
 

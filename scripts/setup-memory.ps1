@@ -1,0 +1,183 @@
+<#
+.SYNOPSIS
+    Bring the optional memory stack up with the fewest manual steps — PowerShell
+    parity of scripts/setup-memory.sh. Auto-runs the cheap/safe parts (pip deps)
+    and confirms-and-runs the invasive ones (start Qdrant via Docker, pull the
+    Ollama model, install the graphify CLI). Nothing is left as "read the docs".
+
+    Idempotent + best-effort: anything present is reused; a prerequisite that
+    can't be auto-installed prints the EXACT command.
+.PARAMETER Plugins
+    Comma-separated: qdrant-session-memory,graphify-code-graph. Default: whatever
+    is present under .sumela/memory-plugins/.
+.PARAMETER Yes
+    Auto-confirm every action (agent/CI after the user opted in).
+.PARAMETER NonInteractive
+    Never prompt; skip invasive steps and print their exact commands.
+#>
+param(
+    [string]$Plugins = "",
+    [switch]$Yes,
+    [switch]$NonInteractive
+)
+
+$ErrorActionPreference = "Continue"
+
+# --- anchor to the nearest .sumela/ ---
+$root = (Get-Location).Path
+while ((-not (Test-Path (Join-Path $root ".sumela"))) -and ($root -ne (Split-Path $root -Parent))) {
+    $root = Split-Path $root -Parent
+}
+if (-not (Test-Path (Join-Path $root ".sumela"))) { Write-Host "setup-memory: no .sumela/ found from here upward."; exit 1 }
+Set-Location $root
+
+$plugDir   = ".sumela/memory-plugins"
+$qHost     = if ($env:QDRANT_HOST) { $env:QDRANT_HOST } else { "localhost" }
+$qPort     = if ($env:QDRANT_PORT) { $env:QDRANT_PORT } else { "6333" }
+$embedModel = if ($env:SUMELA_EMBED_MODEL) { $env:SUMELA_EMBED_MODEL } else { "qwen3-embedding:0.6b" }
+
+$py = if (Get-Command python3 -ErrorAction SilentlyContinue) { "python3" } elseif (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { $null }
+if (-not $py) { Write-Host "python3/python not found — the memory stack needs Python 3.10+."; exit 1 }
+
+$script:manual = 0
+function Ok($m)   { Write-Host "  ok    $m" -ForegroundColor Green }
+function Todo($m) { Write-Host "  todo  $m" -ForegroundColor Yellow; $script:manual++ }
+function Info($m) { Write-Host "  info  $m" -ForegroundColor Cyan }
+function Section($m) { Write-Host ""; Write-Host $m -ForegroundColor White }
+
+function Confirm-Step($msg) {
+    if ($Yes) { return $true }
+    if ($NonInteractive) { return $false }
+    if (-not [Environment]::UserInteractive) { return $false }
+    $a = Read-Host "  $msg [Y/n]"
+    if ($a -match '^(n|no)$') { return $false }
+    return $true   # default Yes on Enter
+}
+
+# Register a memory plugin in SKILL_REGISTRY.md if its files are present but it
+# isn't registered — makes `-Plugins X` an "enable it (now or later)" command.
+function Register-Plugin($p) {
+    $reg = ".sumela/SKILL_REGISTRY.md"
+    if (-not (Test-Path $reg)) { return }
+    $content = Get-Content $reg -Raw
+    if ($content -match ('<name>' + [regex]::Escape($p) + '</name>')) { return }  # already registered
+    $nl = [char]10; $bt = [char]96
+    $entry = $nl + '<skill activation="lazy">' + $nl + '<name>' + $p + '</name>' + $nl +
+        '<description>Memory plugin — see ' + $bt + '.sumela/memory-plugins/' + $p + '/SKILL.md' + $bt + ' for routing and prerequisites.</description>' + $nl +
+        '<path>.sumela/memory-plugins/' + $p + '/SKILL.md</path>' + $nl + '</skill>' + $nl
+    if ($content.Contains('</available_skills>')) {
+        $content.Replace('</available_skills>', $entry + $nl + '</available_skills>') | Set-Content $reg -NoNewline
+        Ok "Registered $p in SKILL_REGISTRY.md"
+    } else { Todo "register $p in SKILL_REGISTRY.md by hand" }
+}
+
+function Qdrant-Up {
+    try {
+        $r = Invoke-WebRequest -Uri "http://${qHost}:${qPort}/readyz" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+        return ($r.StatusCode -ge 200 -and $r.StatusCode -lt 300)
+    } catch { return $false }
+}
+
+function Want($name) {
+    if ($Plugins) { return (",$Plugins," -like "*,$name,*") }
+    return (Test-Path (Join-Path $plugDir $name))
+}
+
+Write-Host "SumelaOS memory setup  ($root)"
+
+# Enable explicitly-requested plugins (register now; the "add a plugin later" path).
+if ($Plugins) {
+    Section "Enable plugins"
+    foreach ($p in ($Plugins -split ",")) {
+        $p = $p.Trim(); if (-not $p) { continue }
+        if (Test-Path (Join-Path $plugDir $p)) { Register-Plugin $p }
+        else { Todo "Plugin '$p' is not present under $plugDir/ — fetch it first (re-run scripts/bootstrap.ps1, or ask your agent to add it), then re-run this." }
+    }
+}
+
+# === Qdrant session memory ===
+if ((Want "qdrant-session-memory") -and (Test-Path (Join-Path $plugDir "qdrant-session-memory"))) {
+    Section "Qdrant session memory"
+    $req = Join-Path $plugDir "qdrant-session-memory/requirements.txt"
+    if (Test-Path $req) {
+        & $py -m pip install -q -r $req *> $null
+        if ($LASTEXITCODE -eq 0) { Ok "Python deps installed ($req)" } else { Todo "pip install failed — run: $py -m pip install -r $req" }
+    }
+
+    # Ollama: install is platform-specific (guide); model pull is cheap (confirm-and-run).
+    if (Get-Command ollama -ErrorAction SilentlyContinue) {
+        $modelRoot = ($embedModel -split ":")[0]
+        if ((ollama list 2>$null | Out-String) -match [regex]::Escape($modelRoot)) {
+            Ok "Ollama model present ($embedModel)"
+        } elseif (Confirm-Step "Pull the embedding model '$embedModel' now (~hundreds of MB)?") {
+            ollama pull $embedModel
+            if ($LASTEXITCODE -eq 0) { Ok "Pulled $embedModel" } else { Todo "ollama pull failed — run: ollama pull $embedModel" }
+        } else { Todo "Pull the embedding model: ollama pull $embedModel" }
+    } else {
+        Todo "Install Ollama (https://ollama.com/download), then: ollama pull $embedModel"
+    }
+
+    # Qdrant server: reuse if running; else Docker (confirm); else guide.
+    if (Qdrant-Up) {
+        Ok "Qdrant reachable at ${qHost}:${qPort}"
+    } elseif (Get-Command docker -ErrorAction SilentlyContinue) {
+        if (Confirm-Step "Start a local Qdrant via Docker (qdrant/qdrant on :${qPort})?") {
+            if ((docker ps -a --format '{{.Names}}' 2>$null) -contains "sumela-qdrant") {
+                docker start sumela-qdrant *> $null
+            } else {
+                docker run -d --name sumela-qdrant -p "${qPort}:6333" -v sumela-qdrant-storage:/qdrant/storage qdrant/qdrant *> $null
+            }
+            $n = 0; while ($n -lt 20 -and -not (Qdrant-Up)) { $n++; Start-Sleep -Seconds 1 }
+            if (Qdrant-Up) { Ok "Qdrant started (container: sumela-qdrant)" } else { Todo "Qdrant container started but not ready yet — re-run once it is up" }
+        } else { Todo "Start Qdrant: docker run -d --name sumela-qdrant -p ${qPort}:6333 -v sumela-qdrant-storage:/qdrant/storage qdrant/qdrant" }
+    } else {
+        Todo "Start Qdrant (install Docker, then): docker run -d -p ${qPort}:6333 -v sumela-qdrant-storage:/qdrant/storage qdrant/qdrant"
+    }
+
+    if (Qdrant-Up) {
+        $s = Join-Path $plugDir "qdrant-session-memory/scripts"
+        if (Test-Path (Join-Path $s "setup-qdrant.py")) {
+            & $py (Join-Path $s "setup-qdrant.py") *> $null
+            if ($LASTEXITCODE -eq 0) { Ok "Qdrant collections ready" } else { Todo "setup-qdrant.py failed — run: $py $s/setup-qdrant.py" }
+        }
+        if ((Test-Path (Join-Path $s "ingest-wiki-to-qdrant.py")) -and (Test-Path "docs/second-brain/wiki")) {
+            & $py (Join-Path $s "ingest-wiki-to-qdrant.py") *> $null
+            if ($LASTEXITCODE -eq 0) { Ok "Seeded wiki_pages" } else { Info "wiki_pages seeding skipped (will sync on pull)" }
+        }
+        Info "code_chunks left empty — first build via: $py $plugDir/qdrant-session-memory/scripts/ingest-code-to-qdrant.py (or the pull-time prompt)"
+    }
+}
+
+# === Graphify code graph ===
+if ((Want "graphify-code-graph") -and (Test-Path (Join-Path $plugDir "graphify-code-graph"))) {
+    Section "Graphify code graph"
+    $req = Join-Path $plugDir "graphify-code-graph/requirements.txt"
+    if (Test-Path $req) { & $py -m pip install -q -r $req *> $null; if ($LASTEXITCODE -eq 0) { Ok "Python deps installed ($req)" } else { Info "pip deps skipped" } }
+
+    if (Get-Command graphify -ErrorAction SilentlyContinue) {
+        Ok "graphify CLI present"
+    } elseif ((Get-Command uv -ErrorAction SilentlyContinue) -and (Confirm-Step "Install the graphify CLI via 'uv tool install graphifyy'?")) {
+        uv tool install graphifyy *> $null
+        if ($LASTEXITCODE -eq 0) { Ok "graphify installed (uv)" } else { Todo "install failed — run: uv tool install graphifyy" }
+    } elseif ((Get-Command pipx -ErrorAction SilentlyContinue) -and (Confirm-Step "Install the graphify CLI via 'pipx install graphifyy'?")) {
+        pipx install graphifyy *> $null
+        if ($LASTEXITCODE -eq 0) { Ok "graphify installed (pipx)" } else { Todo "install failed — run: pipx install graphifyy" }
+    } else {
+        Todo "Install the graphify CLI: uv tool install graphifyy   (or: pipx install graphifyy)"
+    }
+
+    if (Get-Command graphify -ErrorAction SilentlyContinue) {
+        if (Confirm-Step "Build the code graph now (graphify update .)?") {
+            graphify update . *> $null
+            if ($LASTEXITCODE -eq 0) { Ok "Code graph built (graphify-out/)" } else { Todo "build failed — run: graphify update ." }
+        } else { Todo "Build the code graph: graphify update ." }
+    }
+}
+
+Section "Summary"
+if ($script:manual -eq 0) {
+    Write-Host "Memory stack ready. Nothing left to do by hand." -ForegroundColor Green
+} else {
+    Write-Host "$($script:manual) item(s) need a one-time manual step — each is listed above with the exact command. Re-run 'pwsh scripts/setup-memory.ps1' afterwards to finish wiring." -ForegroundColor Yellow
+}
+exit 0

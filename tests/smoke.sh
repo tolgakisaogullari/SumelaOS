@@ -19,6 +19,11 @@
 # -----------------------------------------------------------------------------
 set -uo pipefail
 
+# Keep the smoke test hermetic: setup wires the memory plugins, but we don't want
+# it to pip-install / start Docker / pull models here. (setup-memory.sh is covered
+# by its own checks.)
+export SUMELA_SKIP_MEMORY_SETUP=1
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 

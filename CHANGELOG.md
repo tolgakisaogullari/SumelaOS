@@ -29,6 +29,19 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 - **OpenCode IDE support** — `.opencode/AGENTS.md.template` pointer; wired into
   `setup.sh` / `setup.ps1` (template list, IDE map, multiselect, `--ides`) and the
   README Supported-IDEs table, completing the IDE matrix the README already advertised.
+- **One-step memory runtime** — `scripts/setup-memory.sh` / `.ps1`: opting into a
+  memory plugin no longer leaves the developer to install Qdrant/Ollama/graphify by
+  hand. It auto-installs the cheap/safe deps (pip) and CONFIRMS-and-runs the invasive
+  steps (start Qdrant via Docker, pull the Ollama embedding model, install the graphify
+  CLI), reuses anything already present, then creates the Qdrant collections + builds
+  the initial graph. Idempotent; non-interactive mode prints every exact command
+  instead of running it; `/initSumela` and `setup.sh`/`.ps1` invoke it after copying
+  the plugins (skip with `SUMELA_SKIP_MEMORY_SETUP=1`, e.g. in CI / the smoke test).
+  It is also the **add-a-plugin-later** path: since bootstrap copies all plugin
+  files, `setup-memory.sh --plugins <name>` registers a not-yet-enabled plugin in
+  `SKILL_REGISTRY.md` and brings its runtime up — no re-init needed. All script
+  output is English (framework artifacts stay language-neutral); the `/initSumela`
+  consent prompt is rendered in the developer's configured interaction language.
 - **End-to-end smoke test** — `tests/smoke.sh` runs `setup.sh` against a throwaway
   copy and asserts the contract (AGENTS.md + every selected IDE pointer generated, a
   plugin registered exactly once, no unrendered placeholders, structure + reconcile
