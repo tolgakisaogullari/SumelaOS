@@ -1,6 +1,6 @@
 ---
 name: code-reviewer-prompt
-description: "LEGACY single-reviewer payload — degraded fallback for requesting-code-review when the parallel 3-lane panel (reviewer-correctness-security / reviewer-design-contracts / reviewer-integration-ops) cannot run (no subagent primitive, or a trivially small diff). Evaluates staged/uncommitted/committed changes for production readiness, adaptive TDD compliance, and strict security standards."
+description: "LEGACY single-reviewer payload — degraded fallback for requesting-code-review when the task-scoped parallel review panel (mandatory Correctness & Security floor + task-composed lanes, default 3) cannot run (no subagent primitive, or a trivially small diff). Evaluates staged/uncommitted/committed changes for production readiness, adaptive TDD compliance, and strict security standards."
 ---
 
 <system_role>

@@ -19,7 +19,7 @@ Map every review finding to the severity model used by `requesting-code-review`:
 <feedback_sources>
 Treat feedback source as part of the context:
 - **Human partner / user:** Highest priority. If feedback conflicts with the current plan, clarify intent before changing direction.
-- **Local subagent review:** Strong signal, but still verify against code, tests, architecture, and security constraints. This may arrive as a **merged parallel-panel report** (Correctness & Security / Design & Contracts / Integration & Operations lanes synthesized by `requesting-code-review`): the combined gate is AND (any lane's Critical blocks), and a `CONFLICT` marker means the lanes disagreed — resolve it on technical merit, do not auto-pick one side. A finding flagged by multiple lanes is corroborated, not duplicated.
+- **Local subagent review:** Strong signal, but still verify against code, tests, architecture, and security constraints. This may arrive as a **merged parallel-panel report** — a task-scoped set of lanes (always a Correctness & Security floor, plus task-composed lanes) synthesized by `requesting-code-review`: the combined gate is AND (any lane's Critical blocks), and a `CONFLICT` marker means the lanes disagreed — resolve it on technical merit, do not auto-pick one side. A finding flagged by multiple lanes is corroborated, not duplicated. After you apply fixes, `requesting-code-review` Step 8 will ask the user whether to re-review or proceed — surface that choice, don't auto-advance.
 - **External / GitHub reviewer:** Evaluate as a suggestion unless repository policy or the user makes it mandatory. If it conflicts with an earlier user decision or documented architecture, stop and ask the user.
 </feedback_sources>
 
