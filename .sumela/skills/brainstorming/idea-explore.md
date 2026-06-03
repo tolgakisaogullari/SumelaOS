@@ -103,9 +103,9 @@ If the user confirms, save to `docs/ideas/[idea-name].md` (or a path of their ch
 
 Once the direction is confirmed and the one-pager is approved, present this choice:
 
-"Fikir netleşti. Sıradaki adım ne olsun?
-1. **Mimari tasarıma geç:** `brainstorming` skill'ini çağırarak teknik seçenekleri ve spec'i oluşturalım.
-2. **Burada dur:** Şimdilik bu aşamada kalıp ileride devam edelim."
+"The idea is clear. What's the next step?
+1. **Move to architecture design:** invoke the `brainstorming` skill to lay out the technical options and the spec.
+2. **Stop here:** stay at this stage for now and continue later."
 
 If Option 1: invoke `brainstorming` immediately. Pass the confirmed "How Might We" statement and Recommended Direction as context.
 </workflow>

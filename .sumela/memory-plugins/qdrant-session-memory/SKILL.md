@@ -53,7 +53,7 @@ python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<fi
 
 These triggers require an explicit user query:
 
-- **Trigger:** Query contains "neden", "niye", "why", "ne karar verdik", "what did we decide", "geçen sefer", "previously", "last time", or references past sprint/decision/ADR.
+- **Trigger:** Query contains "why", "what did we decide", "previously", "last time" (or the equivalent in any language), or references past sprint/decision/ADR.
 - **Command:** `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --limit 3`
 - **Threshold:** Top score ≥ 0.5 → read matching session summary file
 - **Fallback:** If Qdrant unavailable or score < 0.5 → skip, let Tier-3 (_SEARCH_INDEX.md) handle it

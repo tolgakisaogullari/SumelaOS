@@ -29,12 +29,12 @@ The `wiki/` directory has FIVE special files (frontmatter-free, governed by `_SC
 Determine which workflow to execute based on these signals (highest specificity wins):
 
 - **Session start** → bootstrap reads + parity + queue count are governed by `.sumela/sumela-prompt.md` (`<session_bootstrap>`). This skill is invoked LAZILY when an information gap appears or one of the triggers below fires.
-- **User says** "save", "add to wiki", "ingest", "note this", "remember this", "kaydet", "wiki'ye ekle" → INGEST workflow.
-- **User drops multiple sources** or says "batch ingest", "process all", "hepsini işle" → BATCH INGEST workflow.
+- **User says** "save", "add to wiki", "ingest", "note this", "remember this" (or the equivalent in any language) → INGEST workflow.
+- **User drops multiple sources** or says "batch ingest", "process all" (or the equivalent in any language) → BATCH INGEST workflow.
 
-- **User says** "clean the wiki", "lint", "health check", "wiki'yi temizle", "sağlık kontrolü" → LINT workflow.
-- **Ad-hoc decision during conversation** — User makes or confirms an architectural/technology decision outside of a coding task (e.g., "let's use Redis", "bu pattern'i seçelim", "select this pattern") → DECISION CAPTURE workflow.
-- **User says** "save this", "save this source", "ingest that URL", "bunu kaydet", "şu URL'yi ingest et", or a lint data-gap suggestion is approved → WEB SOURCE CAPTURE workflow.
+- **User says** "clean the wiki", "lint", "health check" (or the equivalent in any language) → LINT workflow.
+- **Ad-hoc decision during conversation** — User makes or confirms an architectural/technology decision outside of a coding task (e.g., "let's use Redis", "select this pattern") → DECISION CAPTURE workflow.
+- **User says** "save this", "save this source", "ingest that URL" (or the equivalent in any language), or a lint data-gap suggestion is approved → WEB SOURCE CAPTURE workflow.
 - **Threshold trigger (ingest-based):** After writing a new `ingest` entry to `_LOG.md`, count total `ingest` entries. If count is a multiple of 5 (5, 10, 15, ...), ASK the user: *"After the last 5 ingests, I recommend a full lint — should I run it?"* — NEVER auto-run lint.
 - **Threshold trigger (time-based):** At session start, after reading `_LOG.md`, check the date of the last `lint` entry. If 7+ days have passed since the last lint, ASK the user: *"It's been 7+ days since the last lint — I recommend a health check. Should I run it?"* — NEVER auto-run lint.
 - **Ingest with image references** → the standard INGEST workflow activates IMAGE READING WORKFLOW (operation 8) as a sub-step when `raw_sources/assets/` contains files referenced by the new source.
@@ -46,7 +46,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
 1. INGEST (Processing new sources — interactive by default):
    - **CONTEXT SCAN (MANDATORY FIRST STEP):** Read `_INDEX.md` to understand what wiki pages ALREADY exist. This prevents duplicate pages and ensures you UPDATE existing pages instead of creating redundant ones.
    - Read the new file(s) from `raw_sources/`.
-   - **INTERACTIVE DISCUSSION (DEFAULT):** Present key takeaways to the user and discuss what to emphasize, what's surprising, and what contradicts existing knowledge. This is how the human stays in the loop as curator. ONLY skip this step if the user explicitly says "sessiz ingest" or "skip discussion".
+   - **INTERACTIVE DISCUSSION (DEFAULT):** Present key takeaways to the user and discuss what to emphasize, what's surprising, and what contradicts existing knowledge. This is how the human stays in the loop as curator. ONLY skip this step if the user explicitly says "silent ingest" or "skip discussion".
    - MANDATORY SOURCE SUMMARY: Create a `source-summary` page in `wiki/summaries/<source-slug>.md` using the `_SCHEMA.md` source-summary template. This page captures the source's key takeaways, wiki impact, and any contradictions. Every raw_source MUST have exactly one corresponding summary page.
    - Create or update relevant concept/entity pages in the `wiki/` (follow `_SCHEMA.md` templates and frontmatter). A single source may touch 10-15 existing wiki pages — be thorough.
    - Synthesize contradictions: If new data contradicts old data, note it explicitly in the wiki pages using the strike-through pattern from `_SCHEMA.md` Section 9.
@@ -64,7 +64,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
 
 2. QUERY & COMPILE (Answering questions):
    - Read `_INDEX.md` to locate relevant wiki pages, then read those specific pages.
-   - **SESSION CONTEXT CHECK:** If the query references past conversations (e.g., "what did we discuss last week?", "geçen hafta ne konuştuk?", "we discussed this before", "daha önce şunu tartışmıştık"), check `_SEARCH_INDEX.md` for `session-summary` type entries. Read matched session summaries to retrieve conversational context.
+   - **SESSION CONTEXT CHECK:** If the query references past conversations (e.g., "what did we discuss last week?", "we discussed this before" — or the equivalent in any language), check `_SEARCH_INDEX.md` for `session-summary` type entries. Read matched session summaries to retrieve conversational context.
    - Synthesize the answer using strict citations from the wiki.
    - QUERY WRITE-BACK (USER APPROVAL REQUIRED): If your synthesized answer combines **3+ wiki pages** OR exceeds **~200 words of analysis**, you MUST ASK the user: *"Should I save this analysis as an insight page at `wiki/insights/YYYY-MM-DD-<topic>.md`?"* — If approved: create the insight page using `_SCHEMA.md` insight template, update `_INDEX.md`, update `_SEARCH_INDEX.md` with the new insight row, append `query` entry to `_LOG.md`. **NEVER auto-save without explicit user approval.**
 
@@ -97,7 +97,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
    - ASK the user: *"Would you like me to save this decision to the wiki?"* — NEVER auto-capture without approval.
    - If approved:
      - Read `wiki/architecture-decisions.md` to find the latest AD-XX number.
-     - Append a new AD entry using the `_SCHEMA.md` decision template (Karar → Bağlam → Alternatifler → Sonuç).
+     - Append a new AD entry using the `_SCHEMA.md` decision template (Decision → Context → Alternatives → Outcome).
      - Update `_INDEX.md` if the decision count changed significantly or a new category emerged.
      - Update `_SEARCH_INDEX.md`: update the `architecture-decisions` row's Key Terms with the new AD-XX ID.
      - Append a `decision` entry to `_LOG.md`.
@@ -112,8 +112,8 @@ When the user asks you to interact with the Second Brain, execute one of these s
    - Karpathy principle: *"Every source should be integrated into the wiki. Raw sources without summaries are dead weight."*
 
 7. WEB SOURCE CAPTURE (Saving external knowledge to raw_sources):
-   - Triggered when: (a) a lint "data gap" suggestion is approved by the user, OR (b) the user explicitly says "bunu kaydet", "save this source", "şu URL'yi ingest et", OR (c) the agent discovers critical external documentation during brainstorming/debugging that would benefit the wiki.
-   - ALWAYS ASK the user before saving: *"Bu bilgiyi raw_sources'a kaydedip wiki'ye ingest etmemi ister misiniz?"* — NEVER auto-save.
+   - Triggered when: (a) a lint "data gap" suggestion is approved by the user, OR (b) the user explicitly says "save this", "save this source", "ingest that URL" (or the equivalent in any language), OR (c) the agent discovers critical external documentation during brainstorming/debugging that would benefit the wiki.
+   - ALWAYS ASK the user before saving: *"Want me to save this to raw_sources and ingest it into the wiki?"* — NEVER auto-save.
    - If approved:
      1. Fetch the content (via WebFetch or copy from chat context).
      2. Save as `docs/second-brain/raw_sources/YYYY-MM-DD-<descriptive-slug>.md` with a YAML header noting the original URL/source.
@@ -154,7 +154,7 @@ There is NO separate "user query" vs "agent reasoning" branch. Same tiers, same 
 
 | Tier | System | Command | When |
 |---|---|---|---|
-| 1a | Qdrant `chat_history` | `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --limit 3` | Past sessions, prior decisions, "geçen hafta", "daha önce" |
+| 1a | Qdrant `chat_history` | `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --limit 3` | Past sessions, prior decisions, "last week", "previously" |
 | 1b | Qdrant `wiki_pages` | `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --collection wiki_pages` | Curated knowledge — ADRs, entity defs, sprint plans (semantic) |
 | 1c | Qdrant `code_chunks` | `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --collection code_chunks` | Source code semantic search (when Graphify lookup is too narrow) |
 | 2 | Graphify graph (read directly via `query-graph.py`) | `python .sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py "<symbol>"` (primary, surfaces call edges); `graphify query` / `explain` / `path` (secondary, cluster/community) | Function/class lookup, call graph, callers/callees, impact analysis |

@@ -1,6 +1,6 @@
 ---
 name: self-improvement-curator
-description: "Use after every user turn to capture correction, confirmation, decision, friction, challenge, resolution, or preference signals (resolution = bugs the agent fixes itself; preference = standing user instructions); or when the user invokes /evolve, says 'evolve', 'review pending improvements', 'pending önerileri incele', or asks to review captured learnings."
+description: "Use after every user turn to capture correction, confirmation, decision, friction, challenge, resolution, or preference signals (resolution = bugs the agent fixes itself; preference = standing user instructions); or when the user invokes /evolve, says 'evolve', 'review pending improvements', or asks to review captured learnings."
 ---
 
 <purpose>
@@ -20,9 +20,8 @@ This skill's `evolve_review_workflow` MUST be triggered when the user invokes an
 
 **Slash command (Claude Code only):** `/evolve`
 
-**Natural language triggers (all IDEs):**
-- Turkish: "evolve", "öğrenilenleri gözden geçir", "improvement'ları göster", "pending önerileri incele", "self-improvement review", "kuyruğu aç"
-- English: "run evolve", "review improvements", "review pending improvements", "show the improvement queue", "let's review what you learned"
+**Natural language triggers (all IDEs, in any language — these are English references):**
+- "run evolve", "review improvements", "review pending improvements", "show the improvement queue", "let's review what you learned", or the equivalent in the user's language.
 
 When any trigger fires, execute `<evolve_review_workflow>` below. The workflow definition here is the SINGLE SOURCE OF TRUTH — the Claude Code slash command at `.claude/commands/evolve.md` is only a thin ergonomic shortcut that delegates to this skill.
 </trigger_phrases>
@@ -38,9 +37,9 @@ During every user turn — and after you independently resolve a bug or problem 
 
 **Signal types** (full definitions in `_SCHEMA.md` Section 15.4):
 
-1. **`correction`** — User says "hayır", "öyle değil", "bir daha böyle yapma", "şunu kullanma", or equivalents in any language. Capture: what they corrected, what the correct approach is.
+1. **`correction`** — User says "no", "not like that", "don't do it this way again", "don't use that", or the equivalent in any language. Capture: what they corrected, what the correct approach is.
 
-2. **`confirmation`** — User validates a non-obvious choice you made ("evet, tam da böyle", "doğru seçim", "güzel yakalamışsın"). Only capture if the choice was **contested or non-default** — don't capture routine "ok" responses.
+2. **`confirmation`** — User validates a non-obvious choice you made ("yes, exactly", "good call", "nice catch"). Only capture if the choice was **contested or non-default** — don't capture routine "ok" responses.
 
 3. **`decision`** — A decision is made during brainstorming/ULTRATHINK about **how the agent should work** (which rule to add, which workflow to change, which skill to invoke differently). Capture: the decision, alternatives, reason.
 
@@ -57,17 +56,17 @@ During every user turn — and after you independently resolve a bug or problem 
 6. **`resolution`** — You autonomously diagnosed and fixed a bug, or worked a non-trivial problem through to a working solution, **without the user pointing it out**. The agent flags its OWN learning here; capture stays silent. This is the only signal type that originates from the agent's own problem-solving rather than a user turn.
 
    **Generalize the lesson — capture the CLASS of problem, never the one-off instance.** The `proposed_change` must read as a guard that prevents a DIFFERENT future occurrence of the same class, not a note about this specific symptom:
-   - ✗ instance (useless): *"OrderService DI konteynerine register edilmemişti, ekledim."*
-   - ✓ class (reusable): *"Yeni bir servis oluşturulduğunda DI konteynerine register edilmeli — aksi halde runtime'da resolve hatası alınır."*
+   - ✗ instance (useless): *"OrderService wasn't registered in the DI container, so I added it."*
+   - ✓ class (reusable): *"When a new service is created it must be registered in the DI container — otherwise you get a runtime resolve error."*
 
-   Generalization test: *"Bu cümle, aynı sınıftan FARKLI bir vakayı (başka bir servis, başka bir modül) gelecekte önler mi?"* If no, it is too specific — generalize it or skip it. Strip instance-specific identifiers (the concrete service/file/value) from `proposed_change`; keep them only in `evidence` as the triggering example.
+   Generalization test: *"Would this sentence prevent a DIFFERENT future case of the same class (another service, another module)?"* If no, it is too specific — generalize it or skip it. Strip instance-specific identifiers (the concrete service/file/value) from `proposed_change`; keep them only in `evidence` as the triggering example.
 
    - **Confidence:** `medium` by default (concrete evidence — the error + the fix diff — but the user didn't weigh in, so it MUST be captured); escalate to `high` if the same class already cost time in a prior session (it is then also `friction`) or the root cause was non-obvious.
    - **Scope:** usually `rule` (a standard the agent should follow going forward — append to the most relevant `.sumela/rules/<category>.md`). Use `wiki` only when the lesson is a project-specific architectural fact, not a general practice.
 
-7. **`preference`** — The user volunteers a durable, forward-looking standing instruction about how you should work, **without reacting to a specific mistake**: *"bundan sonra hep strict mode kullan"*, *"yorumları minimal tut"*, *"PR açıklamalarını şu formatta yaz"*, *"deploy deyince staging anla"*. Capture the standing rule and the scope it applies to.
+7. **`preference`** — The user volunteers a durable, forward-looking standing instruction about how you should work, **without reacting to a specific mistake**: *"always use strict mode from now on"*, *"keep comments minimal"*, *"write PR descriptions in this format"*, *"'deploy' means staging"*. Capture the standing rule and the scope it applies to.
 
-   **Distinct from `correction`:** `correction` is REACTIVE — the user rejects a specific output, so an error occurred. `preference` is PROACTIVE — a standing rule offered with no triggering mistake. Test: *if the user is fixing something you just did → `correction`; if they are setting a rule for FUTURE work independent of any specific output → `preference`.* (Negative-reactive phrasings like "bir daha böyle yapma" / "şunu kullanma" stay `correction`.)
+   **Distinct from `correction`:** `correction` is REACTIVE — the user rejects a specific output, so an error occurred. `preference` is PROACTIVE — a standing rule offered with no triggering mistake. Test: *if the user is fixing something you just did → `correction`; if they are setting a rule for FUTURE work independent of any specific output → `preference`.* (Negative-reactive phrasings like "don't do it this way again" / "don't use that" stay `correction`.)
 
    - **Confidence:** an explicit standing instruction → `high` (MUST capture); a preference merely inferred from one ambiguous remark → `medium`.
    - **Scope:** usually `rule` (a behavioral standard — append to the relevant `.sumela/rules/<category>.md`); use `active-context` if it is sprint-scoped rather than durable. If unsure, pick the closest scope and let `/evolve` reclassify.
@@ -105,7 +104,7 @@ If unsure, pick the closest scope and let `/evolve` review reclassify it.
 </signal_capture_workflow>
 
 <evolve_review_workflow>
-Triggered by the user invoking `/evolve` (or explicitly asking "pending improvements'ları göster", "öğrenilenleri review edelim").
+Triggered by the user invoking `/evolve` (or explicitly asking to show pending improvements / review what was learned, in any language).
 
 0. PRINT CONTEXT MANIFEST FIRST. `/evolve` mutates rules/skills/schema/wiki, so the user must see exactly which skills and rules are currently loaded BEFORE any pending entry is reviewed. Follow the format defined in `sumela-prompt.md` `<context_manifest_protocol>`. If GAPS are non-zero, ask the user whether to load the missing items first or proceed knowingly.
 0.5. GOVERNANCE + RECONCILE.
@@ -119,18 +118,18 @@ Triggered by the user invoking `/evolve` (or explicitly asking "pending improvem
    - **In-flight skip-guard (team mode):** a `proposed` entry's status flip lives inside its still-open PR, so on the base branch it may still read `pending`. Before listing a pending entry, skip it if an evolve PR is already in flight for it: `git branch --list "sumela/evolve-<IMP-ID>"` is non-empty OR `gh pr list --head "sumela/evolve-<IMP-ID>" --state open` returns a PR. Report such entries as "in review" (handled by reconcile), do NOT re-propose them.
 2. List all `pending` entries to the user with full context (frontmatter: id, signal_type, scope, target, confidence, provider_context; body: `## Proposed Change`, `## Evidence`).
 3. For EACH pending entry, present a diff preview of what the change would look like (read the target file first, show before/after).
-4. Ask the user for each entry: **[onayla / reddet / düzenle / ertele]**.
+4. Ask the user for each entry: **[approve / reject / edit / defer]** (render the options in the user's language).
 5. Based on user choice:
-   - **Onayla (approve):**
-     - If `scope: rule` or `scope: schema` → DOUBLE APPROVAL. First confirm: *"Bu kural/schema değişikliği için çift onay gerekiyor. Değişikliği yazmaya hazırım, onaylıyor musun?"* Only proceed on a second explicit yes.
+   - **Approve:**
+     - If `scope: rule` or `scope: schema` → DOUBLE APPROVAL. First confirm: *"This rule/schema change needs a second approval. I'm ready to write it — do you confirm?"* Only proceed on a second explicit yes.
      - **ROUTING (governance, from step 0.5):** first VALIDATE `scope` — it MUST be one of `rule`, `skill`, `schema`, `wiki`, `active-context`. If it is missing or unrecognized, STOP and ask the user to fix the entry's scope; do NOT default to direct apply (a typo'd gated scope must never bypass the team gate). Then: if mode is `team` AND `scope` ∈ {`rule`, `skill`, `schema`} → use the **PR-GATED PATH** terminal. Otherwise (`solo` mode, or `scope` ∈ {`wiki`, `active-context`}) → use the **DIRECT PATH** terminal. The change MECHANICS below (BOOTSTRAP, DUPLICATE CHECK, apply, REGISTRY UPDATE) are IDENTICAL in both paths — only WHERE they run (working tree vs a dedicated branch) and the entry's terminal status differ.
      - **BOOTSTRAP (auto-create if missing):** Before writing, check if the target file exists. If NOT:
        1. Ensure the parent directory exists (`mkdir -p <parent>` equivalent — in bash: `mkdir -p "$(dirname <target>)"`).
        2. Create an empty file or a minimal stub (for `scope: rule`, a one-line topic header `# <topic>`; for other scopes, empty).
        3. Proceed with the normal write step as if the file existed.
-       4. Mention in the summary report: *"<target> yeni oluşturuldu."*
+       4. Mention in the summary report: *"<target> was created."*
      - **DUPLICATE CHECK (MANDATORY before any append):** Before appending content to an existing rule/skill/wiki file, scan the target file for an existing block with the same IMP-ID reference, the same heading, or substantially overlapping content (e.g., the same code example or the same imperative sentence). If a duplicate is found:
-       1. Report it to the user: *"Bu içerik zaten {file}:{line} satırında mevcut. (a) yeni bloğu ekleme, mevcudu güncelle, (b) iki bloğu birleştir, (c) yine de ekle (gerekçe iste)."*
+       1. Report it to the user: *"This content already exists at {file}:{line}. (a) don't add a new block, update the existing one; (b) merge the two blocks; (c) append anyway (ask for a justification)."*
        2. Default to (a) UPDATE EXISTING — edit the existing block in place, preserving the original IMP-ID reference and adding any new context.
        3. Choose (b) MERGE only when the user explicitly asks; preserve both IMP-IDs in the merged block.
        4. Choose (c) APPEND ANYWAY only when the user provides a justification (e.g., the duplication is intentional for emphasis); record the justification in the `_LOG.md` entry.
@@ -168,17 +167,17 @@ Triggered by the user invoking `/evolve` (or explicitly asking "pending improvem
        - Append an `evolve` entry to `_LOG.md` on the branch: `## [YYYY-MM-DD] evolve | <IMP-ID> proposed: <summary> (PR: <url>)`.
        - Do NOT mark `applied` and do NOT run the challenge-supersede update yet — both happen at RECONCILE (step 0.5) when the PR merges (the merge brings `status: proposed` onto base; reconcile then flips it to `applied`).
        - Tell the user: the change awaits a code owner's review in the PR; it becomes `applied` automatically on the next `/evolve` after the PR merges.
-   - **Reddet (reject):**
+   - **Reject:**
      - Edit the entry FILE's frontmatter in place: `status: rejected`, `rejected_at: <today>`; ask user for `rejection_reason` and record it. The file is NOT deleted.
      - Do NOT write to `_LOG.md` for rejects (avoids log noise).
-   - **Düzenle (edit):**
+   - **Edit:**
      - Ask user what to change in the `## Proposed Change` body / `target` / `scope`, update the entry file in place, keep `status: pending`.
-   - **Ertele (defer):**
+   - **Defer:**
      - Leave `status: pending`, add a `deferred_at: <today>` frontmatter field.
 6. After processing all pending entries, report summary to user: N applied (direct), N proposed (PR opened, team mode), N rejected, N deferred — plus any reconcile outcomes from step 0.5 (N merged→applied).
 7. Closing reminder, governance-aware:
-   - If any gated entry was **applied directly** (solo mode): *"Rule/skill değişiklikleri uygulandı, registry de güncellendi (varsa). Yeni session'da agent yeni durumu otomatik keşfedecek. İstersen `/context` ile manifest'i yeniden bastırabilirim."*
-   - If any gated entry was **proposed** (team mode): *"Rule/skill/schema değişiklikleri PR olarak açıldı ve code-owner review'ı bekliyor; merge olunca bir sonraki `/evolve`'da otomatik `applied` olacak. PR linkleri: <…>."* Do NOT claim these are live yet — they take effect only after the PR merges.
+   - If any gated entry was **applied directly** (solo mode): *"Rule/skill changes applied, and the registry was updated (if relevant). A new session will discover the new state automatically. I can reprint the manifest with `/context` if you want."*
+   - If any gated entry was **proposed** (team mode): *"Rule/skill/schema changes were opened as a PR and await code-owner review; once merged, the next `/evolve` flips them to `applied` automatically. PR links: <…>."* Do NOT claim these are live yet — they take effect only after the PR merges.
 </evolve_review_workflow>
 
 <challenge_detection_rules>
@@ -229,5 +228,5 @@ Hook signal capture into specific skill workflows:
 | `systematic-debugging` | A bug pattern repeated 2+ times across sessions → `friction` signal. |
 | `systematic-debugging` (root cause fixed) | A bug diagnosed and fixed to a working state → `resolution` signal capturing the GENERALIZED root-cause guard (the class, not the instance). |
 | `requesting-code-review` / `receiving-code-review` | A reviewer (subagent or user) rejects an approach → `correction` signal. |
-| `finishing-a-development-branch` | Before final commit, remind the user once: *"Branch kapanışı önce /evolve açmak ister misin?"* Optional, never blocking. |
+| `finishing-a-development-branch` | Before final commit, remind the user once: *"Want to run /evolve before closing the branch?"* Optional, never blocking. |
 </superpowers_integration>

@@ -20,7 +20,7 @@ Payload schema per chunk:
     session_id    : str    (filename without .md)
     date          : str    (ISO date, from frontmatter or today)
     topics        : list   (from frontmatter session_topics)
-    decisions     : list   (extracted from "## Alınan Kararlar" / "## Decisions" block)
+    decisions     : list   (extracted from a "## Decisions" / "## Decisions Made" block)
     affected_files: list   (any file paths mentioned in the chunk that match common code patterns)
     chunk_index   : int
     total_chunks  : int
@@ -97,7 +97,6 @@ FILE_PATTERN = re.compile(
 
 # Decision section heading variants
 DECISION_HEADERS = (
-    re.compile(r"^##\s+Al[ıi]nan\s+Kararlar\s*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^##\s+Decisions?\s+Made\s*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^##\s+Decisions?\s*$", re.IGNORECASE | re.MULTILINE),
 )

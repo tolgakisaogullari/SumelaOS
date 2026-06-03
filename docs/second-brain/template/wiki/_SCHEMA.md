@@ -1,93 +1,93 @@
 # Second Brain Schema
 
-> **Bu dosya kanonik format kaynağıdır.** Wiki'nin yapısı, page template'leri, frontmatter şeması ve isimlendirme kuralları burada tanımlıdır. `using-second-brain` skill bu dosyaya işaret eder ve detayları duplike etmez. Yeni bir projeye second-brain kurarken `_SCHEMA.md`'yi olduğu gibi kopyalayın — tamamen proje-bağımsızdır.
+> **This file is the canonical format source.** The wiki's structure, page templates, frontmatter schema, and naming conventions are defined here. The `using-second-brain` skill points to this file and does not duplicate the details. When setting up second-brain in a new project, copy `_SCHEMA.md` as-is — it is entirely project-independent.
 
 ---
 
-## 1. Üç Katmanlı Mimari
+## 1. Three-Layer Architecture
 
-Karpathy'nin LLM Wiki pattern'i üç ayrık katmana dayanır:
+Karpathy's LLM Wiki pattern is based on three distinct layers:
 
 ```
 docs/second-brain/
-├── raw_sources/      ← IMMUTABLE. Kullanıcı tarafından sağlanan ham kaynaklar.
-│   └── assets/       ← Görseller, diyagramlar, indirilen ekler.
-├── artifacts/        ← IMMUTABLE. LLM tarafından üretilmiş ama write-once dokümanlar.
-│   ├── plans/        ← writing-plans skill çıktıları.
-│   └── specs/        ← brainstorming skill çıktıları.
-└── wiki/             ← LIVE. LLM tarafından sürekli güncellenen sentez katmanı.
-    ├── archive/      ← Wiki'den emekliye ayrılan ama silinmeyen sayfalar.
-    ├── insights/     ← Query write-back ile kaydedilen analizler.
-    ├── summaries/    ← Her raw_source dosyasının LLM-üretimi özet sayfası.
-    ├── _INDEX.md          ← Special: insan-optimized içerik kataloğu.
-    ├── _LOG.md            ← Special: kronolojik aktivite kaydı.
-    ├── _SCHEMA.md         ← Special: bu dosya.
-    ├── _SEARCH_INDEX.md   ← Special: agent-optimized arama indeksi.
-    └── *.md               ← Sentez sayfaları (entity, concept, decision, core).
+├── raw_sources/      ← IMMUTABLE. Raw sources provided by the user.
+│   └── assets/       ← Images, diagrams, downloaded attachments.
+├── artifacts/        ← IMMUTABLE. LLM-generated but write-once documents.
+│   ├── plans/        ← writing-plans skill outputs.
+│   └── specs/        ← brainstorming skill outputs.
+└── wiki/             ← LIVE. Synthesis layer continuously updated by the LLM.
+    ├── archive/      ← Pages retired from the wiki but not deleted.
+    ├── insights/     ← Analyses saved via query write-back.
+    ├── summaries/    ← LLM-generated summary page for each raw_source file.
+    ├── _INDEX.md          ← Special: human-optimized content catalog.
+    ├── _LOG.md            ← Special: chronological activity log.
+    ├── _SCHEMA.md         ← Special: this file.
+    ├── _SEARCH_INDEX.md   ← Special: agent-optimized search index.
+    └── *.md               ← Synthesis pages (entity, concept, decision, core).
 ```
 
-**Katman kuralları:**
-- `raw_sources/`: LLM bu klasörden **okur**, **asla yazmaz**. Ham ve immutable.
-- `artifacts/`: LLM bu klasöre **yazar** (skill çıktısı olarak), sonra **dokunmaz**. Write-once.
-- `wiki/`: LLM bu klasörü **sürekli günceller**. Sentez, çelişki çözümü, cross-reference burada yaşar.
+**Layer rules:**
+- `raw_sources/`: The LLM **reads** from this folder, **never writes**. Raw and immutable.
+- `artifacts/`: The LLM **writes** to this folder (as skill output), then **does not touch it**. Write-once.
+- `wiki/`: The LLM **continuously updates** this folder. Synthesis, contradiction resolution, and cross-referencing live here.
 
 ---
 
-## 2. Page Tipleri
+## 2. Page Types
 
-Her wiki sayfası bir tip altına düşer. Tip, frontmatter'da `type:` alanıyla belirtilir.
+Every wiki page falls under a type. The type is specified in the frontmatter via the `type:` field.
 
-| Type | Açıklama | Örnek |
+| Type | Description | Example |
 |---|---|---|
-| `core` | Projenin temel referans sayfaları | `architecture-and-stack`, `developer-onboarding`, `active-project-context` |
-| `entity` | Sistemdeki bir varlık veya domain nesnesi | `domain-entities`, `user-model`, `payment-flow` |
-| `concept` | Bir kavram, pattern veya alt sistem | `api-registry`, `tech-debt-and-known-issues`, `caching-strategy` |
-| `decision` | Mimari karar kayıtları (ADR-style) | `architecture-decisions` |
-| `insight` | Query write-back'ten kaydedilen analizler | `insights/2026-04-08-cache-vs-redis-comparison` |
-| `archive` | Aktif kullanımdan çıkmış ama saklanan içerik | `archive/sprint-history` |
-| `source-summary` | Bir raw_source dosyasının özeti | `summaries/karpathy-llm-wiki` |
+| `core` | The project's foundational reference pages | `architecture-and-stack`, `developer-onboarding`, `active-project-context` |
+| `entity` | An entity or domain object in the system | `domain-entities`, `user-model`, `payment-flow` |
+| `concept` | A concept, pattern, or subsystem | `api-registry`, `tech-debt-and-known-issues`, `caching-strategy` |
+| `decision` | Architecture decision records (ADR-style) | `architecture-decisions` |
+| `insight` | Analyses saved from query write-back | `insights/2026-04-08-cache-vs-redis-comparison` |
+| `archive` | Content no longer in active use but retained | `archive/sprint-history` |
+| `source-summary` | A summary of a raw_source file | `summaries/karpathy-llm-wiki` |
 
-**Special files (frontmatter ALMAZ):** `_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`
+**Special files (DO NOT take frontmatter):** `_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`
 
 ---
 
-## 3. YAML Frontmatter Şeması
+## 3. YAML Frontmatter Schema
 
-Her wiki sayfası (special files HARİÇ) şu frontmatter ile başlamak ZORUNDADIR:
+Every wiki page (EXCEPT special files) MUST begin with this frontmatter:
 
 ```yaml
 ---
-type: entity              # zorunlu — page tipi (yukarıdaki tablodan)
-tags: [domain, auth]      # zorunlu — minimum 1 etiket; arama ve Dataview için
-date_created: 2026-04-08  # zorunlu — ISO 8601 (YYYY-MM-DD)
-date_updated: 2026-04-08  # zorunlu — son güncelleme tarihi
-sources_referenced: 0     # opsiyonel — bu sayfanın türetildiği kaynak sayısı
-status: active            # opsiyonel — active | archive | deprecated
+type: entity              # required — page type (from the table above)
+tags: [domain, auth]      # required — minimum 1 tag; for search and Dataview
+date_created: 2026-04-08  # required — ISO 8601 (YYYY-MM-DD)
+date_updated: 2026-04-08  # required — last update date
+sources_referenced: 0     # optional — number of sources this page was derived from
+status: active            # optional — active | archive | deprecated
 ---
 ```
 
-**Type-spesifik ek alanlar:**
+**Type-specific additional fields:**
 
 ```yaml
-# decision tipi için:
+# for the decision type:
 ---
 type: decision
-decision_id: AD-12        # zorunlu — Architecture Decision ID
+decision_id: AD-12        # required — Architecture Decision ID
 decision_status: accepted # accepted | superseded | deprecated
-superseded_by: AD-15      # opsiyonel — eğer superseded ise
+superseded_by: AD-15      # optional — if superseded
 ---
 
-# insight tipi için:
+# for the insight type:
 ---
 type: insight
-query_origin: "Redis vs in-memory cache karşılaştırması"  # zorunlu — kaynak soru
+query_origin: "Redis vs in-memory cache comparison"  # required — source question
 related_pages: [caching-strategy, performance]
 ---
 
-# source-summary tipi için:
+# for the source-summary type:
 ---
 type: source-summary
-source_path: ../../raw_sources/karpathy-llm-wiki.md  # zorunlu
+source_path: ../../raw_sources/karpathy-llm-wiki.md  # required
 source_type: article | book | meeting | code-snapshot | external
 ingested_date: 2026-04-08
 ---
@@ -95,105 +95,105 @@ ingested_date: 2026-04-08
 
 ---
 
-## 4. İsimlendirme Kuralları
+## 4. Naming Conventions
 
-| Konum | Format | Örnek |
+| Location | Format | Example |
 |---|---|---|
-| Wiki sayfaları | `kebab-case.md` | `domain-entities.md`, `tech-debt-and-known-issues.md` |
-| Artifact'lar (plans/specs) | `YYYY-MM-DD-feature-name.md` | `2026-04-08-second-brain-restructure.md` |
-| Insight'lar | `insights/YYYY-MM-DD-topic.md` | `insights/2026-04-08-cache-comparison.md` |
-| Archive sayfaları | `archive/<original-name>.md` | `archive/sprint-history.md` |
+| Wiki pages | `kebab-case.md` | `domain-entities.md`, `tech-debt-and-known-issues.md` |
+| Artifacts (plans/specs) | `YYYY-MM-DD-feature-name.md` | `2026-04-08-second-brain-restructure.md` |
+| Insights | `insights/YYYY-MM-DD-topic.md` | `insights/2026-04-08-cache-comparison.md` |
+| Archive pages | `archive/<original-name>.md` | `archive/sprint-history.md` |
 | Source summaries | `summaries/<source-slug>.md` | `summaries/karpathy-llm-wiki.md` |
 | Web-captured sources | `raw_sources/YYYY-MM-DD-<slug>.md` | `raw_sources/2026-04-11-react-native-hls.md` |
 
-**Kurallar:**
-- Sadece küçük harf, tire ile ayrılmış (`kebab-case`)
-- Türkçe karakter YOK (ı→i, ş→s, ç→c, ğ→g, ö→o, ü→u)
-- Boşluk YOK
-- Tarihli dosyalarda tarih HER ZAMAN başta
+**Rules:**
+- Lowercase only, separated by hyphens (`kebab-case`)
+- NO Turkish characters (ı→i, ş→s, ç→c, ğ→g, ö→o, ü→u)
+- NO spaces
+- In dated files, the date ALWAYS comes first
 
 ---
 
-## 5. Cross-Reference Konvansiyonu
+## 5. Cross-Reference Convention
 
-Wiki içi referanslar için **iki format** kullanılır:
+**Two formats** are used for references within the wiki:
 
-### Obsidian wikilink (tercih edilen)
+### Obsidian wikilink (preferred)
 ```markdown
-[[domain-entities]]                    # uzantısız, kebab-case dosya adı
-[[domain-entities|Domain Modeli]]      # özel etiket
-[[architecture-decisions#AD-05]]       # belirli başlığa
+[[domain-entities]]                    # no extension, kebab-case file name
+[[domain-entities|Domain Model]]       # custom label
+[[architecture-decisions#AD-05]]       # to a specific heading
 ```
 
-Obsidian wikilink'leri vault içinde dosya adına göre çözülür — yol bilmeye gerek yok. Bu yüzden dosyalar farklı klasörlere taşınsa bile çalışır.
+Obsidian wikilinks are resolved by file name within the vault — no need to know the path. As a result, they work even when files are moved to different folders.
 
-### Standard markdown link (relatif yol)
+### Standard markdown link (relative path)
 ```markdown
 [domain-entities](./domain-entities.md)
-[plan dosyası](../artifacts/plans/2026-04-08-second-brain-restructure.md)
+[plan file](../artifacts/plans/2026-04-08-second-brain-restructure.md)
 ```
 
-**Kullanım kuralı:**
-- Wiki içi referanslar → Obsidian wikilink (`[[...]]`)
-- Wiki dışı referanslar (artifacts, raw_sources, .sumela) → Standard markdown link (relatif yol)
-- Asla mutlak yol kullanma
+**Usage rule:**
+- References within the wiki → Obsidian wikilink (`[[...]]`)
+- References outside the wiki (artifacts, raw_sources, .sumela) → Standard markdown link (relative path)
+- Never use an absolute path
 
 ---
 
-## 6. `_LOG.md` Entry Formatı
+## 6. `_LOG.md` Entry Format
 
-`_LOG.md` parse-friendly olmak ZORUNDADIR. Karpathy'nin önerdiği format:
+`_LOG.md` MUST be parse-friendly. The format Karpathy recommends:
 
 ```markdown
 ## [YYYY-MM-DD] type | topic
 
-- Bullet point açıklama
-- İkinci bullet
-- Etkilenen wiki sayfaları: [[page-1]], [[page-2]]
-- Commit (varsa): `abc1234`
+- Bullet point description
+- Second bullet
+- Affected wiki pages: [[page-1]], [[page-2]]
+- Commit (if any): `abc1234`
 ```
 
-**Type whitelist (tek kelime, küçük harf):**
-| Type | Ne zaman |
+**Type whitelist (single word, lowercase):**
+| Type | When |
 |---|---|
-| `ingest` | Yeni raw_source işlendi, wiki sayfaları güncellendi |
-| `query` | Kullanıcı sorusu cevaplandı ve insight wiki'ye kaydedildi |
-| `lint` | Wiki sağlık kontrolü yapıldı |
-| `code-commit` | Bir geliştirme branch'i finish edildi, wiki yansıması yapıldı |
-| `decision` | Yeni mimari karar kaydedildi (decision page güncellendi) |
-| `evolve` | Self-improvement queue review (`/evolve`) — bir IMP entry proposed/applied/superseded oldu |
-| `migration` | Wiki yapısal değişikliği (klasör taşıma, format güncelleme) |
+| `ingest` | A new raw_source was processed, wiki pages were updated |
+| `query` | A user question was answered and an insight was saved to the wiki |
+| `lint` | A wiki health check was performed |
+| `code-commit` | A development branch was finished, the wiki was updated to reflect it |
+| `decision` | A new architecture decision was recorded (decision page updated) |
+| `evolve` | Self-improvement queue review (`/evolve`) — an IMP entry became proposed/applied/superseded |
+| `migration` | A structural wiki change (folder move, format update) |
 
-**Parse doğrulaması:**
+**Parse verification:**
 ```bash
 grep "^## \[" docs/second-brain/wiki/_LOG.md | tail -10
 ```
-Bu komut, son 10 entry'i listelemeli. Hiçbir entry parse edilmeyen formatla yazılmamalıdır.
+This command should list the last 10 entries. No entry should be written in a non-parseable format.
 
 ---
 
-## 7. `_INDEX.md` Yapısı
+## 7. `_INDEX.md` Structure
 
-`_INDEX.md` content-oriented bir kataloğdur. Her aktif wiki sayfası bir satır olarak listelenir:
+`_INDEX.md` is a content-oriented catalog. Each active wiki page is listed as one line:
 
 ```markdown
 [[page-name]] - One-line summary. (Sources: N)
 ```
 
-**Kategoriler (öneri):**
-- **Core Pages** — `type: core` olan sayfalar
-- **Entity & Concept Pages** — `type: entity` veya `type: concept`
+**Categories (suggested):**
+- **Core Pages** — pages with `type: core`
+- **Entity & Concept Pages** — `type: entity` or `type: concept`
 - **Decision Records** — `type: decision`
-- **Source Summaries** — `type: source-summary` (her raw_source'un özet sayfası)
-- **Insights** — `type: insight` (Query write-back kayıtları)
-- **Archive** — `type: archive` (referans için)
-- **Artifacts (External)** — plans/ ve specs/ klasörlerine pointer'lar (tek satır, standard markdown link)
+- **Source Summaries** — `type: source-summary` (the summary page for each raw_source)
+- **Insights** — `type: insight` (query write-back records)
+- **Archive** — `type: archive` (for reference)
+- **Artifacts (External)** — pointers to the plans/ and specs/ folders (single line, standard markdown link)
 
-**Kural:** `_INDEX.md` her session başında okunur, dolayısıyla **kompakt** olmalı. Arşiv listeleri tek satıra indirgenmeli.
+**Rule:** `_INDEX.md` is read at the start of every session, so it must be **compact**. Archive lists should be reduced to a single line.
 
 ---
 
-## 8. Page Template'leri
+## 8. Page Templates
 
 ### Core Page Template
 
@@ -206,21 +206,21 @@ date_updated: YYYY-MM-DD
 status: active
 ---
 
-# [Sayfa Başlığı] — [Proje Adı]
+# [Page Title] — [Project Name]
 
-> **Bu dosyanın amacı ve okunma sıklığı.** (Ör: "Her session başında okunur.")
-
----
-
-## [Bölüm 1]
-İçerik...
-
-## [Bölüm 2]
-İçerik...
+> **The purpose of this file and how often it is read.** (E.g., "Read at the start of every session.")
 
 ---
 
-## Referanslar
+## [Section 1]
+Content...
+
+## [Section 2]
+Content...
+
+---
+
+## References
 - [[related-page-1]]
 - [[related-page-2]]
 ```
@@ -239,22 +239,22 @@ status: active
 
 # [Entity Name]
 
-## Tanım
-Bu varlık nedir, ne işe yarar?
+## Definition
+What is this entity, what does it do?
 
-## Alanlar / Özellikler
-| Alan | Tip | Açıklama |
+## Fields / Properties
+| Field | Type | Description |
 |---|---|---|
 
-## İlişkiler
-- `[[other-entity]]` ile bire-çok
-- `[[third-entity]]` ile çoğa-çok
+## Relationships
+- one-to-many with `[[other-entity]]`
+- many-to-many with `[[third-entity]]`
 
-## Kullanım Yerleri
+## Usage Locations
 - `[[api-registry#endpoint-X]]`
 - `[[caching-strategy]]`
 
-## Kaynaklar
+## Sources
 - `../artifacts/specs/YYYY-MM-DD-feature-design.md`
 ```
 
@@ -270,21 +270,21 @@ date_created: YYYY-MM-DD
 date_updated: YYYY-MM-DD
 ---
 
-## AD-XX: [Karar Başlığı]
+## AD-XX: [Decision Title]
 
-**Karar:** Tek cümleyle ne karar verildi.
+**Decision:** In one sentence, what was decided.
 
-**Bağlam:** Neden bu karara ihtiyaç duyuldu? Hangi sorunlar mevcuttu?
+**Context:** Why was this decision needed? What problems existed?
 
-**Alternatifler:** Hangi seçenekler değerlendirildi?
+**Alternatives:** Which options were evaluated?
 - Option A: ... (Pros / Cons)
 - Option B: ... (Pros / Cons)
 
-**Sonuç:** Karar nelere yol açtı? Hangi sayfalarda etkisi var?
-- `[[entity-X]]` üzerinde değişiklik
-- `[[api-registry]]` yeni endpoint
+**Outcome:** What did the decision lead to? Which pages are affected?
+- change on `[[entity-X]]`
+- new endpoint in `[[api-registry]]`
 
-**Kaynaklar:** `../artifacts/specs/YYYY-MM-DD-design.md`
+**Sources:** `../artifacts/specs/YYYY-MM-DD-design.md`
 ```
 
 ### Insight Page Template (Query Write-Back)
@@ -292,26 +292,26 @@ date_updated: YYYY-MM-DD
 ```markdown
 ---
 type: insight
-query_origin: "Kullanıcının sorduğu orijinal soru"
+query_origin: "The original question the user asked"
 tags: [insight, <area>]
 date_created: YYYY-MM-DD
 date_updated: YYYY-MM-DD
 related_pages: [page-1, page-2]
 ---
 
-# [Insight Başlığı]
+# [Insight Title]
 
-## Soru
-[Kullanıcının orijinal sorusu]
+## Question
+[The user's original question]
 
-## Cevap / Sentez
-[3+ wiki sayfasını birleştiren analiz]
+## Answer / Synthesis
+[An analysis that combines 3+ wiki pages]
 
-## Bağlantılı Sayfalar
-- `[[page-1]]` — bu açıdan ilgili
-- `[[page-2]]` — bu açıdan ilgili
+## Linked Pages
+- `[[page-1]]` — relevant in this respect
+- `[[page-2]]` — relevant in this respect
 
-## Açık Sorular / Follow-up
+## Open Questions / Follow-up
 - ?
 ```
 
@@ -328,187 +328,187 @@ date_created: YYYY-MM-DD
 date_updated: YYYY-MM-DD
 ---
 
-# [Source Başlığı]
+# [Source Title]
 
-## Özet
-Bu kaynak ne hakkında? 3-5 cümle.
+## Summary
+What is this source about? 3-5 sentences.
 
-## Anahtar Çıkarımlar
-- Çıkarım 1
-- Çıkarım 2
+## Key Takeaways
+- Takeaway 1
+- Takeaway 2
 
-## Wiki'ye Yansıma
-Bu kaynak hangi wiki sayfalarını güncelledi?
-- `[[page-1]]` — şu kısım eklendi
-- `[[page-2]]` — şu çelişki not edildi
+## Reflection in the Wiki
+Which wiki pages did this source update?
+- `[[page-1]]` — this part was added
+- `[[page-2]]` — this contradiction was noted
 
-## Çelişkiler
-Bu kaynak mevcut wiki ile çelişiyor mu? Nasıl çözüldü?
+## Contradictions
+Does this source contradict the existing wiki? How was it resolved?
 ```
 
 ---
 
-## 9. Çelişki Yönetimi
+## 9. Contradiction Management
 
-Karpathy pattern'inin temel değeri: yeni kaynaklar eski iddiaları çürüttüğünde **wiki'de açıkça not edilir, üzerine yazılmaz**.
+The core value of the Karpathy pattern: when new sources refute old claims, this is **explicitly noted in the wiki, not overwritten**.
 
-**Örnek:**
+**Example:**
 ```markdown
-## Cache Stratejisi
+## Cache Strategy
 
-~~Eski iddia (2026-03-15): Tüm endpoint'ler Redis ile cache'lenmeli.~~
-**Çürütüldü (2026-04-02):** [2026-04-02-cache-analysis-design](../artifacts/specs/2026-04-02-cache-analysis-design.md) → 
-sadece read-heavy endpoint'ler Redis'e konmalı; write-heavy endpoint'lerde cache invalidation maliyeti faydanın üzerinde.
+~~Old claim (2026-03-15): All endpoints should be cached with Redis.~~
+**Refuted (2026-04-02):** [2026-04-02-cache-analysis-design](../artifacts/specs/2026-04-02-cache-analysis-design.md) → 
+only read-heavy endpoints should be placed in Redis; for write-heavy endpoints the cache invalidation cost outweighs the benefit.
 ```
 
-Çelişkiler `_LOG.md`'a `decision` entry'si olarak da kaydedilir.
+Contradictions are also recorded in `_LOG.md` as a `decision` entry.
 
 ---
 
-## 10. Special Files Sözleşmesi
+## 10. Special Files Contract
 
-Bu dört dosya **frontmatter almaz** ve özel kurallara tabidir:
+These four files **take no frontmatter** and are subject to special rules:
 
-| Dosya | Kural |
+| File | Rule |
 |---|---|
-| `_INDEX.md` | Her session başında okunur. Maksimum ~100 satır. Sadece pointer'lar, içerik yok. |
-| `_LOG.md` | Append-only. Sadece yeni entry'ler eklenir, eskileri DEĞİŞTİRİLMEZ (tarihsel doğruluk). |
-| `_SCHEMA.md` | Bu dosya. Sadece schema değişirken güncellenir. |
-| `_SEARCH_INDEX.md` | Agent-optimized arama indeksi. Her ingest/code-commit/lint'te güncellenir. Detay: Section 13. |
+| `_INDEX.md` | Read at the start of every session. Maximum ~100 lines. Pointers only, no content. |
+| `_LOG.md` | Append-only. Only new entries are added, older ones are NEVER modified (historical accuracy). |
+| `_SCHEMA.md` | This file. Updated only when the schema changes. |
+| `_SEARCH_INDEX.md` | Agent-optimized search index. Updated on every ingest/code-commit/lint. Detail: Section 13. |
 
-**Tarihsel doğruluk kuralı:** `_LOG.md` immutable history sayılır. Bir entry yazıldıktan sonra path veya isim değişiklikleri için entry'yi yeniden yazmak yasaktır — bunun yerine yeni bir `migration` entry'si eklenir.
+**Historical accuracy rule:** `_LOG.md` is considered immutable history. Once an entry is written, rewriting it for path or name changes is forbidden — instead, a new `migration` entry is added.
 
-**Takım eşzamanlılık modeli (multi-developer merge stratejisi):**
-- `_LOG.md` → append-only olduğu için repo kökündeki `.gitattributes`'te `merge=union` ile işaretlidir: farklı geliştiricilerin eşzamanlı log eklemeleri conflict yerine birleşir. (Rotasyon/`migration` istisnası: bkz. `.gitattributes` notları.)
-- `_improvement-queue/` → her sinyal ayrı `IMP-*.md` dosyası olduğu için eşzamanlı yakalama hiç conflict üretmez (merge driver gerekmez).
-- `active-project-context.md` → yapılandırılmış prose; `union` UYGULANMAZ (bölümleri bozardı). Paylaşılan sprint state'tir, kişisel scratchpad değil — per-developer aktif iş "Active Work" bölümünde `@isim`/branch ile ayrı satırlarda tutulur, geçici detay session summary'ye yazılır. Gerçek conflict elle çözülür.
-
----
-
-## 11. `_LOG.md` Rotasyon Mekanizması
-
-`_LOG.md` append-only olduğu için proje büyüdükçe şişer. Agent'ın session başında lightweight grep kullanması bu sorunu hafifletir, ancak lint sırasında tam dosya okunabilir.
-
-**Rotasyon kuralı (opsiyonel, ~50+ entry'de devreye girer):**
-1. `_LOG.md`'deki 6 aydan eski entry'ler `archive/_LOG-YYYY.md` dosyasına taşınır.
-2. Taşıma bir `migration` entry'si olarak loglanır.
-3. Arşivlenen log dosyaları immutable kalır.
-4. Rotasyon sadece lint sırasında önerilir, otomatik çalışmaz.
+**Team concurrency model (multi-developer merge strategy):**
+- `_LOG.md` → because it is append-only, it is marked with `merge=union` in the repo root's `.gitattributes`: concurrent log additions from different developers merge instead of conflicting. (Rotation/`migration` exception: see the `.gitattributes` notes.)
+- `_improvement-queue/` → because each signal is a separate `IMP-*.md` file, concurrent capture produces no conflicts at all (no merge driver needed).
+- `active-project-context.md` → structured prose; `union` is NOT applied (it would corrupt the sections). It is shared sprint state, not a personal scratchpad — per-developer active work is kept on separate lines with `@name`/branch in the "Active Work" section, transient detail is written to the session summary. Real conflicts are resolved manually.
 
 ---
 
-## 12. Obsidian Ekosistem Rehberi (Karpathy Tips)
+## 11. `_LOG.md` Rotation Mechanism
 
-Wiki, Obsidian vault olarak kullanılmak üzere tasarlanmıştır. Aşağıdaki ayar ve eklentiler önerilir:
+Because `_LOG.md` is append-only, it grows as the project grows. The agent using lightweight grep at the start of a session mitigates this issue, but the full file may be read during lint.
 
-**Temel Ayarlar:**
-- **Files and links → Attachment folder path:** `raw_sources/assets/` (görseller merkezi bir yere indirilsin)
-- **Files and links → New link format:** `Relative path to file` (wikilink uyumu)
-
-**Önerilen Eklentiler:**
-- **Graph View** (core) — Wiki'nin şeklini görselleştirir; hub sayfaları ve orphan'ları tespit etmeye yardımcı olur.
-- **Dataview** — YAML frontmatter üzerinden dinamik tablolar ve listeler üretir (ör. `TABLE date_updated, type FROM "wiki" SORT date_updated DESC`).
-- **Obsidian Web Clipper** — Web makalelerini markdown'a dönüştürüp `raw_sources/` altına kaydetmeye yarar.
-
-**Opsiyonel:**
-- **Marp** — Markdown tabanlı sunum formatı. Wiki içeriğinden doğrudan slayt üretilebilir.
+**Rotation rule (optional, kicks in at ~50+ entries):**
+1. Entries in `_LOG.md` older than 6 months are moved to an `archive/_LOG-YYYY.md` file.
+2. The move is logged as a `migration` entry.
+3. Archived log files remain immutable.
+4. Rotation is only suggested during lint; it does not run automatically.
 
 ---
 
-## 13. Ölçekleme — `_SEARCH_INDEX.md` (Agent-Optimized Arama)
+## 12. Obsidian Ecosystem Guide (Karpathy Tips)
 
-Wiki büyüdükçe `_INDEX.md` tek başına yetersiz kalır. Bu sorunu **sıfır bağımlılıkla** (script yok, runtime yok, binary yok) çözen mekanizma: `_SEARCH_INDEX.md`.
+The wiki is designed to be used as an Obsidian vault. The following settings and plugins are recommended:
 
-### İki Aşamalı Arama Stratejisi
+**Basic Settings:**
+- **Files and links → Attachment folder path:** `raw_sources/assets/` (so images are downloaded to a central location)
+- **Files and links → New link format:** `Relative path to file` (wikilink compatibility)
 
-| Aşama | Ne | Nasıl |
+**Recommended Plugins:**
+- **Graph View** (core) — Visualizes the shape of the wiki; helps detect hub pages and orphans.
+- **Dataview** — Produces dynamic tables and lists from YAML frontmatter (e.g., `TABLE date_updated, type FROM "wiki" SORT date_updated DESC`).
+- **Obsidian Web Clipper** — Converts web articles to markdown and saves them under `raw_sources/`.
+
+**Optional:**
+- **Marp** — A markdown-based presentation format. Slides can be generated directly from wiki content.
+
+---
+
+## 13. Scaling — `_SEARCH_INDEX.md` (Agent-Optimized Search)
+
+As the wiki grows, `_INDEX.md` alone becomes insufficient. The mechanism that solves this problem **with zero dependencies** (no script, no runtime, no binary): `_SEARCH_INDEX.md`.
+
+### Two-Stage Search Strategy
+
+| Stage | What | How |
 |---|---|---|
-| 1. Index tarama | Agent `_SEARCH_INDEX.md` tablosunu okur | Query terimlerini `Key Terms` ve `Tags` sütunlarıyla eşleştirir |
-| 2. Hedefli okuma | Sadece eşleşen sayfaları okur | Tam sayfa içeriğine erişir, cevabı sentezler |
+| 1. Index scan | The agent reads the `_SEARCH_INDEX.md` table | Matches query terms against the `Key Terms` and `Tags` columns |
+| 2. Targeted read | Reads only the matching pages | Accesses full page content, synthesizes the answer |
 
-Bu strateji wiki yüzlerce sayfaya ulaşsa bile çalışır: 200 sayfa × ~120 karakter/satır = ~24KB — herhangi bir LLM context'ine rahatça sığar.
+This strategy works even when the wiki reaches hundreds of pages: 200 pages × ~120 characters/line = ~24KB — fits comfortably into any LLM context.
 
-### `_SEARCH_INDEX.md` Yapısı
+### `_SEARCH_INDEX.md` Structure
 
 ```markdown
 | Page | Type | Tags | Key Terms | Summary |
 |---|---|---|---|---|
-| [[page-name]] | core | tag1, tag2 | term1, term2, term3 | Tek satırlık açıklama |
+| [[page-name]] | core | tag1, tag2 | term1, term2, term3 | One-line description |
 ```
 
-**Sütun kuralları:**
-- **Page:** Obsidian wikilink (tıklanabilir)
-- **Type:** `_SCHEMA.md` Section 2'deki page type'larından biri
-- **Tags:** Frontmatter `tags` alanının kopyası (virgülle ayrık)
-- **Key Terms:** Sayfanın içeriğinden çıkarılan 5-15 arama terimi — teknik kavramlar, teknoloji isimleri, ID'ler (ör. `AD-01..AD-12`, `TD-01..TD-14`), domain terimleri. **Tags'ten farklıdır:** tags kategorize eder, key terms arama eşleştirmesi sağlar.
-- **Summary:** Tek satır, maksimum ~100 karakter
+**Column rules:**
+- **Page:** Obsidian wikilink (clickable)
+- **Type:** One of the page types from `_SCHEMA.md` Section 2
+- **Tags:** A copy of the frontmatter `tags` field (comma-separated)
+- **Key Terms:** 5-15 search terms extracted from the page's content — technical concepts, technology names, IDs (e.g., `AD-01..AD-12`, `TD-01..TD-14`), domain terms. **Different from Tags:** tags categorize, key terms enable search matching.
+- **Summary:** One line, maximum ~100 characters
 
-### Bakım Kuralları
+### Maintenance Rules
 
-- `_SEARCH_INDEX.md` her **ingest**, **code-commit** ve **lint** operasyonunda güncellenir.
-- Yeni wiki sayfası → yeni satır eklenir.
-- Sayfa arşive taşınırsa → satır `archive/` prefix'i ile güncellenir.
-- Sayfa silinmezse (NEVER delete — always archive) → satır asla kaldırılmaz.
-- `_INDEX.md` ile tutarlılık lint sırasında kontrol edilir: her `_INDEX.md` entry'si `_SEARCH_INDEX.md`'de de olmalı ve vice versa.
+- `_SEARCH_INDEX.md` is updated on every **ingest**, **code-commit**, and **lint** operation.
+- New wiki page → a new row is added.
+- If a page is moved to the archive → the row is updated with the `archive/` prefix.
+- Since a page is never deleted (NEVER delete — always archive) → a row is never removed.
+- Consistency with `_INDEX.md` is checked during lint: every `_INDEX.md` entry must also exist in `_SEARCH_INDEX.md` and vice versa.
 
-### Opsiyonel: Üst Tier Arama Katmanları (~500+ sayfa)
+### Optional: Higher-Tier Search Layers (~500+ pages)
 
-Çok büyük wiki'ler veya kod-yoğun projeler için `_SEARCH_INDEX.md` tek başına yetersiz kalır. Önerilen yol haritası:
+For very large wikis or code-heavy projects, `_SEARCH_INDEX.md` alone becomes insufficient. The recommended roadmap:
 
-- **Tier 1 — Qdrant** (semantic session memory): Ollama embedding (`qwen3-embedding:0.6b`) + local Qdrant. "Geçen hafta ne konuştuk?" tipi soruları çözer.
-- **Tier 2 — Graphify** (kod yapısı): AST + call graph. Function/class lookup ve impact analysis için.
-- Her iki tier de skill seviyesinde routing'e bağlanır (`using-second-brain` skill, REASONING AID workflow).
+- **Tier 1 — Qdrant** (semantic session memory): Ollama embedding (`qwen3-embedding:0.6b`) + local Qdrant. Solves "what did we talk about last week?" type questions.
+- **Tier 2 — Graphify** (code structure): AST + call graph. For function/class lookup and impact analysis.
+- Both tiers are wired into routing at the skill level (`using-second-brain` skill, REASONING AID workflow).
 
 ---
 
-## 14. Special Files Tam Listesi
+## 14. Complete List of Special Files
 
-Güncel special files (frontmatter ALMAZ):
+Current special files (DO NOT take frontmatter):
 
-| Dosya | Amaç | Bakım Sıklığı |
+| File | Purpose | Maintenance Frequency |
 |---|---|---|
-| `_INDEX.md` | İnsan-optimized içerik kataloğu (Obsidian navigasyonu) | Her ingest/code-commit |
-| `_LOG.md` | Kronolojik append-only aktivite kaydı | Her operasyon |
-| `_SCHEMA.md` | Kanonik format kuralları | Schema değişikliğinde |
-| `_SEARCH_INDEX.md` | Agent-optimized arama indeksi (tag + key term tablosu) | Her ingest/code-commit/lint |
-| `_improvement-queue/` | Self-improvement öneri kuyruğu — dizin, her sinyal kendi `IMP-*.md` dosyası (sinyal yakalama + onay + challenge) | Her sinyal yakalandığında yeni dosya |
+| `_INDEX.md` | Human-optimized content catalog (Obsidian navigation) | Every ingest/code-commit |
+| `_LOG.md` | Chronological append-only activity log | Every operation |
+| `_SCHEMA.md` | Canonical format rules | On schema change |
+| `_SEARCH_INDEX.md` | Agent-optimized search index (tag + key term table) | Every ingest/code-commit/lint |
+| `_improvement-queue/` | Self-improvement suggestion queue — a directory, each signal its own `IMP-*.md` file (signal capture + approval + challenge) | A new file each time a signal is captured |
 
 ---
 
 ## 15. Self-Improvement Queue (`_improvement-queue/`)
 
-Agent'ın session'lar arası öğrenebilmesi için kullanılan persistent öneri kuyruğudur. `self-improvement-curator` skill tarafından yönetilir, `/evolve` slash command ile review edilir. Kuyruk bir **dizindir** (her sinyal kendi `IMP-*.md` dosyası) — takımda eşzamanlı yakalama merge-conflict üretmesin diye. Bkz. `_improvement-queue/README.md`.
+This is the persistent suggestion queue used so the agent can learn across sessions. It is managed by the `self-improvement-curator` skill and reviewed via the `/evolve` slash command. The queue is a **directory** (each signal its own `IMP-*.md` file) — so that concurrent capture across a team does not produce merge conflicts. See `_improvement-queue/README.md`.
 
-### 15.1 Amaç
+### 15.1 Purpose
 
-Karpathy wiki pattern'i **bilgi** için çelişki toleransı sağlar; `_improvement-queue/` ise **agent'ın kendi davranış/kural öğrenmesi** için aynı pattern'i uygular. Hedef:
-- Session'da yakalanan düzeltme/onay/karar sinyallerini kaybetmeden kuyruğa yazmak
-- Onay kapısı olmadan rule/skill/wiki'ye yazmayı kesinlikle önlemek
-- Eski öğrenilmiş kuralların **challenge edilmesine + supersede edilmesine** izin vermek
-- Farklı LLM provider'ların öğrenmelerinin geçmişini saklamak (`provider_context` alanı)
+The Karpathy wiki pattern provides contradiction tolerance for **knowledge**; `_improvement-queue/` applies the same pattern for **the agent learning its own behavior/rules**. The goal:
+- Write correction/confirmation/decision signals captured in a session to the queue without losing them
+- Strictly prevent writing to a rule/skill/wiki without an approval gate
+- Allow old learned rules to be **challenged + superseded**
+- Preserve the history of learnings from different LLM providers (the `provider_context` field)
 
-### 15.2 Dosya Yapısı (Dizin — Her Sinyal Kendi Dosyası)
+### 15.2 File Structure (Directory — Each Signal Its Own File)
 
-Kuyruk **monolitik bir dosya değil**, bir dizindir: `_improvement-queue/`. Her sinyal
-**kendi dosyasıdır**. Takımda birden çok geliştiricinin agent'ı aynı anda sinyal
-yakalar — her sinyal ayrı dosya olduğu için eşzamanlı yakalamalar **merge-conflict
-üretmez**. Paylaşılan `IMP-NNN` sayacı **YOKTUR** (paylaşılan sayaç eşzamanlı
-yakalamada çakışır). Durum (pending/applied/...) her dosyanın frontmatter'ında
-yaşar; status değişimi tek küçük dosyaya edit'tir, monolitin çekişmeli yeniden
-yazımı değil.
+The queue is **not a monolithic file**, it is a directory: `_improvement-queue/`. Each signal
+**is its own file**. On a team, multiple developers' agents capture signals at the same time —
+because each signal is a separate file, concurrent captures **do not produce merge
+conflicts**. There is **NO** shared `IMP-NNN` counter (a shared counter would collide on
+concurrent capture). The status (pending/applied/...) lives in each file's frontmatter;
+a status change is an edit to a single small file, not a contended rewrite of a monolith.
 
-**Dosya adı = ID:** `IMP-YYYYMMDD-<short>.md`
-- `IMP-` prefix (greppable) + `YYYYMMDD` capture tarihi (kronolojik) + `<short>`
-  (4 küçük-harf base36, lokal üretilir, koordinasyon yok). Agent yazmadan önce
-  dosya adının var olmadığını doğrular; nadir çakışmada yeniden üretir. "İnsan-dostu
-  GUID": sayaçsız çakışmasız, ama review'da söylenebilir ("IMP-20260601-a3f8 uygula").
-- `id:` frontmatter alanı dosya adının kök adına **eşit olmalı**. Dosya adı tek
-  doğruluk kaynağıdır; hiçbir yerde artırılacak sayaç yoktur.
-- Yalnızca `IMP-*.md` dosyaları entry'dir. `README.md` entry değildir; tüm durum
-  sorguları `IMP-*.md` glob'lar (README sayılmaz).
+**File name = ID:** `IMP-YYYYMMDD-<short>.md`
+- `IMP-` prefix (greppable) + `YYYYMMDD` capture date (chronological) + `<short>`
+  (4-character base36, generated locally, no coordination). Before writing, the agent
+  verifies that the file name does not already exist; on a rare collision it regenerates.
+  A "human-friendly GUID": counterless and collision-free, yet sayable in review ("apply
+  IMP-20260601-a3f8").
+- The `id:` frontmatter field **must equal** the file name's root name. The file name is the
+  single source of truth; there is no counter anywhere to be incremented.
+- Only `IMP-*.md` files are entries. `README.md` is not an entry; all status
+  queries glob `IMP-*.md` (README does not count).
 
-Frontmatter taranabilir metadata'yı tutar; gövde insan-okunur prose'u (`## Proposed
-Change`, `## Evidence`) tutar:
+The frontmatter holds the scannable metadata; the body holds human-readable prose (`## Proposed
+Change`, `## Evidence`):
 
 ```markdown
 ---
@@ -528,105 +528,105 @@ EF Core queries with 3+ joins must explicitly declare `AsSplitQuery()`.
 
 ## Evidence
 
-Session 2026-04-14: N+1 + Cartesian explosion yakalandı; kullanıcı AsSplitQuery'yi onayladı.
+Session 2026-04-14: N+1 + Cartesian explosion was caught; the user approved AsSplitQuery.
 ```
 
-Status değiştiğinde dosya **yerinde** düzenlenir (taşınmaz): `applied`/`superseded`/
-`rejected` entry'ler **silinmez** (tarihsel doğruluk), sadece frontmatter'ları güncellenir.
+When the status changes, the file is edited **in place** (not moved): `applied`/`superseded`/
+`rejected` entries are **not deleted** (historical accuracy), only their frontmatter is updated.
 
-### 15.3 Entry Şeması (Zorunlu Alanlar)
+### 15.3 Entry Schema (Required Fields)
 
-`proposed_change` ve `evidence` gövdede (`## Proposed Change` / `## Evidence`
-başlıkları altında) yaşar; aşağıdaki alanlar frontmatter'dadır:
+`proposed_change` and `evidence` live in the body (under the `## Proposed Change` / `## Evidence`
+headings); the following fields are in the frontmatter:
 
-| Alan | Tip | Açıklama |
+| Field | Type | Description |
 |---|---|---|
-| `id` | `IMP-YYYYMMDD-<short>` | Dosya adının kök adı. Sayaç yok, asla yeniden kullanma. |
-| `detected` | `YYYY-MM-DD` | Sinyalin yakalandığı tarih |
+| `id` | `IMP-YYYYMMDD-<short>` | The file name's root name. No counter, never reuse. |
+| `detected` | `YYYY-MM-DD` | The date the signal was captured |
 | `signal_type` | enum | `correction` \| `confirmation` \| `decision` \| `friction` \| `challenge` \| `resolution` \| `preference` |
 | `scope` | enum | `rule` \| `skill` \| `wiki` \| `schema` \| `active-context` |
-| `target` | path | Dokunulacak dosyanın relative path'i. `scope: rule` için default `.sumela/rules/<topic>.md` (portable, IDE-agnostic). |
-| `provider_context` | string | Sinyali yakalayan model (`claude-opus-4-8`, `claude-sonnet-4-6`, vs.) |
-| `confidence` | enum | `high` \| `medium` \| `low` (bkz. 15.5) |
+| `target` | path | The relative path of the file to be touched. For `scope: rule`, default `.sumela/rules/<topic>.md` (portable, IDE-agnostic). |
+| `provider_context` | string | The model that captured the signal (`claude-opus-4-8`, `claude-sonnet-4-6`, etc.) |
+| `confidence` | enum | `high` \| `medium` \| `low` (see 15.5) |
 | `status` | enum | `pending` \| `proposed` \| `applied` \| `superseded` \| `rejected` |
 
-**Duruma göre ek frontmatter alanları (status değişince yerinde eklenir):**
-- `proposed` (team-mode, gated scope — PR açık) → `pr: <pr-url>` (gerçek PR URL'i; sadece branch adı değil), `proposed_at: YYYY-MM-DD`
+**Additional frontmatter fields by status (added in place when the status changes):**
+- `proposed` (team-mode, gated scope — PR open) → `pr: <pr-url>` (the actual PR URL; not just the branch name), `proposed_at: YYYY-MM-DD`
 - `applied` → `applied: YYYY-MM-DD`, `last_validated: YYYY-MM-DD`, `challenges: [IMP-ID, ...]`
 - `superseded` → `superseded_by: IMP-ID`, `superseded_at: YYYY-MM-DD`
 - `rejected` → `rejected_at: YYYY-MM-DD`, `rejection_reason: text`
 - `pending` (deferred at `/evolve`) → `deferred_at: YYYY-MM-DD` (status stays `pending`)
-- `signal_type: challenge` → `supersedes: IMP-ID` (hangi applied entry'i sorguluyor)
+- `signal_type: challenge` → `supersedes: IMP-ID` (which applied entry it questions)
 
-### 15.4 Sinyal Tipleri (Ne Yakalanır?)
+### 15.4 Signal Types (What Gets Captured?)
 
-| Type | Ne zaman |
+| Type | When |
 |---|---|
-| `correction` | Kullanıcı "hayır, öyle değil" / "bir daha böyle yapma" / "şunu kullanma" dediğinde |
-| `confirmation` | Kullanıcı tartışmalı bir seçimi onayladığında ("evet, tam da böyle", "doğru seçim") |
-| `decision` | Brainstorming/ULTRATHINK sırasında mimari karar alındığında |
-| `friction` | Aynı hata/soru 2+ kez tekrar ettiğinde (pattern tespiti) |
-| `challenge` | Mevcut `applied` entry ile çelişen yeni kanıt bulunduğunda |
-| `resolution` | Agent bir bug'ı/sorunu **kendisi** teşhis edip çözdüğünde — instance değil, GENELLEŞTİRİLMİŞ ders yakalanır (ör. "X servisi register edilmemişti" değil, "yeni servisler DI'a register edilmeli") |
-| `preference` | Kullanıcı bir hataya tepki olmadan, ileriye dönük kalıcı bir çalışma kuralı verdiğinde ("bundan sonra hep X yap", "yorumları minimal tut") — reaktif `correction`'dan farklı: proaktif duruş |
+| `correction` | When the user says "no, that's not it" / "don't do it like that again" / "don't use that" |
+| `confirmation` | When the user approves a debatable choice ("yes, exactly like that", "the right choice") |
+| `decision` | When an architecture decision is made during brainstorming/ULTRATHINK |
+| `friction` | When the same error/question recurs 2+ times (pattern detection) |
+| `challenge` | When new evidence is found that contradicts an existing `applied` entry |
+| `resolution` | When the agent diagnoses and resolves a bug/problem **itself** — the GENERALIZED lesson is captured, not the instance (e.g., not "service X wasn't registered" but "new services must be registered in DI") |
+| `preference` | When the user gives a forward-looking, persistent working rule without it being a reaction to an error ("from now on always do X", "keep comments minimal") — different from a reactive `correction`: a proactive stance |
 
-### 15.5 Confidence Thresholds (Sessiz Kalmayı Önlemek İçin)
+### 15.5 Confidence Thresholds (To Avoid Staying Silent)
 
-`self-improvement-curator`'ın thresholdu çok yükseğe çekip hiç yazmaması kabul edilemez. Kural:
+It is unacceptable for `self-improvement-curator` to set the threshold too high and never write anything. The rule:
 
-- **`high`**: Kullanıcı açıkça doğruladı VEYA reddetti VEYA 2+ kez aynı düzeltmeyi yaptı → **HER ZAMAN** kuyruğa yazılır.
-- **`medium`**: Tartışmalı ama kanıt somut (kod/log/dosya referansı var) → **HER ZAMAN** kuyruğa yazılır, review'da kullanıcıya "emin değilim" notuyla sunulur.
-- **`low`**: Sadece sezgi, somut kanıt yok → **YAZILMAZ** (gürültüyü önlemek için).
+- **`high`**: The user explicitly confirmed OR rejected OR made the same correction 2+ times → **ALWAYS** written to the queue.
+- **`medium`**: Debatable but the evidence is concrete (there is a code/log/file reference) → **ALWAYS** written to the queue, presented to the user in review with an "I'm not sure" note.
+- **`low`**: Only intuition, no concrete evidence → **NOT written** (to avoid noise).
 
-**Kural:** Şüpheye düşersen `medium` seç, `low`'a kaçma. Review kapısı kullanıcıyı koruyor — agent'ın iş yükünü azaltmak uğruna sinyal kaçırmak kabul edilemez.
+**Rule:** When in doubt, pick `medium`, don't fall back to `low`. The review gate protects the user — missing a signal for the sake of reducing the agent's workload is unacceptable.
 
-### 15.6 Challenge & Supersede Akışı (Eski Öğrenileni Güncelleme)
+### 15.6 Challenge & Supersede Flow (Updating Old Learnings)
 
-Farklı provider/zaman farklı karar verebilir. Agent yeni session'da mevcut bir `applied` entry ile çelişen somut kanıt bulursa:
+Different providers/times may decide differently. If the agent, in a new session, finds concrete evidence that contradicts an existing `applied` entry:
 
-1. **Yeni bir entry oluşturur**, `signal_type: challenge`, `supersedes: <IMP-ID>` alanıyla orijinale referans verir.
-2. Entry `pending` olarak kuyruğa yazılır — **asla otomatik uygulanmaz**.
-3. `/evolve` review'da kullanıcı challenge'ı onaylarsa:
-   - Orijinal entry dosyasının frontmatter'ı yerinde güncellenir: `status: superseded`, `superseded_by: <yeni-IMP-ID>`, `superseded_at` eklenir
-   - Yeni entry `status: applied` olur, ilgili dosyaya uygulanır
-   - `_LOG.md`'ye `evolve` entry'si: *"IMP-20260714-c3d4 applied; supersedes IMP-20260601-a1b2 — reason: ..."*
-4. Orijinal entry dosyası **silinmez** — sadece frontmatter'ı `superseded` yapılır, dosya yerinde kalır (tarihsel doğruluk).
+1. **It creates a new entry**, with `signal_type: challenge` and a `supersedes: <IMP-ID>` field referencing the original.
+2. The entry is written to the queue as `pending` — it is **never applied automatically**.
+3. If the user approves the challenge in the `/evolve` review:
+   - The original entry file's frontmatter is updated in place: `status: superseded`, `superseded_by: <new-IMP-ID>`, `superseded_at` is added
+   - The new entry becomes `status: applied` and is applied to the relevant file
+   - An `evolve` entry in `_LOG.md`: *"IMP-20260714-c3d4 applied; supersedes IMP-20260601-a1b2 — reason: ..."*
+4. The original entry file is **not deleted** — only its frontmatter is set to `superseded`, the file stays in place (historical accuracy).
 
-### 15.7 Proaktif Re-validation
+### 15.7 Proactive Re-validation
 
-Session başında `using-second-brain` eager-load içinde:
-- Pending entry sayısı raporlanır (sayı > 0 ise kullanıcıya *"N öneri onay bekliyor, /evolve ile bakabilirsin"* denir)
-- Son 5 applied entry'nin özeti gösterilir (context bütçesi bu kadar) — dizini `grep -l "^status: applied" IMP-*.md` ile tarayıp tarihe göre son 5'i al
-- **Re-validation pulse**: Son 90 günde `last_validated` güncellenmemiş applied entry'lerden rastgele 1 tanesi seçilir → agent session boyunca bu entry'nin hâlâ geçerli olup olmadığına dair pasif dikkat eder. Çelişki görürse otomatik `challenge` sinyali açar.
+At the start of a session, within the `using-second-brain` eager-load:
+- The number of pending entries is reported (if the count > 0, the user is told *"N suggestions await approval, you can review them with /evolve"*)
+- A summary of the last 5 applied entries is shown (that's the context budget) — scan the directory with `grep -l "^status: applied" IMP-*.md` and take the most recent 5 by date
+- **Re-validation pulse**: One random applied entry whose `last_validated` has not been updated in the last 90 days is selected → the agent passively attends, throughout the session, to whether this entry is still valid. If it sees a contradiction, it automatically opens a `challenge` signal.
 
-### 15.8 Onay Modeli (Çift Onay Kuralı)
+### 15.8 Approval Model (Double-Approval Rule)
 
-| Scope | Onay Modeli |
+| Scope | Approval Model |
 |---|---|
-| `wiki` (sentez sayfaları) | Tek onay + diff preview |
-| `active-context` | Tek onay |
-| `skill` (yeni) | Tek onay + `writing-skills` skill'i zorunlu |
-| `skill` (mevcut edit) | Tek onay + diff + etkilenen workflow listesi |
-| `rule` (`.sumela/rules/*.md`) | **Çift onay:** "bu kural yazılsın mı?" → sonra "uygula?" |
-| `schema` (`_SCHEMA.md`) | **Çift onay** + manuel review zorunlu |
+| `wiki` (synthesis pages) | Single approval + diff preview |
+| `active-context` | Single approval |
+| `skill` (new) | Single approval + `writing-skills` skill is mandatory |
+| `skill` (existing edit) | Single approval + diff + list of affected workflows |
+| `rule` (`.sumela/rules/*.md`) | **Double approval:** "should this rule be written?" → then "apply?" |
+| `schema` (`_SCHEMA.md`) | **Double approval** + manual review mandatory |
 
-**Governance modu (team) — gated scope'lar için PR kapısı:** `AGENTS.md` Section 8'deki `governance` `team` ise, `rule` / `skill` / `schema` scope'lu (yani her geliştiricinin agent'ını etkileyen) değişiklikler doğrudan uygulanmaz; `/evolve` bunları `sumela/evolve-<IMP-ID>` branch'inde uygular + commit + **pull request** açar ve entry `status: proposed` olur. Bir code owner PR'ı merge edince `applied` olur (bkz. 15.10 reconcile). `solo` modda VEYA `wiki`/`active-context` scope'larda bugünkü doğrudan-apply davranışı geçerlidir. Detay: `self-improvement-curator/SKILL.md` `<evolve_review_workflow>`.
+**Governance mode (team) — PR gate for gated scopes:** If `governance` in `AGENTS.md` Section 8 is `team`, changes with `rule` / `skill` / `schema` scope (i.e., those affecting every developer's agent) are not applied directly; `/evolve` applies them on a `sumela/evolve-<IMP-ID>` branch + commit + opens a **pull request** and the entry becomes `status: proposed`. Once a code owner merges the PR, it becomes `applied` (see 15.10 reconcile). In `solo` mode OR for `wiki`/`active-context` scopes, today's direct-apply behavior applies. Detail: `self-improvement-curator/SKILL.md` `<evolve_review_workflow>`.
 
-### 15.9 Hijyen & Arşivleme
+### 15.9 Hygiene & Archiving
 
-- `_improvement-queue/` 500+ entry olursa `superseded` ve `rejected` dosyaları `_improvement-queue/archive/YYYY/` alt dizinine taşınır (dosyalar silinmez)
-- `applied` entry'ler **asla** arşivlenmez (aktif öğrenme, challenge edilebilir olmalı)
-- Arşivleme bir `migration` log entry'si ile kayıt altına alınır
-- Session başı eager-load sadece `pending` + son 5 `applied` okur (context bütçesi); durum dizini `grep -l "^status: <durum>" IMP-*.md` ile taranır
+- If `_improvement-queue/` has 500+ entries, `superseded` and `rejected` files are moved to the `_improvement-queue/archive/YYYY/` subdirectory (files are not deleted)
+- `applied` entries are **never** archived (active learning, must remain challengeable)
+- Archiving is recorded with a `migration` log entry
+- The session-start eager-load reads only `pending` + the last 5 `applied` (context budget); the status directory is scanned with `grep -l "^status: <status>" IMP-*.md`
 
-### 15.10 `_LOG.md` Entegrasyonu
+### 15.10 `_LOG.md` Integration
 
-Aşağıdaki olaylar `_LOG.md`'ye `evolve` entry'si olarak yazılır:
-- Bir IMP entry `proposed` olduğunda (team-mode, PR açıldı)
-- Bir IMP entry `applied` olduğunda (solo doğrudan apply VEYA team-mode PR merge — reconcile)
-- Bir IMP entry `superseded` olduğunda (challenge onayı; applied log satırına `supersedes: <IMP-ID>` eklenir)
+The following events are written to `_LOG.md` as an `evolve` entry:
+- When an IMP entry becomes `proposed` (team-mode, PR opened)
+- When an IMP entry becomes `applied` (solo direct apply OR team-mode PR merge — reconcile)
+- When an IMP entry becomes `superseded` (challenge approval; `supersedes: <IMP-ID>` is added to the applied log line)
 
-`rejected` olaylar `_LOG.md`'ye **yazılmaz** (log gürültüsünü önlemek için) — solo reddetme de team-mode'da kapanan PR de.
+`rejected` events are **not written** to `_LOG.md` (to avoid log noise) — neither a solo rejection nor a PR closed in team-mode.
 
 Format:
 ```markdown
@@ -637,11 +637,11 @@ Format:
 - Challenges: none
 ```
 
-**Reconcile (team mode):** `/evolve` başında, `proposed` durumundaki her entry'nin PR'ı kontrol edilir (`gh pr view` / `glab mr view`; yoksa kullanıcıya sorulur): merge olduysa → `applied` (+ `applied`/`last_validated`), merge olmadan kapandıysa → `rejected`, hâlâ açıksa → `proposed` kalır.
+**Reconcile (team mode):** At the start of `/evolve`, the PR of every entry in the `proposed` status is checked (`gh pr view` / `glab mr view`; if missing, the user is asked): if merged → `applied` (+ `applied`/`last_validated`), if closed without merging → `rejected`, if still open → stays `proposed`.
 
-## 16. Scale Playbook (Wiki Büyüme Yol Haritası)
+## 16. Scale Playbook (Wiki Growth Roadmap)
 
-Wiki büyüdükçe search stack değişir. Aşağıdaki tabloya göre ilerleyin:
+As the wiki grows, the search stack changes. Proceed according to the table below:
 
 | Wiki Size | Search Stack | Action Required |
 |---|---|---|
@@ -654,11 +654,11 @@ Threshold check: invoked during lint workflow (count `*.md` in wiki/ non-recursi
 
 ## 17. Image Reading Workflow (Karpathy Image Pattern)
 
-LLM'ler (Claude dahil) genellikle inline görselleri tek geçişte okuyamaz. Karpathy'nin önerdiği pattern, bu wiki'de şöyle uygulanır:
+LLMs (including Claude) generally cannot read inline images in a single pass. The pattern Karpathy recommends is applied in this wiki as follows:
 
-1. Agent önce kaynak markdown metnini okur (tam metinsel bağlam kurulur).
-2. Agent, görsel referanslarını belirler (`![[...]]` veya `![](../raw_sources/assets/...)`).
-3. Agent, native image-read yeteneği ile görselleri ayrıca görüntüler.
-4. Agent, metin + görsel içeriğini source-summary sayfasında birleştirir.
+1. The agent first reads the source markdown text (full textual context is established).
+2. The agent identifies the image references (`![[...]]` or `![](../raw_sources/assets/...)`).
+3. The agent additionally views the images using its native image-read capability.
+4. The agent combines the text + image content in the source-summary page.
 
-**Storage kuralı:** tüm görsel asset'leri `raw_sources/assets/` altında tutulur (bkz. Section 12 "Obsidian Ekosistem Rehberi"). Obsidian "Attachment folder path" ayarı bu dizine eşlenmiş olmalıdır.
+**Storage rule:** all image assets are kept under `raw_sources/assets/` (see Section 12 "Obsidian Ecosystem Guide"). The Obsidian "Attachment folder path" setting must be mapped to this directory.

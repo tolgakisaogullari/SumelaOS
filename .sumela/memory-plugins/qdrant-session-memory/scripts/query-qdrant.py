@@ -4,8 +4,8 @@ query-qdrant.py — Semantic Search over Qdrant Collections (v1.0-agnostic)
 
 Usage:
     python query-qdrant.py "why was sprint 12 following feed chosen"
-    python query-qdrant.py "geçen hafta ne konuştuk" --limit 3 --threshold 0.75
-    python query-qdrant.py "AuthService ne yapıyor" --collection code_vectors
+    python query-qdrant.py "what did we discuss last week" --limit 3 --threshold 0.75
+    python query-qdrant.py "what does AuthService do" --collection code_vectors
     python query-qdrant.py "test" --host my-qdrant --port 6333 --ollama-url http://gpu:11434
 
 What it does:

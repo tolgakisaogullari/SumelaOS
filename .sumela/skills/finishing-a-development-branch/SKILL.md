@@ -84,13 +84,13 @@ Execute these steps strictly in sequence. DO NOT announce the skill.
      - Report issues IF ANY; stay silent if clean. Do NOT block branch completion on lint issues - only warn.
 
 8. DEPLOYMENT PROMPT (OPTIONAL - ALWAYS ASK):
-   - After the Second Brain update is complete, present this exact question to the user in Turkish:
-     "Branch kapatildi ve Second Brain guncellendi. Bu degisiklikleri production'a almak ister misin? (Evet -> `shipping-and-launch` adimlarini baslatirim / Hayir -> burada tamamliyoruz)"
+   - After the Second Brain update is complete, present this question to the user in the configured interaction language (English reference):
+     "Branch closed and the Second Brain is updated. Want to ship these changes to production? (Yes -> I'll start the `shipping-and-launch` steps / No -> we finish here)"
    - If YES: Invoke the `shipping-and-launch` skill immediately.
    - If NO: Proceed directly to Step 9 without invoking any other skill. Do not ask again.
    - IMPORTANT: This is ALWAYS asked - even for small tasks. The user decides; the agent never assumes.
 
 9. FINAL REPORTING (MANDATORY):
-   - Explicitly inform the user in Turkish that the entire workflow is complete.
-   - You MUST clearly state that the Second Brain (`active-project-context.md` and `_LOG.md`) has been successfully updated with the latest context. (e.g., "Islem tamamlandi, kodlar basariyla commit edildi ve Second Brain hafizasi guncellendi.")
+   - Explicitly inform the user, in the configured interaction language, that the entire workflow is complete.
+   - You MUST clearly state that the Second Brain (`active-project-context.md` and `_LOG.md`) has been successfully updated with the latest context. (e.g., "Done — the code was committed successfully and the Second Brain memory is updated.")
 </execution_workflow>

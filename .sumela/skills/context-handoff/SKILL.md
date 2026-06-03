@@ -1,6 +1,6 @@
 ---
 name: context-handoff
-description: "Use when context compaction warnings appear, after 8+ major tool sequences, after 3+ large file reads plus 2+ review cycles, when a sprint task closes mid-session with more work pending, or when the user asks for a handoff prompt, says 'context doldu mu', 'yeni session', 'handoff hazırla'."
+description: "Use when context compaction warnings appear, after 8+ major tool sequences, after 3+ large file reads plus 2+ review cycles, when a sprint task closes mid-session with more work pending, or when the user asks for a handoff prompt or to start a new session (in any language)."
 ---
 
 <purpose>
@@ -26,7 +26,7 @@ Activate the handoff-assessment workflow when ANY of these conditions are true:
 2. **Task-count heuristic:** You have executed 8+ major tool call sequences (each task counts as one sequence) in the current session.
 3. **Volume heuristic:** The session has involved 3+ full reads of large files (>200 lines) AND 2+ code-review cycles.
 4. **Sprint milestone heuristic:** A sprint task is marked complete and the remaining task count suggests 2+ tasks still need to be done this session.
-5. **Explicit user trigger:** User says "context handoff", "prepare handoff", "new session", "handoff prompt hazırla", "yeni session'a geçelim", "context doldu mu?", "let's continue in a new session".
+5. **Explicit user trigger:** User says "context handoff", "prepare handoff", "new session", "let's continue in a new session", "is the context full?" — or the equivalent in any language.
 
 **Rule:** Activate the assessment — do NOT interrupt the user mid-task. Always complete the current smallest meaningful unit first, THEN assess.
 </trigger_conditions>
@@ -123,7 +123,7 @@ Use when: You are mid-task and context is running low.
    - Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in the project's configured language**.
 
 **Step 6 — Generate and present handoff prompt** using `<handoff_template>` below.
-- The "Sıradaki Görev" section MUST include the full checkpoint detail so the next agent continues from exactly where you stopped.
+- The "🔴 Continue Point" section MUST include the full checkpoint detail so the next agent continues from exactly where you stopped.
 </protocol_b>
 
 <session_summary_protocol>
@@ -226,10 +226,10 @@ Present the filled template inside a fenced code block so the user can copy-past
 
 ## Session Handoff — {DATE}
 
-### Proje & Branch
+### Project & Branch
 - Branch: `{branch-name}`
-- Worktree: `{worktree-path}` (veya "ana repo, worktree yok")
-- Plan / Artifact: [{plan-file-name}](docs/second-brain/artifacts/plans/{plan-file.md}) veya `{none - maintenance/session summary only}`
+- Worktree: `{worktree-path}` (or "main repo, no worktree")
+- Plan / Artifact: [{plan-file-name}](docs/second-brain/artifacts/plans/{plan-file.md}) or `{none - maintenance/session summary only}`
 
 ### Sprint Summary
 - Sprint: {sprint-id or feature-name}
@@ -237,12 +237,12 @@ Present the filled template inside a fenced code block so the user can copy-past
 - Completed: {M} tasks ✅
 - Remaining: {N-M} tasks
 
-### Tamamlanan Tasklar (Bu Session)
+### Completed Tasks (This Session)
 {For each task completed in this session:}
-- ✅ T{N}: {task-adi} — {commit-hash veya "staged"}
+- ✅ T{N}: {task-name} — {commit-hash or "staged"}
 
 ### 🔴 Continue Point
-**T{N}: {task-adi}**
+**T{N}: {task-name}**
 
 {Full task description copied from the plan file — do NOT summarize, copy verbatim so the next agent has full intent context.}
 
@@ -251,7 +251,7 @@ Present the filled template inside a fenced code block so the user can copy-past
 > **Next step:** {Exactly where to continue.}
 
 ### Pending Decisions / Blockers
-{List open decisions or blockers, or write "Yok."}
+{List open decisions or blockers, or write "None."}
 
 ### Second Brain Status
 - `active-project-context.md`: {Updated ✅ | Unchanged - active state unchanged}

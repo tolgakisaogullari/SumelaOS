@@ -64,20 +64,20 @@ This block is eager-loaded so the routing rules are available BEFORE any user qu
 Two trigger FAMILIES — a question may match one, both, or neither. Run the matching tier(s) BEFORE any `Read`, `grep`, or `git log` call.
 
 FAMILY A — Tier-1 (Qdrant `chat_history`) — for past-decision / "why" / "what changed" questions:
-- Contains "why" / "neden" / "niye".
-- Contains "what did we decide" / "ne karar verdik" / "what changed" / "ne değişti".
-- Contains "previously" / "last time" / "before" / "geçen sefer" / "geçen hafta" / "daha önce".
-- References a past sprint, refactor, decision, ADR, or architectural choice (e.g., "Sprint 12 neden", "AD-XX nasıl", "the auth refactor").
+- Contains "why" (or the equivalent in any language).
+- Contains "what did we decide" / "what changed" (or the equivalent in any language).
+- Contains "previously" / "last time" / "before".
+- References a past sprint, refactor, decision, ADR, or architectural choice (e.g., "why Sprint 12", "how does AD-XX work", "the auth refactor").
 - Asks about an entity/method/file that has likely been discussed in prior sessions.
 
 FAMILY B — Tier-2 (Graphify code graph at `graphify-out/graph.json`) — for structural / call-graph / impact / dependency questions:
-- "X used where" / "X nerede kullanılıyor" / "who calls X" / "kim çağırıyor X".
-- "what does X do" / "X.Y() ne yapıyor" / "what does X call" / "X.Y() ne çağırıyor".
-- "if I change X what breaks" / "X'i değiştirsem ne etkilenir" — impact analysis.
-- "who depends on X" / "X entity'sine kim bağlı" / "what references X".
+- "where is X used" / "who calls X" (or the equivalent in any language).
+- "what does X do" / "what does X.Y() call".
+- "if I change X what breaks" — impact analysis.
+- "who depends on X" / "what references X".
 - References a function, class, method, file path, or entity by name + asks about its callers, callees, dependencies, or impact.
 
-HARD RULE — for any FAMILY A match: Tier-1 query is MANDATORY before any `Read`, `git log`, or `grep`. For any FAMILY B match: Tier-2 query is MANDATORY before any `Read` or `grep`. For HYBRID questions matching both families (e.g., "Sprint 15 neden Adjacency List seçtik ve Comment entity hangi servisleri etkiliyor"): run BOTH Tier-1 AND Tier-2 in parallel, then synthesize. Skipping a matching tier and going straight to file/history reads is a workflow violation.
+HARD RULE — for any FAMILY A match: Tier-1 query is MANDATORY before any `Read`, `git log`, or `grep`. For any FAMILY B match: Tier-2 query is MANDATORY before any `Read` or `grep`. For HYBRID questions matching both families (e.g., "why did we choose Adjacency List in Sprint 15, and which services does the Comment entity affect"): run BOTH Tier-1 AND Tier-2 in parallel, then synthesize. Skipping a matching tier and going straight to file/history reads is a workflow violation.
 
 CONCRETE PROTOCOL (run in order, stop as soon as you have a complete answer):
 
@@ -161,7 +161,7 @@ WHEN to print (mandatory triggers — print at every one of these):
 1. After session bootstrap (`<session_bootstrap>` STEP 4) finishes — initial manifest, BEFORE the first response.
 2. At every PHASE TRANSITION (e.g., spec approved → entering planning; plan approved → entering implementation).
 3. Before any high-stakes action: `git commit`, `requesting-code-review` dispatch, `finishing-a-development-branch`, `shipping-and-launch`, AND before the `/evolve` review workflow begins (since `/evolve` writes to rules/skills/schema/wiki).
-4. Whenever the user asks: "what's loaded", "show context", "ne yüklü", "ne aktif", "manifest", "context göster", `/context`, `/manifest`.
+4. Whenever the user asks: "what's loaded", "show context", "manifest" (or the equivalent in any language), `/context`, `/manifest`.
 
 FORMAT — header in the project's configured language, content in English (skill/rule names + structural tags):
 

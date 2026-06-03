@@ -15,7 +15,7 @@ The correct installation is `uv tool install graphifyy` (PyPI: `graphifyy`, doub
 All query operations (`query-graph.py`, `graphify query`, `graphify path`, `graphify explain`) read from the local `graphify-out/graph.json` file. They are **purely local** — no network calls, no API keys, no cost. API keys are only needed for initial graph BUILD from docs/PDFs/images (not for querying an existing graph).
 
 ## Routing
-- **Trigger:** Query contains "X nerede kullanılıyor", "X used where", "who calls X", "what does X call", "if I change X what breaks", or references function/class/method + asks about callers/callees/dependencies.
+- **Trigger:** Query contains "where is X used", "who calls X", "what does X call", "if I change X what breaks" (or the equivalent in any language), or references function/class/method + asks about callers/callees/dependencies.
 - **Primary tool:** `python .sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py "<symbol>"`
   - `--depth 2` for transitive (2-hop)
   - `--impact` for incoming closure (what breaks if you change X)

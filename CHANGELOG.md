@@ -86,6 +86,15 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   now also copies `docs/second-brain/template/` and the new `.opencode/`), and
   `/initSumela` gained Step 3.6b (`.gitattributes` union-merge + `.gitignore` secret
   baseline) so both install paths reach full parity with `setup.sh`.
+- **English-only framework artifacts (global-ready)** — removed hardcoded Turkish from
+  the agent-control surface: the prompt's routing/trigger examples, skill trigger
+  phrases + user-facing example prompts (`self-improvement-curator`, `using-second-brain`,
+  `context-handoff`, `idea-explore`, `finishing-a-development-branch`), the plugin
+  trigger lines, the `_SCHEMA.md` template (fully translated, section numbers + enums
+  preserved), and the two ingest scripts' examples. Triggers are now English + "the
+  equivalent in any language"; instructions that said "respond in Turkish" now say
+  "in the configured interaction language". Setup-script output is English; the agent
+  still renders all user-facing text in the developer's chosen language.
 
 - **`status.sh` / `status.ps1` hook detection** now recognizes all three wiring forms
   the monorepo work introduced (root, subdir `<rel>/.sumela/git-hooks`, and the

@@ -102,7 +102,7 @@ Files to create:
 Replace all placeholder values:
 - `[Project Name]` → your project name
 - `YYYY-MM-DD` → today's date
-- Add initial project state under "Aktif Çalışma"
+- Add initial project state under "Active Work"
 
 ### A.5. Copy `.sumela/` skill engine
 

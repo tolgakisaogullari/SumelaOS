@@ -378,7 +378,7 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
         printf 'sumela: Qdrant code_chunks (semantic code search) %s and code changed in this pull.\n        Re-embed the whole source tree now? It can be slow. [y/N] ' "$since" >/dev/tty
         local ans=""; read -t 30 -r ans </dev/tty 2>/dev/null || ans=""
         case "$ans" in
-          y|Y|yes|YES|e|E|evet|EVET) do_ingest=true ;;
+          y|Y|yes|YES) do_ingest=true ;;
           *) echo "sumela: code_chunks refresh skipped — run later: python3 .sumela/memory-plugins/qdrant-session-memory/scripts/ingest-code-to-qdrant.py (or export SUMELA_PULL_CODE_REINGEST=1)" >/dev/tty ;;
         esac
       else
