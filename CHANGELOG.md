@@ -7,6 +7,43 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ## [Unreleased]
 
+### Added
+
+- **Parallel code-review panel** — `requesting-code-review` now dispatches three
+  lane reviewers concurrently instead of one generalist: Correctness & Security
+  (incl. auth/credential token lifecycle + security-boundary tests), Design &
+  Contracts (conventions, architecture, API/contract stability, backward-compat),
+  and Integration & Operations (cross-module impact via graphify, performance,
+  data/persistence, observability/rollback, test coverage). The orchestrator then
+  synthesizes the lanes — dedupes overlapping findings, surfaces `CONFLICT`s, and
+  applies an AND-gate (any lane's Critical blocks commit/merge). New lane templates:
+  `reviewer-correctness-security.md`, `reviewer-design-contracts.md`,
+  `reviewer-integration-ops.md`; the legacy single-reviewer `code-reviewer.md` is
+  retained as an IDE/degraded fallback. SDD's final review (Step 5) inherits the
+  panel automatically; its per-task Stage-1/Stage-2 reviews are unchanged.
+- **`reconcile-registry.py --stats`** — prints the canonical skill counts
+  (`skill_workflows`, `loadable_skills`, `plugin_skills`) as the single source of
+  truth for any number quoted in docs.
+- **README skill-count drift guard** — `validate-structure.sh` compares the README
+  `<!-- sumela:skill-count -->` marker against `--stats` and fails on mismatch, so
+  the documented count can never silently diverge when a skill is added/removed
+  (silent no-op in user projects, where README isn't present).
+- **"How SumelaOS Extends Superpowers" README section** — an evidence-based,
+  honest side-by-side vs [obra/superpowers](https://github.com/obra/superpowers)
+  (21 vs 14 skill workflows, the review panel, rules/memory/governance layers — and
+  where Superpowers is still broader on harness count).
+
+### Changed
+
+- **Context Manifest triggers narrowed** — the manifest now prints only on explicit
+  user request (`/context`) and immediately before high-stakes actions (commit,
+  code-review dispatch, finishing a branch, shipping, `/evolve`). It no longer
+  prints at session start or on every phase transition, removing the "first output
+  must be the manifest" mandate. Cuts recurring output tokens and per-turn latency
+  while keeping the GAP-visibility checkpoint where it matters; spec trimmed in
+  `sumela-prompt.md`. Dependent references (using-superpowers, RULE_REGISTRY
+  template, AGENTS.md template, init-sumela, README) updated to match.
+
 ## [0.4.0] - 2026-06-02
 
 ### Added — less manual work, monorepo support

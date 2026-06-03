@@ -20,6 +20,7 @@ Scope:
 Usage:
   python3 scripts/reconcile-registry.py            # add missing skill entries; report orphans
   python3 scripts/reconcile-registry.py --check     # report only; exit 1 if out of sync
+  python3 scripts/reconcile-registry.py --stats     # print canonical skill counts (source of truth for docs)
 """
 import sys
 import os
@@ -29,6 +30,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 CHECK = "--check" in sys.argv[1:]
+STATS = "--stats" in sys.argv[1:]
 
 
 def find_root(start):
@@ -88,6 +90,22 @@ for b in reg_blocks:
         registered_names.add(n.group(1).strip())
     if p:
         registered_paths.append(p.group(1).strip())
+
+# --stats: emit the canonical skill counts (the single source of truth for any
+# number quoted in docs). README's drift guard (validate-structure.sh) compares
+# the numbers it prints against these, so docs can never silently diverge.
+if STATS:
+    dir_count = 0
+    if os.path.isdir(SKILLS_DIR):
+        for entry in sorted(os.listdir(SKILLS_DIR)):
+            if os.path.isfile(os.path.join(SKILLS_DIR, entry, "SKILL.md")):
+                dir_count += 1
+    loadable = [p for p in registered_paths if p.startswith(".sumela/skills/")]
+    plugins = [p for p in registered_paths if "memory-plugins/" in p]
+    print(f"skill_workflows={dir_count}")      # one SKILL.md dir = one workflow
+    print(f"loadable_skills={len(loadable)}")   # registry skills/ paths (incl. sub-skills)
+    print(f"plugin_skills={len(plugins)}")      # memory-plugin entries (conditional)
+    sys.exit(0)
 
 # 1) Skills on disk (core skills dir) missing from the registry.
 unregistered = []  # (name, description, relpath)

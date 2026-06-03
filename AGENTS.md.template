@@ -91,7 +91,7 @@ This file deliberately does NOT duplicate that content. Read the runtime contrac
 - Canonical rule catalog lives in `.sumela/RULE_REGISTRY.md` — phase definitions, stack scopes, and the phase-to-rule matrix. Use it to decide which project rules to load for the current task.
 - If a required skill or rule is not in context, read its file via the `<path>` in the matching registry before executing.
 - Once loaded, the skill's `<execution_workflow>` is the absolute operating directive for that phase; rules are constraint layers applied across all subsequent actions.
-- Context Manifest is mandatory at session start, phase transitions, and before high-stakes actions. Spec lives in `sumela-prompt.md` `<context_manifest_protocol>`.
+- Context Manifest prints on explicit user request (`/context`, "show context") and immediately before high-stakes actions (commit, code-review dispatch, finishing a branch, shipping, `/evolve`) — NOT at session start or on phase transitions. Spec lives in `sumela-prompt.md` `<context_manifest_protocol>`.
 - Full runtime contract: `.sumela/sumela-prompt.md`.
 
 ---

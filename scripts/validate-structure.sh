@@ -249,6 +249,29 @@ for plugin in qdrant-session-memory graphify-code-graph; do
 done
 
 # -----------------------------------------------------------------------------
+# 9. Doc skill-count drift guard (framework repo only — README isn't copied into
+#    user projects, so this is a silent no-op there). The README carries a marker:
+#      <!-- sumela:skill-count workflows=21 loadable=26 ... -->
+#    whose numbers MUST match reconcile-registry.py --stats (the source of truth),
+#    so the headline count can never silently drift when a skill is added/removed.
+# -----------------------------------------------------------------------------
+MARKER_LINE="$(grep -m1 'sumela:skill-count' README.md 2>/dev/null || true)"
+if [ -n "$MARKER_LINE" ] && command -v python3 &>/dev/null && [ -f scripts/reconcile-registry.py ]; then
+  STATS="$(python3 scripts/reconcile-registry.py --stats 2>/dev/null || true)"
+  real_wf="$(printf '%s\n' "$STATS"   | sed -n 's/^skill_workflows=//p')"
+  real_load="$(printf '%s\n' "$STATS" | sed -n 's/^loadable_skills=//p')"
+  doc_wf="$(printf '%s\n'   "$MARKER_LINE" | sed -n 's/.*workflows=\([0-9][0-9]*\).*/\1/p')"
+  doc_load="$(printf '%s\n' "$MARKER_LINE" | sed -n 's/.*loadable=\([0-9][0-9]*\).*/\1/p')"
+  if [ -z "$real_wf" ] || [ -z "$real_load" ]; then
+    warn "Skill-count guard — reconcile-registry.py --stats produced no counts, skipping"
+  elif [ "$doc_wf" = "$real_wf" ] && [ "$doc_load" = "$real_load" ]; then
+    pass "README skill count in sync (workflows=$real_wf, loadable=$real_load)"
+  else
+    fail "README skill count DRIFTED — marker says workflows=$doc_wf/loadable=$doc_load, on-disk is workflows=$real_wf/loadable=$real_load (fix README.md marker + prose)"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------------
 TOTAL=$((PASSES + FAILURES))

@@ -412,7 +412,7 @@ All checks must pass.
 
 ### Next Steps
 1. Review the generated files and customize if needed
-2. On the first session, the agent will automatically print the Context Manifest
+2. Ask for the Context Manifest anytime with `/context` to see which skills/rules are loaded (it also prints automatically before high-stakes actions like commit, code review, shipping, and `/evolve`)
 3. Start the self-improvement loop with `/evolve`
 4. (Optional) Activate memory plugins — should have been asked during `/initSumela`
 

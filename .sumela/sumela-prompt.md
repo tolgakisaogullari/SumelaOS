@@ -14,7 +14,7 @@ If two skill bodies appear to disagree, the one whose `<execution_workflow>` is 
 </authority_hierarchy>
 
 <session_bootstrap>
-EXECUTE this sequence at the first user turn of every session as concrete tool calls — NOT as instructions to remember. Do not write any user-facing text until ALL steps complete and the Context Manifest has been printed. Bootstrap is silent (do not narrate the steps); only the Manifest at STEP 5 is shown to the user.
+EXECUTE this sequence at the first user turn of every session as concrete tool calls — NOT as instructions to remember. Bootstrap is silent: do not narrate the steps, and do NOT print a Context Manifest at session start. Once all steps complete, answer the user's prompt directly. The Context Manifest is printed only on the narrowed triggers in `<context_manifest_protocol>` (explicit user request, or immediately before a high-stakes action).
 
 STEP 1 — DISCOVERY SURFACES — execute these reads BEFORE drafting any answer:
   ☐ Read `.sumela/SKILL_REGISTRY.md` (skip if already in context)
@@ -52,10 +52,9 @@ STEP 4 — PROJECT RULES — driven by `RULE_REGISTRY.md`:
   ☐ Consult `<phase_to_rule_matrix>` and READ every universal rule, every phase-conditional rule whose phase matches, and every stack-conditional rule whose stack matches. Skip rules already in context.
   ☐ Load nothing else — do NOT pre-load all rules.
 
-STEP 5 — PRINT CONTEXT MANIFEST — this is YOUR FIRST USER-FACING OUTPUT (see `<context_manifest_protocol>` below for format and `INVARIANTS`).
-  - The manifest comes BEFORE answering the user's question.
-  - If you skip the manifest, you violate the contract — even for a "simple" or "quick" question.
-  - After the manifest, address the user's actual prompt.
+STEP 5 — COMPLETE BOOTSTRAP SILENTLY — do NOT print a Context Manifest here.
+  - Bootstrap is done. Proceed directly to the user's actual prompt; answering first is correct, not a contract violation.
+  - Print a manifest later ONLY when `<context_manifest_protocol>` requires it (explicit user request, or immediately before a high-stakes action).
 </session_bootstrap>
 
 <information_gap_routing>
@@ -155,13 +154,13 @@ For `scope: rule` signals, the default target is `.sumela/rules/<existing-catego
 </signal_capture>
 
 <context_manifest_protocol>
-The Context Manifest is a structured printout listing every skill and rule currently loaded into context. It exists so the user can verify the agent loaded what `SKILL_REGISTRY.md` and `RULE_REGISTRY.md` say it should load — and spot gaps when something is missing.
+The Context Manifest is a structured printout of every skill and rule currently loaded into context, plus a GAPS section showing what `SKILL_REGISTRY.md` / `RULE_REGISTRY.md` expected for the active phase/stack but isn't loaded. It is the user's visibility/lint checkpoint.
 
-WHEN to print (mandatory triggers — print at every one of these):
-1. After session bootstrap (`<session_bootstrap>` STEP 4) finishes — initial manifest, BEFORE the first response.
-2. At every PHASE TRANSITION (e.g., spec approved → entering planning; plan approved → entering implementation).
-3. Before any high-stakes action: `git commit`, `requesting-code-review` dispatch, `finishing-a-development-branch`, `shipping-and-launch`, AND before the `/evolve` review workflow begins (since `/evolve` writes to rules/skills/schema/wiki).
-4. Whenever the user asks: "what's loaded", "show context", "manifest" (or the equivalent in any language), `/context`, `/manifest`.
+WHEN to print (these triggers ONLY — do NOT print at session start or on phase transitions):
+1. The user asks: "what's loaded", "show context", "manifest" (or the equivalent in any language), `/context`, `/manifest`.
+2. Immediately BEFORE a high-stakes action: `git commit`, `requesting-code-review` dispatch, `finishing-a-development-branch`, `shipping-and-launch`, and before the `/evolve` review workflow begins (since `/evolve` writes to rules/skills/schema/wiki).
+
+Outside these two triggers, do NOT print the manifest — answering directly (including the first response of a session) is correct, not a violation. When a trigger DOES fire, skipping the manifest is a workflow violation: it is the only place the user sees GAPS.
 
 FORMAT — header in the project's configured language, content in English (skill/rule names + structural tags):
 
@@ -170,35 +169,22 @@ FORMAT — header in the project's configured language, content in English (skil
 
 SKILLS
   ✓ <name>                    [eager|lazy]              <reason loaded>
-  ⏳ <name>                    [pending]                 <when will load>
-
 RULES
   ✓ <name>                    [universal|phase|stack]   <reason loaded>
-  ⏳ <name>                    [pending]                 <when will load>
-
 GAPS (expected by registry, NOT loaded — verify intent)
   ⚠ <name>                    [<expected-trigger>]      <hint or path>
 
-ALIGNMENT
-  Skills loaded: N / expected: M
-  Rules loaded:  N / expected: M
-  Gaps: K        ← if K > 0, user should investigate the GAPS section above
+ALIGNMENT  Skills N/M · Rules N/M · Gaps K   (if K > 0, investigate GAPS above)
 ```
 
 GAP COMPUTATION (the lint layer):
-- `expected_skills` = eager skills (always 2: `using-superpowers` + `context-handoff`) + lazy skills required by the active phase.
-- `expected_rules` = universal rules (always loaded once any task is active) + phase-conditional rules for current phase + stack-conditional rules for active stack scope (per `RULE_REGISTRY.md` matrix).
-- `actual` = whatever is currently in context.
-- `gaps = expected - actual`. Each gap line includes the trigger that should have loaded the missing item, so the user can immediately see why it was expected.
+- `expected_skills` = 2 eager (`using-superpowers` + `context-handoff`) + lazy skills required by the active phase.
+- `expected_rules` = universal rules + phase-conditional rules for the current phase + stack-conditional rules for the active stack scope (per `RULE_REGISTRY.md` matrix).
+- `gaps = expected − actual`. Each gap line names the trigger that should have loaded it.
 
-INVARIANTS:
-- **FIRST USER-FACING OUTPUT MUST BE THE MANIFEST.** In a fresh session, your VERY FIRST text response to the user MUST begin with the Context Manifest block. The user's question is answered AFTER the manifest, never instead of. If you find yourself drafting a non-manifest first response, STOP and reorder: manifest first, answer second. This invariant overrides any "be concise" tendency, any "the question is simple" rationalization, and any "the user is in a hurry" assumption.
-- ALWAYS print the manifest at the four mandatory triggers above. Skipping it is a workflow violation, regardless of the brevity or domain of the user's question.
-- NEVER print the manifest mid-task (it would interrupt flow). Print only at the trigger boundaries listed above.
-- The Phase header MUST reflect the agent's actual current phase, not a guess. If you cannot determine a phase yet (e.g., very first user prompt before task is clear), print `[Phase: <none-yet>]` and reprint after phase becomes clear.
-- The Stack header MUST list every active stack scope (e.g., `[Stack: backend, mobile]` for cross-stack tasks).
-- If `RULE_REGISTRY.md` is not in context yet, print a degraded manifest noting the registry is missing — never silently skip the manifest.
-- The manifest is short (~15-25 lines). It is NOT noise — it is the visibility contract with the user. Skipping it because "the answer is just one paragraph" is the most common failure mode and is forbidden.
+NOTES:
+- The Phase/Stack headers MUST reflect the agent's actual current phase/stack — list every active stack (e.g., `[Stack: backend, mobile]`). Use `[Phase: <none-yet>]` if not yet determinable.
+- If `RULE_REGISTRY.md` is not in context when a manifest is triggered, print a degraded manifest noting the registry is missing rather than skipping it.
 </context_manifest_protocol>
 
 <context_handoff>

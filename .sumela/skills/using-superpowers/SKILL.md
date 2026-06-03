@@ -82,9 +82,9 @@ GLOBAL SECURITY MANDATE — If the task involves planning, writing, or reviewing
 - Skill types: rigid skills (e.g., `systematic-debugging`, `secure-coding-standard`) follow exactly — do NOT adapt away discipline; flexible skills (architecture patterns, conventions) adapt principles to context. The skill body declares which.
 - Once loaded, the skill's `<execution_workflow>` is the operating directive for that phase.
 
-## STEP 5b — Print Context Manifest (visibility checkpoint)
+## STEP 5b — Context Manifest (visibility checkpoint)
 
-Print the Context Manifest exactly when `.sumela/sumela-prompt.md` `<context_manifest_protocol>` requires it: after bootstrap, phase transitions, high-stakes actions, `/evolve`, or explicit user request. The GAPS section is the lint layer; never skip a mandatory manifest.
+Print the Context Manifest only when `.sumela/sumela-prompt.md` `<context_manifest_protocol>` requires it: on explicit user request, or immediately before a high-stakes action (commit, code-review dispatch, finishing a branch, shipping, `/evolve`). Do NOT print it at session start or on phase transitions — answer directly. When a trigger fires, the GAPS section is the lint layer; don't skip it.
 
 ## STEP 6 — Forbidden rationalizations
 
@@ -95,5 +95,5 @@ Print the Context Manifest exactly when `.sumela/sumela-prompt.md` `<context_man
 - "I remember this skill, no need to re-read" — wrong, skills evolve; load the file.
 - "I'll commit and review later" — wrong, `requesting-code-review` runs before any commit.
 - "Inline execution is equivalent to subagent dispatch" — wrong unless the skill defines an explicit IDE Fallback Protocol.
-- "The manifest is noise, I'll skip it" — wrong, the manifest is the ONLY way the user sees gaps. Skipping it defeats the entire visibility design.
+- "The manifest is noise, I'll skip it" — wrong at its triggers (user request, pre-high-stakes action); there it is the only way the user sees GAPS. (Outside those triggers you correctly do NOT print it.)
 </execution_workflow>

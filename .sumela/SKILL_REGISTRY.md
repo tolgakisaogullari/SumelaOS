@@ -14,7 +14,7 @@ Selection rules:
 
 What is NOT in this registry (deliberately):
 Some skill directories contain helper files that are NOT independently discoverable:
-- Prompt templates (e.g., `brainstorming/spec-document-reviewer-prompt.md`, `requesting-code-review/code-reviewer.md`, `subagent-driven-development/{implementer,spec-reviewer,code-quality-reviewer}-prompt.md`, `writing-plans/plan-document-reviewer-prompt.md`) — payloads dispatched to a subagent BY a parent skill.
+- Prompt templates (e.g., `brainstorming/spec-document-reviewer-prompt.md`, `requesting-code-review/{reviewer-correctness-security,reviewer-design-contracts,reviewer-integration-ops}.md` (the parallel review-panel lanes) and `requesting-code-review/code-reviewer.md` (legacy single-reviewer fallback), `subagent-driven-development/{implementer,spec-reviewer,code-quality-reviewer}-prompt.md`, `writing-plans/plan-document-reviewer-prompt.md`) — payloads dispatched to a subagent BY a parent skill.
 - Reference docs (e.g., `writing-skills/persuasion-principles.md`) — loaded BY the parent skill when relevant.
 - Optional companions (e.g., `brainstorming/visual-companion.md`) — invoked BY parent skill on user opt-in.
 

@@ -4,7 +4,7 @@
   <img src="sumela.jpeg" alt="Sumela Monastery, Trabzon, Turkey" width="500" height="625">
 </p>
 
-A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 26 universal skills, structured rules, and a living knowledge base from the first session.
+A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 21 skill workflows, structured rules, and a living knowledge base from the first session.
 
 Built to scale from **a single developer to a whole team** — with git-native shared memory, governed self-improvement, enforced structure, per-developer overrides, and a versioned upgrade path. See [Working as a Team](#working-as-a-team).
 
@@ -97,7 +97,8 @@ it anytime is safe (idempotent).
 
 ## Features
 
-- **26 universal agent skills** — brainstorming, planning, TDD, debugging, code review, shipping, and more
+<!-- sumela:skill-count workflows=21 loadable=26 (verified by validate-structure.sh against reconcile-registry.py --stats) -->
+- **21 skill workflows** (26 loadable skill files incl. sub-skills) — brainstorming, planning, TDD, debugging, code review, shipping, and more
 - **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile)
 - **Second-brain wiki** — Karpathy LLM Wiki pattern with structured knowledge capture
 - **Memory plugins** — optional Qdrant session memory (Tier-1) and Graphify code graph (Tier-2)
@@ -136,7 +137,7 @@ This file defines:
 - **Skill and rule loading** — which workflows and constraints are active
 - **Information gap routing** — how the agent searches for context (Qdrant, Graphify, wiki, grep)
 - **Signal capture** — how the agent learns from corrections and friction
-- **Context manifest** — what the agent shows you at session start
+- **Context manifest** — what skills/rules are loaded; shown on request (`/context`) and before high-stakes actions
 
 Every other file in `.sumela/` defers to this prompt when instructions conflict. **You don't need to edit it** — it works out of the box. But if you want to customize how your agent behaves at the deepest level, this is where you do it.
 
@@ -155,7 +156,7 @@ Every other file in `.sumela/` defers to this prompt when instructions conflict.
 │  │         .sumela/             │            │
 │  │  SKILL_REGISTRY.md               │            │
 │  │  RULE_REGISTRY.md                │            │
-│  │  skills/        (26 skills)      │            │
+│  │  skills/        (21 workflows)   │            │
 │  │  rules/         (7+ rules)       │            │
 │  │  memory-plugins/ (optional)      │            │
 │  └──────────────────────────────────┘            │
@@ -187,7 +188,9 @@ Git + any IDE          Python 3.10+
 | Trae | `.trae/rules/00-agent.md` | Yes |
 | OpenCode | `.opencode/AGENTS.md` | Yes |
 
-All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one file only; pointers never drift.
+All pointer files are ≤15 lines (the shipped ones are ~9) and redirect to `AGENTS.md`. Updates go to one file only; pointers never drift.
+
+**The six above are a starter set, not a limit.** The real contract is `AGENTS.md` + `.sumela/`; each pointer is just a ~9-line "read `AGENTS.md` first" redirect. To support a tool that isn't listed, drop one pointer into whatever instruction file that tool auto-reads (or, if it reads `AGENTS.md` natively, nothing at all). So SumelaOS runs in **any agent/IDE that loads a project instruction file** — the same engine, unchanged, behind every pointer.
 
 ## What's Included
 
@@ -219,7 +222,7 @@ All pointer files are ≤15 lines and redirect to `AGENTS.md`. Updates go to one
 │   ├── VERSION                     # Core framework version (for update.sh)
 │   ├── SKILL_REGISTRY.md           # Skill catalog
 │   ├── RULE_REGISTRY.md.template   # Rule catalog template
-│   ├── skills/                     # 26 skills (across 21 dirs)
+│   ├── skills/                     # 21 workflows · 26 loadable skill files
 │   ├── rules/                      # Universal + stack-specific rules
 │   ├── git-hooks/                  # pre-commit validation + memory-sync hooks
 │   ├── local.md.example            # Per-developer override template (gitignored when copied)
@@ -243,7 +246,7 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 
 | Problem | Without SumelaOS | With SumelaOS |
 |---|---|---|
-| **No workflow structure** | Agent improvises each task | 26 skills define structured workflows (brainstorm → plan → implement → review → ship) |
+| **No workflow structure** | Agent improvises each task | 21 skill workflows define structured procedures (brainstorm → plan → implement → review → ship) |
 | **No coding standards** | Agent uses its own defaults | Project-specific rules enforce your conventions |
 | **No session memory** | Every session starts from zero | Qdrant plugin remembers past decisions; on a team, summaries sync to every developer via git hooks |
 | **No code structure awareness** | Agent greps blindly | Graphify plugin understands call graphs and dependencies |
@@ -253,6 +256,25 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 | **Team merge conflicts** | Everyone edits the same memory/queue files | Union-merge logs + one-file-per-signal queue + per-developer overrides |
 | **Ungoverned agent standards** | One dev's correction silently becomes everyone's rule | Team mode routes rule/skill/schema changes through a reviewed PR (CODEOWNERS) |
 | **Drift & decay** | Structure rots; framework updates clobber customizations | Pre-commit + CI enforce the contract; `update.sh` upgrades the core, never the overlay |
+
+## How SumelaOS Extends Superpowers
+
+SumelaOS's skill engine is a fork of [obra/superpowers](https://github.com/obra/superpowers) — the project that pioneered structured agent workflows. We kept all 14 of its skill workflows verbatim and built **7 more** on top, then layered on systems Superpowers does not ship (rules, knowledge base, memory, governance). The table below is an honest side-by-side — including where Superpowers is still broader.
+
+| Capability | [Superpowers](https://github.com/obra/superpowers) | SumelaOS |
+|---|---|---|
+| **Skill workflows** | 14 | **21** — the same 14 + 7 added: `secure-coding-standard`, `performance-optimization`, `shipping-and-launch`, `using-second-brain`, `self-improvement-curator`, `context-handoff`, `init-sumela` |
+| **Code review** | Single reviewer subagent | **3-lane parallel panel** — Correctness & Security (incl. auth/credential token lifecycle) · Design & Contracts · Integration & Operations — synthesized with an AND-gate (any lane's Critical blocks) |
+| **Rule framework** | TDD / YAGNI / DRY as methodology | Phase-to-rule matrix: universal + stack-specific rules loaded per active phase & stack |
+| **Knowledge base** | — | Second-brain wiki (Karpathy LLM-Wiki pattern): raw sources → artifacts → live wiki |
+| **Session memory** | — | Optional Qdrant semantic memory; on a team, summaries sync to every dev via git hooks |
+| **Code-graph awareness** | — | Optional Graphify call-graph + impact analysis, queried before changes |
+| **Self-improvement** | — | `/evolve` loop: captures correction/friction signals → governed application |
+| **Team governance** | — | `solo \| team` modes; `/evolve` routes rule/skill/schema changes through a CODEOWNERS-reviewed PR; per-developer language overrides |
+| **Context visibility** | — | Context Manifest (loaded skills/rules + GAPS) on request and before high-stakes actions |
+| **Harness / IDE support** | Ready-made installers for 8 named harnesses (Codex CLI/App, Factory Droid, Gemini CLI, Copilot CLI, …) | **IDE-agnostic by design** — one `AGENTS.md` + a ~15-line pointer per tool. 6 shipped as examples (Claude Code, Cursor, Cline, Kilo Code, Trae, OpenCode); **any** other tool that reads a project instruction file works by dropping in a pointer (or reading `AGENTS.md` natively) — the list is a starter set, not a ceiling |
+
+In short: **Superpowers is the skill engine; SumelaOS is that engine plus the memory, rules, knowledge, and governance layers a team needs** — delivered through a single `AGENTS.md` that any tool consumes via a thin pointer, so harness coverage is a starter list, not a ceiling. Superpowers ships turnkey installers for more *named* harnesses today; SumelaOS's pointer model is designed to reach any of them (and any future tool) by adding one redirect file.
 
 ## Credits & Foundations
 
@@ -266,7 +288,7 @@ The core skill architecture — the universal skills covering brainstorming, pla
 - **Rule framework** with phase-to-rule matrix (universal + stack-specific rules)
 - **Second-brain wiki** with Karpathy LLM Wiki pattern for knowledge capture
 - **Self-improvement loop** (`/evolve`) for capturing and applying learnings
-- **Context Manifest** protocol for session-start transparency
+- **Context Manifest** protocol for on-demand and pre-high-stakes transparency
 - **Proactive impact analysis** — agent checks code dependencies before making changes
 - **Project-agnostic template** — works with any stack, not just one project
 - **Team-enablement layer** — git-native shared memory, conflict-free wiki, PR-governed `/evolve`, pre-commit + CI enforcement, per-developer overrides, and a versioned core upgrade path
