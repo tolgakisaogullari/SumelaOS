@@ -167,37 +167,39 @@ try {
     # Not all terminals support this
 }
 
-# --- Template existence preflight ---
-$RequiredTemplates = @(
-    "AGENTS.md.template",
-    ".sumela/RULE_REGISTRY.md.template",
-    "CLAUDE.md.template",
-    ".clinerules.template",
-    ".cursor/rules/00-agent.md.template",
-    ".kilocode/rules.md.template",
-    ".trae/rules/00-agent.md.template",
-    ".opencode/AGENTS.md.template",
-    "docs/second-brain/template/wiki/_INDEX.md.template",
-    "docs/second-brain/template/wiki/_LOG.md.template",
-    "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template",
-    "docs/second-brain/template/wiki/_improvement-queue/README.md",
-    "docs/second-brain/template/wiki/_SCHEMA.md",
-    "docs/second-brain/template/wiki/active-project-context.md.template"
-)
+# --- Template existence preflight (skipped for -HooksOnly: it generates nothing) ---
+if (-not $HooksOnly) {
+    $RequiredTemplates = @(
+        "AGENTS.md.template",
+        ".sumela/RULE_REGISTRY.md.template",
+        "CLAUDE.md.template",
+        ".clinerules.template",
+        ".cursor/rules/00-agent.md.template",
+        ".kilocode/rules.md.template",
+        ".trae/rules/00-agent.md.template",
+        ".opencode/AGENTS.md.template",
+        "docs/second-brain/template/wiki/_INDEX.md.template",
+        "docs/second-brain/template/wiki/_LOG.md.template",
+        "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template",
+        "docs/second-brain/template/wiki/_improvement-queue/README.md",
+        "docs/second-brain/template/wiki/_SCHEMA.md",
+        "docs/second-brain/template/wiki/active-project-context.md.template"
+    )
 
-$MissingTemplates = @()
-foreach ($tmpl in $RequiredTemplates) {
-    if (-not (Test-Path $tmpl)) {
-        $MissingTemplates += $tmpl
+    $MissingTemplates = @()
+    foreach ($tmpl in $RequiredTemplates) {
+        if (-not (Test-Path $tmpl)) {
+            $MissingTemplates += $tmpl
+        }
     }
-}
 
-if ($MissingTemplates.Count -gt 0) {
-    Write-Err "Missing template files:"
-    foreach ($m in $MissingTemplates) {
-        Write-Host "  - $m"
+    if ($MissingTemplates.Count -gt 0) {
+        Write-Err "Missing template files:"
+        foreach ($m in $MissingTemplates) {
+            Write-Host "  - $m"
+        }
+        exit 1
     }
-    exit 1
 }
 
 # --- Helper: prompt with default ---
@@ -312,7 +314,22 @@ $Governance = $Governance.ToLower().Trim()
 if ($Governance -ne "team") { $Governance = "solo" }
 
 # Slugify a domain name -> filesystem-safe slug (lowercase, non-alnum -> single hyphen).
-function Get-Slug { param([string]$s) ($s.ToLower() -replace '[^a-z0-9]+', '-').Trim('-') }
+function Get-Slug {
+    # Transliterate accented Latin + Turkish letters to ASCII first ('Ödeme'->'odeme',
+    # 'Café'->'cafe'), then lowercase, non-alnum runs -> single hyphen, trim. Mirrors
+    # bash slugify(). ASCII input yields the same slug as a plain replace.
+    param([string]$s)
+    $map = @{ 'ı' = 'i'; 'İ' = 'i'; 'ş' = 's'; 'Ş' = 's'; 'ğ' = 'g'; 'Ğ' = 'g'; 'ç' = 'c'; 'Ç' = 'c'; 'ö' = 'o'; 'Ö' = 'o'; 'ü' = 'u'; 'Ü' = 'u' }
+    foreach ($k in $map.Keys) { $s = $s.Replace($k, $map[$k]) }
+    $d = $s.Normalize([Text.NormalizationForm]::FormD)
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($ch in $d.ToCharArray()) {
+        if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($ch) -ne [Globalization.UnicodeCategory]::NonSpacingMark) {
+            [void]$sb.Append($ch)
+        }
+    }
+    ($sb.ToString().ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
+}
 
 # --- Business-domain taxonomy (team mode only) ---
 # The SET of domains is team-wide and TRACKED; which domain(s) a developer works in
@@ -459,22 +476,22 @@ if ((Test-Path "AGENTS.md") -and -not (Select-String -Path "AGENTS.md" -Pattern 
 
 # Perform replacements
 $content = Get-Content "AGENTS.md.template" -Raw
-$content = $content -replace '\{\{project_name\}\}', $ProjectName
-$content = $content -replace '\{\{project_purpose\}\}', $ProjectPurpose
-$content = $content -replace '\{\{tech_stack_summary\}\}', $TechSummaryStr
-$content = $content -replace '\{\{interaction_language\}\}', $InteractionLanguage
-$content = $content -replace '\{\{naming_language\}\}', $NamingLanguage
-$content = $content -replace '\{\{documentation_language\}\}', $DocumentationLanguage
-$content = $content -replace '\{\{backend_commands\}\}', $BackendCmds
-$content = $content -replace '\{\{frontend_commands\}\}', $FrontendCmds
-$content = $content -replace '\{\{mobile_commands\}\}', $MobileCmds
-$content = $content -replace '\{\{infrastructure_commands\}\}', $InfraCmds
-$content = $content -replace '\{\{dependency_flow\}\}', $DepFlow
-$content = $content -replace '\{\{package_boundaries\}\}', $PkgBoundariesStr
-$content = $content -replace '\{\{governance_mode\}\}', $Governance
-$content = $content -replace '\{\{naming_conventions\}\}', "# Define your naming conventions here"
-$content = $content -replace '\{\{technical_constraints\}\}', "# Define your technical constraints here"
-$content = $content -replace '\{\{project_specific_security\}\}', $ProjectSecurity
+$content = $content.Replace('{{project_name}}', [string]($ProjectName))
+$content = $content.Replace('{{project_purpose}}', [string]($ProjectPurpose))
+$content = $content.Replace('{{tech_stack_summary}}', [string]($TechSummaryStr))
+$content = $content.Replace('{{interaction_language}}', [string]($InteractionLanguage))
+$content = $content.Replace('{{naming_language}}', [string]($NamingLanguage))
+$content = $content.Replace('{{documentation_language}}', [string]($DocumentationLanguage))
+$content = $content.Replace('{{backend_commands}}', [string]($BackendCmds))
+$content = $content.Replace('{{frontend_commands}}', [string]($FrontendCmds))
+$content = $content.Replace('{{mobile_commands}}', [string]($MobileCmds))
+$content = $content.Replace('{{infrastructure_commands}}', [string]($InfraCmds))
+$content = $content.Replace('{{dependency_flow}}', [string]($DepFlow))
+$content = $content.Replace('{{package_boundaries}}', [string]($PkgBoundariesStr))
+$content = $content.Replace('{{governance_mode}}', [string]($Governance))
+$content = $content.Replace('{{naming_conventions}}', [string]("# Define your naming conventions here"))
+$content = $content.Replace('{{technical_constraints}}', [string]("# Define your technical constraints here"))
+$content = $content.Replace('{{project_specific_security}}', [string]($ProjectSecurity))
 $content | Set-Content "AGENTS.md" -NoNewline
 
 Write-Ok "AGENTS.md generated"
@@ -550,12 +567,12 @@ $PhaseMatrix = @"
 "@
 
 $content = Get-Content ".sumela/RULE_REGISTRY.md.template" -Raw
-$content = $content -replace '\{\{stack_scopes\}\}', $StackScopesStr
-$content = $content -replace '\{\{stack_rules\}\}', $StackRules
-$content = $content -replace '\{\{domain_scopes\}\}', $DomainScopesStr
-$content = $content -replace '\{\{domain_rules\}\}', $DomainRules
-$content = $content -replace '\{\{phase_matrix_rows\}\}', $PhaseMatrix
-$content = $content -replace '\{\{example_override\}\}', "backend"
+$content = $content.Replace('{{stack_scopes}}', [string]($StackScopesStr))
+$content = $content.Replace('{{stack_rules}}', [string]($StackRules))
+$content = $content.Replace('{{domain_scopes}}', [string]($DomainScopesStr))
+$content = $content.Replace('{{domain_rules}}', [string]($DomainRules))
+$content = $content.Replace('{{phase_matrix_rows}}', [string]($PhaseMatrix))
+$content = $content.Replace('{{example_override}}', [string]("backend"))
 $content | Set-Content ".sumela/RULE_REGISTRY.md" -NoNewline
 
 Write-Ok "RULE_REGISTRY.md generated"
@@ -579,7 +596,7 @@ foreach ($stack in $StackArray) {
         $dst = ".sumela/rules/$ruleName.md"
         if (Test-Path $src) {
             $content = Get-Content $src -Raw
-            $content = $content -replace '\{\{date_created\}\}', $DateCreated
+            $content = $content.Replace('{{date_created}}', [string]($DateCreated))
             $content | Set-Content $dst -NoNewline
             Write-Ok "Copied $dst"
         }
@@ -597,7 +614,7 @@ $OpSrc = ".sumela/rules/templates/operational_excellence_maintenance.md.$RuleVar
 $OpDst = ".sumela/rules/operational_excellence_maintenance.md"
 if (Test-Path $OpSrc) {
     $content = Get-Content $OpSrc -Raw
-    $content = $content -replace '\{\{date_created\}\}', $DateCreated
+    $content = $content.Replace('{{date_created}}', [string]($DateCreated))
     $content | Set-Content $OpDst -NoNewline
     Write-Ok "Copied $OpDst"
 }
@@ -621,13 +638,32 @@ foreach ($dom in $DomainArray) {
     if (Test-Path $DomainTmpl) {
         New-Item -ItemType Directory -Force -Path ".sumela/rules/domains" | Out-Null
         $content = Get-Content $DomainTmpl -Raw
-        $content = $content -replace '\{\{date_created\}\}', $DateCreated
-        $content = $content -replace '\{\{domain_name\}\}', $dom
+        $content = $content.Replace('{{date_created}}', $DateCreated)
+        $content = $content.Replace('{{domain_name}}', $dom)
         $content | Set-Content $dst -NoNewline
         Write-Ok "Copied $dst"
     }
     else {
         Write-Warn "Template not found: $DomainTmpl — skipping"
+    }
+}
+
+# Prune orphaned domain rules (re-run with a NARROWER list): quarantine to the gitignored
+# _migration dir rather than leaving them unregistered (which fails parity + blocks commits).
+if (Test-Path ".sumela/rules/domains") {
+    $curSlugs = @()
+    foreach ($dom in $DomainArray) {
+        $dom = $dom.Trim()
+        if ([string]::IsNullOrWhiteSpace($dom)) { continue }
+        $curSlugs += (Get-Slug $dom)
+    }
+    foreach ($f in (Get-ChildItem ".sumela/rules/domains" -Filter *.md -File)) {
+        if ($curSlugs -notcontains $f.BaseName) {
+            $qdir = ".sumela/_migration/domains-$DateCreated"
+            New-Item -ItemType Directory -Force -Path $qdir | Out-Null
+            Move-Item $f.FullName (Join-Path $qdir $f.Name) -Force
+            Write-Warn "Domain '$($f.BaseName)' is no longer in the taxonomy — quarantined to $qdir/ (gitignored). If unintended, move it back and re-add the domain."
+        }
     }
 }
 
@@ -656,7 +692,7 @@ foreach ($ide in $IDEArray) {
                 New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
             }
             $content = Get-Content $tmpl -Raw
-            $content = $content -replace '\{\{project_name\}\}', $ProjectName
+            $content = $content.Replace('{{project_name}}', [string]($ProjectName))
             $content | Set-Content $dst -NoNewline
             Write-Ok "Generated $dst"
         }
@@ -702,8 +738,8 @@ foreach ($entry in $WikiTemplates) {
     $dst = "docs/second-brain/wiki/$($entry.Dst)"
     if (Test-Path $src) {
         $content = Get-Content $src -Raw
-        $content = $content -replace '\{\{project_name\}\}', $ProjectName
-        $content = $content -replace '\{\{date_created\}\}', $DateCreated
+        $content = $content.Replace('{{project_name}}', [string]($ProjectName))
+        $content = $content.Replace('{{date_created}}', [string]($DateCreated))
         $content | Set-Content $dst -NoNewline
         Write-Ok "Copied $dst"
     }
@@ -865,6 +901,7 @@ if ($Governance -eq "team") {
         if ((Test-Path $codeownersFile) -and ((Get-Item $codeownersFile).Length -gt 0)) { Add-Content $codeownersFile "" }
         Add-Content $codeownersFile "$codeownersMarker — changes here alter every developer's agent."
         Add-Content $codeownersFile "# Replace @OWNER with your team/maintainer handle (e.g. @org/maintainers)."
+        Add-Content $codeownersFile "/AGENTS.md                          @OWNER"
         Add-Content $codeownersFile "/.sumela/rules/                     @OWNER"
         Add-Content $codeownersFile "/.sumela/skills/                    @OWNER"
         Add-Content $codeownersFile "/.sumela/sumela-prompt.md           @OWNER"
@@ -964,6 +1001,7 @@ try {
     $bashAvailable = $false
 }
 
+$ValidationFailed = $false
 if ($bashAvailable) {
     & bash scripts/validate-structure.sh --check-placeholders --post-setup
     if ($LASTEXITCODE -eq 0) {
@@ -973,6 +1011,7 @@ if ($bashAvailable) {
     else {
         Write-Host ""
         Write-Warn "Validation had failures — review output above"
+        $ValidationFailed = $true
     }
 }
 else {
@@ -1011,3 +1050,9 @@ Write-Host "    3. Edit docs/second-brain/wiki/active-project-context.md — add
 Write-Host "    4. Review .sumela/RULE_REGISTRY.md — adjust stack scopes if needed"
 if ($PluginArray.Count) { Write-Host "    5. Install plugin dependencies: pip install -r .sumela/memory-plugins/*/requirements.txt" }
 Write-Host ""
+
+# Exit non-zero if our own validation failed (don't let "Setup Complete" mask a broken project).
+if ($ValidationFailed) {
+    Write-Err "Setup finished but structure validation FAILED — fix the issues listed above before committing (the pre-commit hook will otherwise block you)."
+    exit 1
+}

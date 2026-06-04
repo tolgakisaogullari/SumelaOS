@@ -109,8 +109,8 @@ Replace all placeholder values:
 Copy the entire `.sumela/` directory from the source project. This includes:
 - `SKILL_REGISTRY.md` — skill catalog
 - `skills/` — all skill definitions
-- `rules/` — portable rule files (customize per project)
-- `learned-rules/` — empty initially; populated by `self-improvement-curator`
+- `rules/` — portable rule files (customize per project), incl. `rules/templates/` and any `rules/domains/` (team domain rules)
+- New rules added later by `self-improvement-curator` / `/evolve` land directly in `rules/` (the legacy `learned-rules/` path is no longer used)
 
 ### A.6. Run validation
 
@@ -123,7 +123,12 @@ powershell -File scripts/setup.ps1   # Windows
 ### A.7. First commit
 
 ```bash
-git add docs/second-brain/ .sumela/ AGENTS.md CLAUDE.md .cursor/ .clinerules .kilocode/ .trae/
+# Include scripts/ (setup.sh/status.sh/update.sh — teammates need these for /onboardSumela
+# and `setup.sh --hooks-only`) and the *.template + IDE pointer files. Simplest: review,
+# then `git add -A`. Explicit form:
+git add scripts/ docs/second-brain/ .sumela/ AGENTS.md CLAUDE.md \
+        .cursor/ .clinerules .kilocode/ .trae/ .opencode/ \
+        .gitignore .gitattributes *.template
 git commit -m "feat(meta): initialize second brain + skill engine"
 ```
 

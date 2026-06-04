@@ -127,3 +127,4 @@ On completion, report concisely (in the developer's interaction language): what 
 set up or skipped, and — if a new domain was requested — whether it was applied (solo) or
 queued via /evolve (team). Do NOT print the full Context Manifest here unless asked.
 </output_contract>
+

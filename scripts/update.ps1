@@ -84,7 +84,7 @@ try {
         ".sumela/rules/git_workflow_mandatory_review_protocol.md",
         ".sumela/rules/self_improvement_protocol.md"
     )
-    $coreDirs = @(".sumela/skills", ".sumela/git-hooks", ".sumela/memory-plugins", "docs/second-brain/template", "scripts")
+    $coreDirs = @(".sumela/skills", ".sumela/git-hooks", ".sumela/memory-plugins", ".sumela/rules/templates", "docs/second-brain/template", "scripts")
     $selfDefer = @("scripts/update.sh", "scripts/update.ps1")
 
     # Flatten core dirs from the SOURCE into relative paths.
@@ -249,6 +249,13 @@ try {
     if ($nSkipped -gt 0) { Write-Warn "$nSkipped changed core file(s) were SKIPPED and still differ from upstream $srcVer. Re-run with -Force to revisit them." }
     Write-Warn "Overlay was untouched. Skills were auto-reconciled into SKILL_REGISTRY.md; if RULES"
     Write-Warn "changed, reconcile RULE_REGISTRY.md via /initSumela's registry step or /evolve (rules need phase/stack metadata)."
+    # Domain-scope migration notice (overlay RULE_REGISTRY.md is untouched; a pre-domain
+    # project won't have <domain_scopes>, which the refreshed prompt STEP 4 expects).
+    $rr = Join-Path $root ".sumela/RULE_REGISTRY.md"
+    if ((Test-Path $rr) -and -not (Select-String -Path $rr -Pattern '^<domain_scopes>$' -Quiet)) {
+        Write-Warn "Business-domain support arrived in this core, but your RULE_REGISTRY.md has no <domain_scopes> section yet."
+        Write-Warn "  To enable domains: add the <domain_scopes> block (see RULE_REGISTRY.md.template) — fastest via /onboardSumela or /evolve. Until then domains are simply inactive (no breakage)."
+    }
     if ($deferredList.Count -gt 0) { Write-Warn "The updater itself changed upstream — re-run scripts/update.ps1 to pick up the new version." }
     Write-Host "Review changes with 'git diff' before committing."
 }

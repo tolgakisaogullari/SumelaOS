@@ -149,12 +149,12 @@ if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     if grep -qxF "$reg_entry" "$git_root/.sumela-hooks/installs" 2>/dev/null; then
       ok "core.hooksPath = $hp (multi-install dispatcher; this install registered)"
     else
-      attention "dispatcher active but this install isn't registered — fix: rerun setup (bash scripts/setup.sh)"
+      attention "dispatcher active but this install isn't registered — fix: bash scripts/setup.sh --hooks-only (or run /onboardSumela)"
     fi
   elif [ -n "$hp" ]; then
-    attention "core.hooksPath = '$hp' (not this install) — fix: rerun setup (bash scripts/setup.sh)"
+    attention "core.hooksPath = '$hp' (not this install) — fix: bash scripts/setup.sh --hooks-only (or run /onboardSumela)"
   else
-    attention "hooks not wired — fix: rerun setup (bash scripts/setup.sh)"
+    attention "hooks not wired — fix: bash scripts/setup.sh --hooks-only (or run /onboardSumela)"
   fi
 else
   info "not a git repository — hooks skipped"

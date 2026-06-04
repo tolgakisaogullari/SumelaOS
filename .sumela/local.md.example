@@ -16,9 +16,9 @@ interaction_language: English
 
 # Domains — the business domain(s) YOU work in (comma-separated). The agent loads the
 # matching domain rules from .sumela/rules/domains/ in ADDITION to phase + stack rules.
-# Must be names from the project taxonomy in RULE_REGISTRY.md <domain_scopes>; an
-# unknown value is warned-and-skipped, never fatal. Leave blank if you don't work in a
-# specific domain. Example:
+# Must be names from the project taxonomy in RULE_REGISTRY.md <domain_scopes> (matched
+# case-insensitively, so `card` == `Card`); an unknown value is warned-and-skipped, never
+# fatal. Leave blank if you don't work in a specific domain. Example:
 # domains: Card, Payments
 ---
 

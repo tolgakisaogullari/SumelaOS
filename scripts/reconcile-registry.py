@@ -57,17 +57,20 @@ if not os.path.isfile(REGISTRY):
 
 
 def domain_rule_parity():
-    """Domain-conditional rule <-> file parity.
+    """Domain-conditional rule <-> file <-> taxonomy parity.
 
     The `.sumela/rules/domains/` path prefix is exclusive to domain rules, so a
     registered <path> under it identifies a domain rule without needing the
-    activation attribute. Returns (missing_files, unregistered_files):
-      * missing_files     — registered in RULE_REGISTRY.md but absent on disk
+    activation attribute. Returns (missing_files, unregistered_files, phantom_rows):
+      * missing_files      — registered in RULE_REGISTRY.md but absent on disk
       * unregistered_files — present under .sumela/rules/domains/ but not registered
-    Returns ([], []) when there is nothing to check (no generated RULE_REGISTRY.md).
+      * phantom_rows       — a <domain_scopes> row whose domain has no domain-conditional
+                             rule (the agent treats it as valid but loads nothing)
+    Returns ([], [], []) when there is nothing to check (no generated RULE_REGISTRY.md).
+    The example comment uses <slug>/<Domain> placeholders, so the `<` stops the regex.
     """
     if not os.path.isfile(RULE_REGISTRY):
-        return [], []
+        return [], [], []
     with open(RULE_REGISTRY, encoding="utf-8") as f:
         rr = f.read()
     reg_paths = set(
@@ -80,7 +83,17 @@ def domain_rule_parity():
                 disk_paths.add(f".sumela/rules/domains/{entry}")
     missing = sorted(p for p in reg_paths if not os.path.isfile(os.path.join(ROOT, p)))
     unregistered = sorted(disk_paths - reg_paths)
-    return missing, unregistered
+    # Taxonomy rows vs domain-conditional rule entries. Anchor the section tags at
+    # line-start — the literal `<domain_scopes>` also appears inline in <usage> prose,
+    # and an unanchored match would scoop up <phase_definitions>/<stack_scopes> rows.
+    scope_block = re.search(r"^<domain_scopes>\s*(.*?)^</domain_scopes>", rr, re.S | re.M)
+    rule_domains = set(re.findall(r'activation="domain-conditional"[^>]*domain="([^"]+)"', rr))
+    phantom = []
+    if scope_block:
+        for row in re.findall(r"^\|\s*`([^`]+)`", scope_block.group(1), re.M):
+            if row != "(none)" and row not in rule_domains:
+                phantom.append(row)
+    return missing, unregistered, sorted(set(phantom))
 
 
 def read_frontmatter(path):
@@ -173,9 +186,11 @@ orphans = [p for p in registered_paths if not os.path.isfile(os.path.join(ROOT, 
 # 3) Domain-conditional rule <-> file parity (RULE_REGISTRY.md). Not auto-fixable
 #    here (a domain rule needs a scope name + description + matrix row written
 #    together by setup / init-sumela / onboard-sumela / evolve) — report only.
-dom_missing, dom_unregistered = domain_rule_parity()
+dom_missing, dom_unregistered, dom_phantom = domain_rule_parity()
+domain_drift = bool(dom_missing or dom_unregistered or dom_phantom)
+skill_drift = bool(unregistered or orphans)
 
-if not unregistered and not orphans and not dom_missing and not dom_unregistered:
+if not skill_drift and not domain_drift:
     print("reconcile-registry: SKILL_REGISTRY.md is in sync with skills on disk.")
     sys.exit(0)
 
@@ -187,9 +202,15 @@ for p in dom_missing:
     print(f"  MISSING domain rule file (registered in RULE_REGISTRY, not on disk): {p}")
 for p in dom_unregistered:
     print(f"  UNREGISTERED domain rule file (on disk, no RULE_REGISTRY entry): {p}")
+for d in dom_phantom:
+    print(f"  PHANTOM domain (in <domain_scopes> but no domain-conditional rule): {d}")
 
 if CHECK:
-    print("reconcile-registry: registry is OUT OF SYNC (run: python3 scripts/reconcile-registry.py).")
+    if skill_drift:
+        print("reconcile-registry: registry is OUT OF SYNC (run: python3 scripts/reconcile-registry.py to auto-register skills).")
+    else:
+        # Domain parity is not auto-fixable here — pointing at `reconcile` would mislead.
+        print("reconcile-registry: domain rule parity is OUT OF SYNC — resolve via /onboardSumela or /evolve (a domain rule needs its <domain_scopes> row + domain-conditional entry + file together).")
     sys.exit(1)
 
 # Apply: insert new <skill> entries before </available_skills>.
@@ -215,8 +236,8 @@ if unregistered:
 if orphans:
     print(f"reconcile-registry: {len(orphans)} orphan entry(ies) above were NOT removed — "
           "delete them by hand if the skill was intentionally removed, or restore the file.")
-if dom_missing or dom_unregistered:
-    print(f"reconcile-registry: {len(dom_missing) + len(dom_unregistered)} domain rule parity "
-          "issue(s) above were NOT auto-fixed — resolve via /onboardSumela or /evolve "
-          "(register the rule + add its <domain_scopes> row + matrix cell, or remove the file).")
+if domain_drift:
+    print(f"reconcile-registry: {len(dom_missing) + len(dom_unregistered) + len(dom_phantom)} domain "
+          "parity issue(s) above were NOT auto-fixed — resolve via /onboardSumela or /evolve "
+          "(a domain needs its <domain_scopes> row + domain-conditional rule entry + file together).")
 sys.exit(0)

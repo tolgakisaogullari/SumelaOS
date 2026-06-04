@@ -108,6 +108,7 @@ CORE_DIRS=(
   ".sumela/skills"
   ".sumela/git-hooks"
   ".sumela/memory-plugins"
+  ".sumela/rules/templates"
   "docs/second-brain/template"
   "scripts"
 )
@@ -279,5 +280,13 @@ ok "Core updated to ${SRC_VER}."
 [ "$n_skipped" -gt 0 ] && warn "${n_skipped} changed core file(s) were SKIPPED and still differ from upstream ${SRC_VER}. Re-run with --force to revisit them."
 warn "Overlay was untouched. Skills were auto-reconciled into SKILL_REGISTRY.md; if RULES"
 warn "changed, reconcile RULE_REGISTRY.md via /initSumela's registry step or /evolve (rules need phase/stack metadata)."
+# Domain-scope migration notice: the prompt's STEP 4 (core, just refreshed) reads a
+# <domain_scopes> section, but RULE_REGISTRY.md is OVERLAY (untouched). A project from
+# before the domain feature won't have it — tell the user how to add it (no auto-edit of
+# the overlay). Silent when the section is already present or no registry exists yet.
+if [ -f "$ROOT/.sumela/RULE_REGISTRY.md" ] && ! grep -qE '^<domain_scopes>$' "$ROOT/.sumela/RULE_REGISTRY.md" 2>/dev/null; then
+  warn "Business-domain support arrived in this core, but your RULE_REGISTRY.md has no <domain_scopes> section yet."
+  warn "  To enable domains: add the <domain_scopes> block (see RULE_REGISTRY.md.template) — fastest via /onboardSumela or /evolve. Until then domains are simply inactive (no breakage)."
+fi
 [ "$n_def" -gt 0 ] && warn "The updater itself changed upstream — re-run 'bash scripts/update.sh' to pick up the new version."
 echo "Review changes with 'git diff' before committing."

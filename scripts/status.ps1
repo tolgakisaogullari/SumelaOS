@@ -138,12 +138,12 @@ if ($isGit) {
         if ((Test-Path $installsFile) -and ((Get-Content $installsFile) -contains $regEntry)) {
             Ok "core.hooksPath = $hp (multi-install dispatcher; this install registered)"
         } else {
-            Attn "dispatcher active but this install isn't registered — fix: rerun setup (pwsh scripts/setup.ps1)"
+            Attn "dispatcher active but this install isn't registered — fix: pwsh scripts/setup.ps1 -HooksOnly (or run /onboardSumela)"
         }
     } elseif ($hp) {
-        Attn "core.hooksPath = '$hp' (not this install) — fix: rerun setup (pwsh scripts/setup.ps1)"
+        Attn "core.hooksPath = '$hp' (not this install) — fix: pwsh scripts/setup.ps1 -HooksOnly (or run /onboardSumela)"
     } else {
-        Attn "hooks not wired — fix: rerun setup (pwsh scripts/setup.ps1)"
+        Attn "hooks not wired — fix: pwsh scripts/setup.ps1 -HooksOnly (or run /onboardSumela)"
     }
 } else {
     Info "not a git repository — hooks skipped"

@@ -93,36 +93,43 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
-REQUIRED_TEMPLATES=(
-  "AGENTS.md.template"
-  ".sumela/RULE_REGISTRY.md.template"
-  "CLAUDE.md.template"
-  ".clinerules.template"
-  ".cursor/rules/00-agent.md.template"
-  ".kilocode/rules.md.template"
-  ".trae/rules/00-agent.md.template"
-  ".opencode/AGENTS.md.template"
-  "docs/second-brain/template/wiki/_INDEX.md.template"
-  "docs/second-brain/template/wiki/_LOG.md.template"
-  "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template"
-  "docs/second-brain/template/wiki/_improvement-queue/README.md"
-  "docs/second-brain/template/wiki/_SCHEMA.md"
-  "docs/second-brain/template/wiki/active-project-context.md.template"
-)
+# Skip the template preflight for --hooks-only: it generates nothing, so the
+# config templates are irrelevant. (cd "$ROOT_DIR" above still ran — wire_git_hooks
+# needs CWD = repo root.) Without this skip, a teammate onboarding via
+# `setup.sh --hooks-only` on a clone that didn't commit the *.template files would
+# abort before wiring hooks.
+if [ "$HOOKS_ONLY" != true ]; then
+  REQUIRED_TEMPLATES=(
+    "AGENTS.md.template"
+    ".sumela/RULE_REGISTRY.md.template"
+    "CLAUDE.md.template"
+    ".clinerules.template"
+    ".cursor/rules/00-agent.md.template"
+    ".kilocode/rules.md.template"
+    ".trae/rules/00-agent.md.template"
+    ".opencode/AGENTS.md.template"
+    "docs/second-brain/template/wiki/_INDEX.md.template"
+    "docs/second-brain/template/wiki/_LOG.md.template"
+    "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template"
+    "docs/second-brain/template/wiki/_improvement-queue/README.md"
+    "docs/second-brain/template/wiki/_SCHEMA.md"
+    "docs/second-brain/template/wiki/active-project-context.md.template"
+  )
 
-MISSING_TEMPLATES=()
-for tmpl in "${REQUIRED_TEMPLATES[@]}"; do
-  if [ ! -f "$tmpl" ]; then
-    MISSING_TEMPLATES+=("$tmpl")
-  fi
-done
-
-if [ ${#MISSING_TEMPLATES[@]} -gt 0 ]; then
-  err "Missing template files:"
-  for m in "${MISSING_TEMPLATES[@]}"; do
-    echo "  - $m"
+  MISSING_TEMPLATES=()
+  for tmpl in "${REQUIRED_TEMPLATES[@]}"; do
+    if [ ! -f "$tmpl" ]; then
+      MISSING_TEMPLATES+=("$tmpl")
+    fi
   done
-  exit 1
+
+  if [ ${#MISSING_TEMPLATES[@]} -gt 0 ]; then
+    err "Missing template files:"
+    for m in "${MISSING_TEMPLATES[@]}"; do
+      echo "  - $m"
+    done
+    exit 1
+  fi
 fi
 
 # --- Helper: render template using Python (handles multi-line, pipes, special chars) ---
@@ -142,10 +149,21 @@ with open(sys.argv[2], 'w') as f:
 " "$template" "$output"
 }
 
-# Slugify a domain name -> filesystem-safe slug (lowercase, non-alnum -> single
-# hyphen, trimmed). bash 3.2 / BSD-tr compatible.
+# Slugify a domain name -> filesystem-safe slug. Transliterates accented Latin +
+# Turkish letters to ASCII FIRST (so 'Ödeme'->'odeme', 'Çek'->'cek', 'Café'->'cafe'
+# rather than lossy 'deme'/'ek'/'caf'), then lowercases, maps runs of non-alnum to a
+# single hyphen, and trims. Uses python3 (already required by render_template) for
+# reliable Unicode handling; ASCII input yields the same slug as a plain tr pipeline.
 slugify() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-' | tr -s '-' | sed 's/^-//; s/-$//'
+  python3 -c '
+import sys, unicodedata, re
+s = sys.argv[1]
+# Turkish letters NFKD does not reduce to ASCII (esp. dotless i) — map explicitly first.
+tr = {"ı":"i","İ":"i","ş":"s","Ş":"s","ğ":"g","Ğ":"g","ç":"c","Ç":"c","ö":"o","Ö":"o","ü":"u","Ü":"u"}
+s = "".join(tr.get(ch, ch) for ch in s)
+s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+print(re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-"))
+' "$1"
 }
 
 # --- Git hook wiring (core.hooksPath) — used by the full install AND by --hooks-only ---
@@ -698,6 +716,30 @@ for dom in ${DOMAINS[@]+"${DOMAINS[@]}"}; do
 done
 unset TMPL_DOMAIN_NAME 2>/dev/null || true
 
+# Prune orphaned domain rules: re-running setup with a NARROWER domain list regenerates
+# RULE_REGISTRY.md without the dropped domain, but its .sumela/rules/domains/<slug>.md
+# would linger — unregistered — and fail domain parity (blocking commits). Quarantine
+# (never delete) such files to the gitignored _migration dir, with a clear warning.
+if [ -d .sumela/rules/domains ]; then
+  CUR_SLUGS=""
+  for dom in ${DOMAINS[@]+"${DOMAINS[@]}"}; do
+    dom="$(echo "$dom" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"; [ -z "$dom" ] && continue
+    CUR_SLUGS="$CUR_SLUGS $(slugify "$dom")"
+  done
+  for f in .sumela/rules/domains/*.md; do
+    [ -e "$f" ] || continue
+    fslug="$(basename "$f" .md)"
+    case " $CUR_SLUGS " in
+      *" $fslug "*) : ;;                          # still in the taxonomy — keep
+      *)
+        QDIR=".sumela/_migration/domains-$DATE_CREATED"
+        mkdir -p "$QDIR"
+        mv "$f" "$QDIR/" 2>/dev/null && \
+          warn "Domain '$fslug' is no longer in the taxonomy — quarantined $f to $QDIR/ (gitignored). If unintended, move it back and re-add the domain." ;;
+    esac
+  done
+fi
+
 # =============================================================================
 # 5. GENERATE IDE POINTER FILES
 # =============================================================================
@@ -948,6 +990,7 @@ if [ "$GOVERNANCE" = "team" ]; then
       [ -s "$CODEOWNERS_FILE" ] && echo ""
       echo "$CODEOWNERS_MARKER — changes here alter every developer's agent."
       echo "# Replace @OWNER with your team/maintainer handle (e.g. @org/maintainers)."
+      echo "/AGENTS.md                          @OWNER"
       echo "/.sumela/rules/                     @OWNER"
       echo "/.sumela/skills/                    @OWNER"
       echo "/.sumela/sumela-prompt.md           @OWNER"
@@ -1038,12 +1081,14 @@ echo ""
 info "Running structure validation..."
 echo ""
 
+VALIDATION_FAILED=false
 if bash scripts/validate-structure.sh --check-placeholders --post-setup; then
   echo ""
   ok "Validation passed"
 else
   echo ""
   warn "Validation had failures — review output above"
+  VALIDATION_FAILED=true
 fi
 
 # =============================================================================
@@ -1078,3 +1123,11 @@ echo "    3. Edit docs/second-brain/wiki/active-project-context.md — add curre
 echo "    4. Review .sumela/RULE_REGISTRY.md — adjust stack scopes if needed"
 [ ${#PLUGINS[@]} -gt 0 ] && echo "    5. Install plugin dependencies: pip install -r .sumela/memory-plugins/*/requirements.txt"
 echo ""
+
+# Exit non-zero if our own validation failed — otherwise the "Setup Complete" banner
+# masks a broken project (e.g. a registered rule whose file is missing), and the user
+# only discovers it when the pre-commit hook blocks their next commit.
+if [ "$VALIDATION_FAILED" = true ]; then
+  err "Setup finished but structure validation FAILED — fix the issues listed above before committing (the pre-commit hook will otherwise block you)."
+  exit 1
+fi

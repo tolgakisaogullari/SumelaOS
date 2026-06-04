@@ -240,41 +240,58 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 6b. Domain rule parity (generated projects only). Every domain-conditional rule
-#     registered in RULE_REGISTRY.md must have its file on disk, and every
-#     .sumela/rules/domains/*.md must be registered. The `.sumela/rules/domains/`
-#     path prefix is EXCLUSIVE to domain rules, so a path match alone identifies
-#     them. Skipped on the framework SOURCE repo (no generated RULE_REGISTRY.md)
-#     and silent when no domains are configured.
+# 6b. Rule registry <-> file parity (generated projects only). Three checks:
+#   (i)   FORWARD — every registered <path>.sumela/rules/...</path> in RULE_REGISTRY.md
+#         must exist on disk (catches a registered stack/operational/domain rule whose
+#         file was never written, e.g. a typo'd --rule-variant).
+#   (ii)  REVERSE (domains) — every .sumela/rules/domains/*.md must be registered
+#         (the domains/ prefix is exclusive to domain rules; universal/stack files are
+#         always present + registered, so the reverse check is scoped to domains).
+#   (iii) TAXONOMY — every <domain_scopes> row must have a matching domain-conditional
+#         rule (else a "phantom" domain the agent treats as valid but loads nothing).
+#   Template example comments use <stack>/<slug> placeholders (the `<` stops the
+#   [^<]+ match), so samples are excluded. Skipped on the framework SOURCE repo.
+#   `|| true`: grep exits 1 on no-match, which under `set -euo pipefail` would abort.
 # -----------------------------------------------------------------------------
 if [ -f ".sumela/RULE_REGISTRY.md" ]; then
-  # `|| true`: grep exits 1 on no-match, which under `set -euo pipefail` would
-  # otherwise abort the whole script (e.g. a solo project with no domains).
-  DOMAIN_REG_PATHS="$(grep -oE '<path>\.sumela/rules/domains/[^<]+</path>' .sumela/RULE_REGISTRY.md 2>/dev/null | sed 's#<path>##; s#</path>##' | sort -u || true)"
+  ALL_REG_RULE_PATHS="$(grep -oE '<path>\.sumela/rules/[^<]+</path>' .sumela/RULE_REGISTRY.md 2>/dev/null | sed 's#<path>##; s#</path>##' | sort -u || true)"
   DOMAIN_DISK_PATHS=""
   if [ -d ".sumela/rules/domains" ]; then
     DOMAIN_DISK_PATHS="$(find .sumela/rules/domains -maxdepth 1 -type f -name '*.md' | sort -u || true)"
   fi
-  DOMAIN_PARITY_OK=true
-  DOMAIN_PARITY_MSG=""
-  for p in $DOMAIN_REG_PATHS; do
+  # Domain NAMES declared in <domain_scopes> rows (first `code`-quoted cell), excluding
+  # the `(none)` placeholder. Used for the taxonomy<->rule check.
+  # Anchor the section tags at line-start: the literal `<domain_scopes>` also appears
+  # inline in <usage> prose ("see `<domain_scopes>`"), so an unanchored match would
+  # scoop up <phase_definitions>/<stack_scopes> rows (ideation, backend, …).
+  DOMAIN_SCOPE_NAMES="$(awk '/^<domain_scopes>$/{f=1} /^<\/domain_scopes>$/{f=0} f' .sumela/RULE_REGISTRY.md 2>/dev/null \
+    | grep -oE '^\| `[^`]+`' | sed 's/^| `//; s/`$//' | grep -vx '(none)' | sort -u || true)"
+  RULE_PARITY_OK=true
+  RULE_PARITY_MSG=""
+  # (i) forward
+  for p in $ALL_REG_RULE_PATHS; do
     [ -z "$p" ] && continue
-    if [ ! -f "$p" ]; then
-      DOMAIN_PARITY_OK=false
-      DOMAIN_PARITY_MSG="$DOMAIN_PARITY_MSG registered-but-missing:$p"
-    fi
+    [ -f "$p" ] || { RULE_PARITY_OK=false; RULE_PARITY_MSG="$RULE_PARITY_MSG registered-but-missing:$p"; }
   done
+  # (ii) reverse (domains only)
   for p in $DOMAIN_DISK_PATHS; do
     [ -z "$p" ] && continue
-    if ! printf '%s\n' "$DOMAIN_REG_PATHS" | grep -Fxq "$p"; then
-      DOMAIN_PARITY_OK=false
-      DOMAIN_PARITY_MSG="$DOMAIN_PARITY_MSG on-disk-but-unregistered:$p"
-    fi
+    printf '%s\n' "$ALL_REG_RULE_PATHS" | grep -Fxq "$p" || { RULE_PARITY_OK=false; RULE_PARITY_MSG="$RULE_PARITY_MSG on-disk-but-unregistered:$p"; }
   done
-  if [ "$DOMAIN_PARITY_OK" = true ]; then
-    [ -n "$DOMAIN_REG_PATHS$DOMAIN_DISK_PATHS" ] && pass "Domain rule parity (RULE_REGISTRY ↔ .sumela/rules/domains/)"
+  # (iii) taxonomy: each domain-scope name must have a domain-conditional rule entry
+  while IFS= read -r dname; do
+    [ -z "$dname" ] && continue
+    if ! grep -qE "activation=\"domain-conditional\"[^>]*domain=\"$dname\"" .sumela/RULE_REGISTRY.md 2>/dev/null; then
+      RULE_PARITY_OK=false
+      RULE_PARITY_MSG="$RULE_PARITY_MSG taxonomy-row-without-rule:$dname"
+    fi
+  done <<EOF
+$DOMAIN_SCOPE_NAMES
+EOF
+  if [ "$RULE_PARITY_OK" = true ]; then
+    pass "Rule registry parity (registered rules exist; domain files + taxonomy rows backed)"
   else
-    fail "Domain rule parity —$DOMAIN_PARITY_MSG (fix RULE_REGISTRY.md domain-conditional entries or the .sumela/rules/domains/ files)"
+    fail "Rule registry parity —$RULE_PARITY_MSG (fix RULE_REGISTRY.md entries / <domain_scopes> rows / the .sumela/rules/ files)"
   fi
 fi
 
