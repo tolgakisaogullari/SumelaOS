@@ -58,6 +58,15 @@ These triggers require an explicit user query:
 - **Threshold:** Top score ≥ 0.5 → read matching session summary file
 - **Fallback:** If Qdrant unavailable or score < 0.5 → skip, let Tier-3 (_SEARCH_INDEX.md) handle it
 
+### By developer / domain / date (session-summary metadata)
+- **Trigger:** "what did developer X do last week", "which sessions touched the Card domain", "what happened between two dates".
+- **Filters:** `--developer "<name>"`, `--domain <Domain>`, `--since YYYY-MM-DD`, `--until YYYY-MM-DD` (exact match on developer/domain; date range on `date_int`).
+- **Filter-only listing** (all matches, not top-K semantic): pass `"*"` as the query:
+  ```
+  python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "*" --developer "Ada" --since 2026-06-01
+  ```
+- **Authoritative fallback:** for exact commit-level attribution, `git log --author=… --since=…`. The summary captures the session narrative; git captures the commits.
+
 ## Session Ingestion
 - After context-handoff, run:
   ```

@@ -130,7 +130,43 @@ When the user asks you to interact with the Second Brain, execute one of these s
       4. Fuse text + image content in the `summaries/<source-slug>.md` page under a dedicated "Images" heading.
    - Storage: images live under `raw_sources/assets/` per `_SCHEMA.md` Section 12.
    - Never attempt to describe an image without viewing it; cite "(not viewed)" if viewing is blocked.
+
+9. SESSION SUMMARY (canonical — see `<session_summary_protocol>` below):
+   - The per-session conversational work record (who did what, decisions + rationale, artifacts) written to `wiki/session-summaries/` and ingested into Qdrant `chat_history`. Both `finishing-a-development-branch` (task completion) and `context-handoff` (context pressure) invoke THIS protocol — it is the single source of truth so the two triggers never drift.
 </operations>
+
+<session_summary_protocol>
+## Session Summary Protocol (canonical — referenced by context-handoff + finishing-a-development-branch)
+
+Persists the session's conversational context as a structured, queryable wiki page + Qdrant `chat_history` record. This is how a future session or teammate answers "what did <developer> do last week, in which domain, and why".
+
+### When invoked
+- **Task/branch completion** — `finishing-a-development-branch` Step 7 (so EVERY finished task leaves a record, even with no handoff).
+- **Context-pressure handoff** — `context-handoff` Protocol A/B Step 3.
+- **Explicit** — user asks to "save the session".
+If a summary for the same task already exists for today, UPDATE/supersede it (do not create a near-duplicate); idempotent re-ingest makes re-running safe.
+
+### Capture (stamp the frontmatter — this is what makes memory queryable)
+Resolve and write into the `session-summary` frontmatter (format = `_SCHEMA.md` Session Summary Page Template):
+- `developer` ← `git config user.name` (the person who DID the work); `unknown` if unset. `developer_email` ← `git config user.email` (optional).
+- `domains` ← the session's domain context, written in the CANONICAL casing from `RULE_REGISTRY.md` `<domain_scopes>` (e.g. `Card`, not `card`) so `--domain` queries match reliably (the Qdrant filter is exact-match): default to `.sumela/local.md` `domains` resolved to that canonical casing; refine if the work explicitly belonged to a different domain.
+- `spec_artifact` / `plan_artifact` ← paths of the spec/plan this task produced or used, if any (find them via `active-project-context.md` links or the plan you executed). Omit if none.
+- `session_date` ← today (ISO); `session_topics` ← 2-5 topics.
+
+### Content (substantive — NOT lip-service)
+Fill every applicable section of the template with real detail: Topics; **Decisions Made with their rationale**; **Work Completed** (concrete changes + commit hash(es) + files); Artifacts (spec/plan links); Open Questions/Blockers; Related Wiki Pages. A pointer-only stub defeats the memory — capture enough that the work is reconstructable. Keep the `## Decisions Made` heading verbatim (parsed by `session-ingest.py`).
+
+### Steps
+1. Read `_SCHEMA.md` Session Summary Page Template (if not already in context).
+2. Create `docs/second-brain/wiki/session-summaries/YYYY-MM-DD-<topic>.md` (kebab-case dominant topic) from the template; `mkdir -p` the directory if absent.
+3. Update `_SEARCH_INDEX.md` with a row for the new summary (Type `session-summary`); update `_INDEX.md` Session Summaries section on the first summary or a milestone.
+4. Ingest into Qdrant `chat_history`:
+   ```bash
+   python .sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py docs/second-brain/wiki/session-summaries/YYYY-MM-DD-<topic>.md
+   ```
+   Reads the frontmatter (developer/domains/session_date/spec/plan) into the payload. If Qdrant is down, the markdown remains and the next pull's hook re-ingests — no retry needed. Relay the `SESSION INGEST REPORT` to the user in the configured language.
+5. COMMIT it. The summary lands in your LOCAL Qdrant immediately, but cross-developer recall ("what did X do") needs the markdown COMMITTED so teammates pull it and their post-merge hook ingests it into their own Qdrant. In `finishing-a-development-branch` the code was committed earlier (Step 2), so explicitly commit the new `session-summaries/` file + the `_SEARCH_INDEX`/`_INDEX` updates (a small `docs(memory): session summary` commit is fine). If you already PUSHED in that flow (PR path), push again so the summary reaches the remote/PR. Uncommitted summaries are author-local only.
+</session_summary_protocol>
 
 <wiki_formatting_and_search>
 CANONICAL SCHEMA SOURCE:

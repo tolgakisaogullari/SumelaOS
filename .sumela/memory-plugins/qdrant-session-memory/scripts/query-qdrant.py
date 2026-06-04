@@ -6,7 +6,10 @@ Usage:
     python query-qdrant.py "why was sprint 12 following feed chosen"
     python query-qdrant.py "what did we discuss last week" --limit 3 --threshold 0.75
     python query-qdrant.py "what does AuthService do" --collection code_vectors
-    python query-qdrant.py "test" --host my-qdrant --port 6333 --ollama-url http://gpu:11434
+    # Per-developer / per-domain / per-date filters (session-summary metadata):
+    python query-qdrant.py "card limit" --developer "Tolga" --domain Card     # filtered semantic search
+    python query-qdrant.py "*" --developer "Tolga" --since 2026-06-01         # FILTER-ONLY listing (all matches)
+    python query-qdrant.py "" --domain Card --since 2026-06-01 --until 2026-06-07
 
 What it does:
     1. Generates an embedding for the query via Ollama (qwen3-embedding:0.6b).
@@ -65,10 +68,38 @@ except ImportError:
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import ScoredPoint
+    from qdrant_client.models import ScoredPoint, Filter, FieldCondition, MatchValue, Range
 except ImportError:
     report_failure("Dependency", "qdrant-client not installed. Run: pip install qdrant-client")
     sys.exit(1)
+
+
+def _iso_to_int(d: str):
+    """'2026-06-04' -> 20260604, else None."""
+    from datetime import datetime
+    try:
+        return int(datetime.strptime(d.strip(), "%Y-%m-%d").strftime("%Y%m%d"))
+    except (ValueError, AttributeError):
+        return None
+
+
+def build_filter(developer: str = "", domain: str = "", since: str = "", until: str = ""):
+    """Build a Qdrant Filter from session-summary payload fields (chat_history).
+
+    developer/domain -> exact match (domains is a list; Qdrant matches array membership).
+    since/until -> Range on the integer `date_int` field (YYYYMMDD). Returns None if no
+    filter was requested.
+    """
+    must = []
+    if developer:
+        must.append(FieldCondition(key="developer", match=MatchValue(value=developer)))
+    if domain:
+        must.append(FieldCondition(key="domains", match=MatchValue(value=domain)))
+    gte = _iso_to_int(since) if since else None
+    lte = _iso_to_int(until) if until else None
+    if gte is not None or lte is not None:
+        must.append(FieldCondition(key="date_int", range=Range(gte=gte, lte=lte)))
+    return Filter(must=must) if must else None
 
 DEFAULT_COLLECTION = os.getenv("QDRANT_COLLECTION", "chat_history")
 DEFAULT_LIMIT = 5
@@ -86,27 +117,52 @@ def get_embedding(text: str, ollama_url: str) -> list[float]:
 
 
 def query_qdrant(
-    query_vector: list[float],
+    query_vector,
     collection: str,
     limit: int,
     threshold: float,
     host: str,
     port: int,
+    query_filter=None,
 ) -> tuple[list, int]:
+    """Semantic search (optionally filtered) when query_vector is given; pure
+    metadata listing via scroll when query_vector is None (filter-only mode)."""
     client = QdrantClient(host=host, port=port, check_compatibility=False)
 
     collections = [c.name for c in client.get_collections().collections]
     if collection not in collections:
         raise ValueError(f"Collection '{collection}' not found. Available: {collections}")
 
-    response = client.query_points(
-        collection_name=collection,
-        query=query_vector,
-        limit=limit,
-        score_threshold=threshold if threshold > 0 else None,
-        with_payload=True,
-    )
-    results = response.points
+    if query_vector is None:
+        # Filter-only listing: gather ALL points matching the filter (not top-K), paging
+        # through scroll until exhausted — e.g. "everything developer X did last week".
+        # A session is chunked into many points, so we must not stop at the first page;
+        # the caller dedups by session_id. HARD_CAP guards against a runaway scan.
+        HARD_CAP = 10000
+        results = []
+        offset = None
+        while True:
+            batch, offset = client.scroll(
+                collection_name=collection,
+                scroll_filter=query_filter,
+                limit=256,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            results.extend(batch)
+            if offset is None or len(results) >= HARD_CAP:
+                break
+    else:
+        response = client.query_points(
+            collection_name=collection,
+            query=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+            score_threshold=threshold if threshold > 0 else None,
+            with_payload=True,
+        )
+        results = response.points
 
     info = client.get_collection(collection_name=collection)
     total_chunks = info.points_count
@@ -118,13 +174,25 @@ def main():
     parser = argparse.ArgumentParser(
         description="Semantic search over Qdrant collections via Ollama embeddings."
     )
-    parser.add_argument("query", help="Search query text")
+    parser.add_argument("query", nargs="?", default="",
+                        help="Search query text. Omit (or pass '*') for a FILTER-ONLY listing "
+                             "(lists ALL points matching the --developer/--domain/--since/--until "
+                             "filter, not top-K by similarity).")
     parser.add_argument("--collection", default=DEFAULT_COLLECTION,
                         help=f"Qdrant collection name (default: {DEFAULT_COLLECTION})")
-    parser.add_argument("--limit", type=int, default=DEFAULT_LIMIT,
-                        help=f"Max results (default: {DEFAULT_LIMIT})")
+    parser.add_argument("--limit", type=int, default=None,
+                        help=f"Max results. Semantic search default {DEFAULT_LIMIT}; filter-only "
+                             "listing default = ALL matching sessions (deduped).")
     parser.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,
                         help="Minimum similarity score (0-1), default 0 = no filter")
+    parser.add_argument("--developer", default="",
+                        help="Filter to a developer (exact match on the `developer` payload field).")
+    parser.add_argument("--domain", default="",
+                        help="Filter to a domain (matches membership of the `domains` list).")
+    parser.add_argument("--since", default="",
+                        help="Filter to sessions on/after this ISO date (YYYY-MM-DD).")
+    parser.add_argument("--until", default="",
+                        help="Filter to sessions on/before this ISO date (YYYY-MM-DD).")
     parser.add_argument("--json", action="store_true",
                         help="Output raw JSON instead of human-readable report")
     parser.add_argument("--host", default=os.getenv("QDRANT_HOST", "localhost"),
@@ -135,35 +203,72 @@ def main():
                         help="Ollama base URL (default: http://localhost:11434 or OLLAMA_URL env)")
     args = parser.parse_args()
 
-    if not args.query or not args.query.strip():
-        report_failure("Input", "Query text cannot be empty.")
+    query_filter = build_filter(args.developer, args.domain, args.since, args.until)
+    query_text = args.query.strip()
+    filter_only = query_text in ("", "*")
+
+    if filter_only and query_filter is None:
+        report_failure("Input", "Provide a query, or a filter (--developer/--domain/--since/--until) "
+                                "for a filter-only listing.")
         sys.exit(1)
 
-    try:
-        embedding = get_embedding(args.query.strip(), args.ollama_url)
-    except Exception as e:
-        report_failure("Ollama Embedding", str(e))
-        sys.exit(1)
+    embedding = None
+    if not filter_only:
+        try:
+            embedding = get_embedding(query_text, args.ollama_url)
+        except Exception as e:
+            report_failure("Ollama Embedding", str(e))
+            sys.exit(1)
 
     try:
         results, total_chunks = query_qdrant(
             query_vector=embedding,
             collection=args.collection,
-            limit=args.limit,
+            limit=(args.limit if args.limit is not None else DEFAULT_LIMIT),
             threshold=args.threshold,
             host=args.host,
             port=args.port,
+            query_filter=query_filter,
         )
     except Exception as e:
         report_failure("Qdrant Search", str(e))
         sys.exit(1)
 
+    truncated = 0
+    if filter_only:
+        # Collapse chunks → one row per session (keep the lowest chunk_index as the
+        # representative), newest first. Then apply --limit as a max-SESSIONS cap
+        # (default: show all). This is what makes "everything X did" complete.
+        def _ci(r):
+            c = r.payload.get("chunk_index")
+            return c if isinstance(c, int) else float("inf")  # missing index never wins over a real chunk 0
+        by_session = {}
+        for r in results:
+            sid = r.payload.get("session_id")
+            if sid not in by_session or _ci(r) < _ci(by_session[sid]):
+                by_session[sid] = r
+        # `or ""` (not get default) so an explicit None `date` can't crash the sort;
+        # session_id is a stable tiebreaker for same-date sessions.
+        results = sorted(
+            by_session.values(),
+            key=lambda r: (r.payload.get("date") or "", r.payload.get("session_id") or ""),
+            reverse=True,
+        )
+        if args.limit is not None and args.limit > 0 and len(results) > args.limit:
+            truncated = len(results) - args.limit
+            results = results[: args.limit]
+
     if args.json:
         payload = [
             {
-                "score": r.score,
+                "score": getattr(r, "score", None),   # None in filter-only (scroll) mode
                 "session_id": r.payload.get("session_id"),
                 "date": r.payload.get("date"),
+                "developer": r.payload.get("developer"),
+                "developer_email": r.payload.get("developer_email"),
+                "domains": r.payload.get("domains"),
+                "spec_artifact": r.payload.get("spec_artifact"),
+                "plan_artifact": r.payload.get("plan_artifact"),
                 "topics": r.payload.get("topics"),
                 "text": r.payload.get("text"),
                 "chunk_index": r.payload.get("chunk_index"),
@@ -175,7 +280,7 @@ def main():
         sys.exit(0)
 
     report_success(
-        query=args.query,
+        query=(query_text or "(filter-only listing)"),
         collection=args.collection,
         results_count=len(results),
         total_chunks=total_chunks,
@@ -184,15 +289,34 @@ def main():
     for i, r in enumerate(results, 1):
         sid = r.payload.get("session_id", "n/a")
         date = r.payload.get("date", "n/a")
+        dev = r.payload.get("developer", "n/a")
+        domains = r.payload.get("domains", [])
+        spec = r.payload.get("spec_artifact", "")
+        plan = r.payload.get("plan_artifact", "")
         topics = r.payload.get("topics", [])
         text = r.payload.get("text", "")
-        print(f"\n--- Result {i} (score: {r.score:.4f}) ---")
-        print(f"Session : {sid}")
-        print(f"Date    : {date}")
-        print(f"Topics  : {', '.join(topics) if topics else 'n/a'}")
-        print(f"Text    : {text[:500]}{'...' if len(text) > 500 else ''}")
+        score = getattr(r, "score", None)
+        header = f"(score: {score:.4f})" if score is not None else "(filter match)"
+        print(f"\n--- Result {i} {header} ---")
+        print(f"Session  : {sid}")
+        print(f"Date     : {date}")
+        print(f"Developer: {dev}")
+        print(f"Domains  : {', '.join(domains) if domains else 'n/a'}")
+        if spec:
+            print(f"Spec     : {spec}")
+        if plan:
+            print(f"Plan     : {plan}")
+        print(f"Topics   : {', '.join(topics) if topics else 'n/a'}")
+        print(f"Text     : {text[:500]}{'...' if len(text) > 500 else ''}")
 
-    print(f"\n[{len(results)} result(s) from {total_chunks} total chunk(s) in '{args.collection}']")
+    if filter_only:
+        print(f"\n[{len(results)} session(s) matched the filter "
+              f"({total_chunks} total chunk(s) in '{args.collection}', unfiltered)]")
+        if truncated:
+            print(f"[NOTE: {truncated} more matching session(s) hidden by --limit; "
+                  f"raise --limit or omit it to see all.]")
+    else:
+        print(f"\n[{len(results)} result(s) from {total_chunks} total chunk(s) in '{args.collection}']")
     sys.exit(0)
 
 

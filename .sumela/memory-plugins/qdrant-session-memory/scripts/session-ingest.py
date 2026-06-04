@@ -19,11 +19,23 @@ Payload schema per chunk:
     text          : str    (the chunk body)
     session_id    : str    (filename without .md)
     date          : str    (ISO date, from frontmatter or today)
+    date_int      : int     (YYYYMMDD form of `date` for range filtering; 0 if unparseable)
+    developer     : str    (who did the work — frontmatter `developer`, else --fallback-developer, else "unknown")
+    developer_email: str   (frontmatter `developer_email`, else "")
+    domains       : list   (frontmatter `domains` — the session's domain context)
+    spec_artifact : str    (frontmatter `spec_artifact` path, else "")
+    plan_artifact : str    (frontmatter `plan_artifact` path, else "")
     topics        : list   (from frontmatter session_topics)
     decisions     : list   (extracted from a "## Decisions" / "## Decisions Made" block)
     affected_files: list   (any file paths mentioned in the chunk that match common code patterns)
     chunk_index   : int
     total_chunks  : int
+
+These extra fields make `chat_history` queryable by developer / domain / date range
+(see query-qdrant.py --developer/--domain/--since/--until). Summaries written before this
+feature lack them and won't match a filter until re-ingested; the post-merge hook only
+re-ingests summaries Added/Modified in a pulled range, so pre-existing ones backfill only
+when re-committed (or via a one-time manual re-ingest of wiki/session-summaries/).
 
 Environment:
     OLLAMA_URL       — Ollama base URL (default: http://localhost:11434)
@@ -53,10 +65,13 @@ def print_report(summary_lines: list):
     print("=" * 60 + "\n")
 
 
-def report_success(session_id: str, chunk_count: int, qdrant_ok: bool, decisions_n: int, files_n: int):
+def report_success(session_id: str, chunk_count: int, qdrant_ok: bool, decisions_n: int, files_n: int,
+                   developer: str = "unknown", domains: list = None):
     print_report([
         f"Status: {'SUCCESS' if qdrant_ok else 'PARTIAL'}",
         f"Session ID: {session_id}",
+        f"Developer: {developer}",
+        f"Domains: {', '.join(domains) if domains else '(none)'}",
         f"Chunks created: {chunk_count}",
         f"Decisions extracted: {decisions_n}",
         f"Affected files mentioned: {files_n}",
@@ -145,9 +160,15 @@ def extract_frontmatter(content: str) -> dict:
     if len(parts) < 3:
         return fm
     for line in parts[1].strip().splitlines():
+        # Skip full-line comments; tolerate a trailing " # comment" on a value (agents
+        # sometimes copy the annotated template verbatim). " #" (space-hash) avoids
+        # clipping a '#' that is part of a value (e.g. "c#-migration").
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
         if ":" in line:
             k, v = line.split(":", 1)
-            fm[k.strip()] = v.strip()
+            v = v.split(" #", 1)[0].strip()
+            fm[k.strip()] = v
     return fm
 
 
@@ -184,6 +205,11 @@ def main():
                         help="Qdrant host (default: localhost or QDRANT_HOST env)")
     parser.add_argument("--port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")),
                         help="Qdrant port (default: 6333 or QDRANT_PORT env)")
+    parser.add_argument("--fallback-developer", default="",
+                        help="Used as `developer` when the summary frontmatter has none "
+                             "(the post-merge hook passes the commit's git author here).")
+    parser.add_argument("--fallback-date", default="",
+                        help="Used as `session_date` when frontmatter has none (ISO YYYY-MM-DD).")
     args = parser.parse_args()
 
     summary_path = args.summary_path
@@ -195,12 +221,24 @@ def main():
         text = f.read()
 
     fm = extract_frontmatter(text)
-    session_date = fm.get("session_date", datetime.now().strftime("%Y-%m-%d"))
-    topics = (
-        [t.strip() for t in fm.get("session_topics", "").strip("[]").replace("'", "").split(",") if t.strip()]
-        if "session_topics" in fm
-        else []
-    )
+    session_date = fm.get("session_date") or args.fallback_date or datetime.now().strftime("%Y-%m-%d")
+
+    def _list_field(key):
+        """Parse a frontmatter value that may be a YAML inline list or comma string."""
+        raw = fm.get(key, "")
+        return [t.strip() for t in raw.strip("[]").replace("'", "").replace('"', "").split(",") if t.strip()]
+
+    topics = _list_field("session_topics")
+    domains = _list_field("domains")
+    developer = (fm.get("developer") or args.fallback_developer or "unknown").strip()
+    developer_email = fm.get("developer_email", "").strip()
+    spec_artifact = fm.get("spec_artifact", "").strip()
+    plan_artifact = fm.get("plan_artifact", "").strip()
+    # date_int (YYYYMMDD) for Qdrant Range filtering; 0 if the date isn't a clean ISO date.
+    try:
+        date_int = int(datetime.strptime(session_date.strip(), "%Y-%m-%d").strftime("%Y%m%d"))
+    except (ValueError, AttributeError):
+        date_int = 0
     # splitext (not .replace) so filenames containing ".md" mid-name aren't mangled.
     session_id = os.path.splitext(os.path.basename(summary_path))[0]
 
@@ -227,6 +265,12 @@ def main():
                         "text": chunk,
                         "session_id": session_id,
                         "date": session_date,
+                        "date_int": date_int,
+                        "developer": developer,
+                        "developer_email": developer_email,
+                        "domains": domains,
+                        "spec_artifact": spec_artifact,
+                        "plan_artifact": plan_artifact,
                         "topics": topics,
                         "decisions": decisions,
                         "affected_files": chunk_files,
@@ -255,7 +299,8 @@ def main():
         print(f"[session-ingest] WARNING: Qdrant upsert failed: {e}")
         print("[session-ingest] Fallback: markdown summary already exists; will retry on next run.")
 
-    report_success(session_id, len(chunks), qdrant_ok, len(decisions), len(affected_files))
+    report_success(session_id, len(chunks), qdrant_ok, len(decisions), len(affected_files),
+                   developer=developer, domains=domains)
     sys.exit(0)
 
 

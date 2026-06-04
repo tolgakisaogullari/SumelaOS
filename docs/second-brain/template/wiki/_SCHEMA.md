@@ -46,6 +46,7 @@ Every wiki page falls under a type. The type is specified in the frontmatter via
 | `insight` | Analyses saved from query write-back | `insights/2026-04-08-cache-vs-redis-comparison` |
 | `archive` | Content no longer in active use but retained | `archive/sprint-history` |
 | `source-summary` | A summary of a raw_source file | `summaries/karpathy-llm-wiki` |
+| `session-summary` | A per-session work record (who did what, decisions, artifacts) — the conversational memory ingested into Qdrant `chat_history` | `session-summaries/2026-06-04-card-limit-refactor` |
 
 **Special files (DO NOT take frontmatter):** `_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`
 
@@ -90,6 +91,18 @@ type: source-summary
 source_path: ../../raw_sources/karpathy-llm-wiki.md  # required
 source_type: article | book | meeting | code-snapshot | external
 ingested_date: 2026-04-08
+---
+
+# for the session-summary type:
+---
+type: session-summary
+session_date: 2026-06-04                 # required — ISO date the work happened (drives "last week" queries)
+session_topics: [card-limits, refactor]  # required — 2-5 topics (also ingested for filtering)
+developer: Ada Lovelace                  # required — who DID the work (git config user.name); "unknown" if unset
+developer_email: ada@example.com          # optional — git config user.email
+domains: [Card]                           # optional — domain(s) this session's work belongs to (from .sumela/local.md)
+spec_artifact: ../artifacts/specs/2026-06-04-card-limits-design.md   # optional — spec produced/used this session
+plan_artifact: ../artifacts/plans/2026-06-04-card-limits.md          # optional — plan produced/used this session
 ---
 ```
 
@@ -345,6 +358,58 @@ Which wiki pages did this source update?
 ## Contradictions
 Does this source contradict the existing wiki? How was it resolved?
 ```
+
+### Session Summary Page Template
+
+The per-session work record. Written at the end of a task (`finishing-a-development-branch`) AND on a context-pressure handoff (`context-handoff`), via the canonical procedure in `using-second-brain` `<session_summary_protocol>`. It is ingested into Qdrant `chat_history`, so its frontmatter is what makes "which developer did what last week, in which domain" queryable.
+
+**This must be substantive, not lip-service.** Record the actual decisions (with rationale), the concrete work (commits + changed files), and the spec/plan paths if the task produced them — so a future session (or teammate) can reconstruct what happened and why. A pointer-only stub defeats the memory.
+
+Copy this frontmatter verbatim and fill the values — do NOT keep inline `# comments` in it (omit optional lines you don't use rather than commenting them). Write `domains` in the canonical `<domain_scopes>` casing (e.g. `Card`, not `card`) so `--domain` queries match (the filter is exact):
+
+```markdown
+---
+type: session-summary
+session_date: YYYY-MM-DD
+session_topics: [topic-1, topic-2]
+developer: <git config user.name, or "unknown">
+developer_email: <git config user.email>
+domains: [<Domain>]
+spec_artifact: ../artifacts/specs/YYYY-MM-DD-<topic>-design.md
+plan_artifact: ../artifacts/plans/YYYY-MM-DD-<topic>.md
+tags: [session, <domain-or-topic>]
+date_created: YYYY-MM-DD
+date_updated: YYYY-MM-DD
+---
+
+# Session Summary — [YYYY-MM-DD] [Primary Topic]
+
+> What was discussed, decided, and done this session. Read to reconstruct context.
+
+## Topics Discussed
+- Topic 1 — brief description
+- Topic 2 — brief description
+
+## Decisions Made
+- **Decision 1** — what was decided AND the rationale (the "why")
+- **Decision 2** — ...
+
+## Work Completed
+- Task/change 1 — files touched, commit hash(es) if committed
+- Task/change 2 — ...
+
+## Artifacts Created / Updated
+- Spec: [<spec-name>](../artifacts/specs/YYYY-MM-DD-<topic>-design.md)   <!-- omit if none -->
+- Plan: [<plan-name>](../artifacts/plans/YYYY-MM-DD-<topic>.md)          <!-- omit if none -->
+
+## Open Questions / Blockers
+- Question / blocker for next session (or "none")
+
+## Related Wiki Pages
+- [[architecture-decisions]] / [[active-project-context]] / domain pages touched
+```
+
+**Required frontmatter:** the base required fields every page carries (`tags`, `date_created`, `date_updated` — see Section 3) PLUS `type`, `session_date`, `session_topics`, `developer`. `domains`/`spec_artifact`/`plan_artifact` are optional but SHOULD be filled when applicable (they power domain- and artifact-scoped recall). The `## Decisions Made` heading is parsed by `session-ingest.py` — keep it verbatim.
 
 ---
 

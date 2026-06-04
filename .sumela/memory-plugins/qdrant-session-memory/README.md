@@ -41,13 +41,44 @@ export OLLAMA_URL=http://gpu-server:11434
 python .sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py session-summary.md
 ```
 
+## Session metadata — queryable by developer / domain / date
+
+`session-ingest.py` reads the session-summary frontmatter (see `_SCHEMA.md` Session Summary
+Page Template) into the `chat_history` payload, so sessions are filterable, not just
+semantically searchable. Fields: `developer`, `developer_email`, `domains` (list),
+`spec_artifact`, `plan_artifact`, `date`/`date_int` (YYYYMMDD), `session_topics`.
+
+`query-qdrant.py` adds matching filters:
+
+```bash
+# Filtered semantic search (combine a query with filters)
+python .../query-qdrant.py "card limit bug" --developer "Ada Lovelace" --domain Card
+
+# Filter-ONLY listing — everything a developer did in a date range (pass "*" as the query)
+python .../query-qdrant.py "*" --developer "Ada Lovelace" --since 2026-06-01 --until 2026-06-07
+
+# All Card-domain sessions since a date
+python .../query-qdrant.py "*" --domain Card --since 2026-06-01
+```
+
+`--developer`/`--domain` are exact (case-sensitive) matches on the stored value; `--since`/`--until`
+range on `date_int`. Summaries stamp `domains` in the canonical `<domain_scopes>` casing (e.g.
+`Card`), so query with that casing (`--domain Card`). Notes: (1) summaries written before this
+feature lack these fields and won't match a filter. New + edited summaries carry them going
+forward; a pre-existing summary backfills ONLY if it's re-committed (the post-merge hook
+re-ingests just the Added/Modified summaries in a pulled range, not the whole tree). To fully
+backfill history once, manually re-ingest: `for f in docs/second-brain/wiki/session-summaries/*.md; do python .../session-ingest.py "$f"; done`. (2) when frontmatter omits
+`developer`/`session_date`, the hook passes the commit's git author/date via
+`--fallback-developer`/`--fallback-date`; (3) for exact commit-level attribution, `git log` is
+the authoritative source — this captures the session narrative.
+
 ## Scripts
 
 | Script | Purpose |
 |---|---|
 | `setup-qdrant.py` | Create Qdrant collections (idempotent) |
-| `session-ingest.py` | Ingest a session summary markdown into Qdrant |
-| `query-qdrant.py` | Semantic search over session history |
+| `session-ingest.py` | Ingest a session summary markdown into Qdrant (developer/domain/date/spec/plan metadata) |
+| `query-qdrant.py` | Semantic search + developer/domain/date filters (and filter-only listing) over session history |
 | `ingest-code-to-qdrant.py` | Ingest source code files into `code_chunks` collection |
 | `ingest-wiki-to-qdrant.py` | Ingest wiki pages into `wiki_pages` collection |
 | `lib/memory_ingest.py` | Shared helpers (chunking, embedding, deterministic IDs) |

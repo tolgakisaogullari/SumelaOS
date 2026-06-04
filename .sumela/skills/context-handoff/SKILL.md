@@ -74,7 +74,7 @@ Use when: The current task is fully finished and verified.
 - **Timing constraint:** If /evolve review would consume too much remaining context, skip it and note it in handoff prompt. Never sacrifice handoff quality for evolve completeness.
 
 **Step 3 — Session Summary (MANDATORY):**
-- Create a session summary file following `<session_summary_protocol>` below.
+- Create a session summary file following `using-second-brain` `<session_summary_protocol>` (canonical; see `<session_summary_protocol>` below for the context-handoff-specific trigger note).
 - This persists the session's conversational context as a searchable wiki page.
 - The handoff prompt will reference this summary file.
    - Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in the project's configured language**.
@@ -119,7 +119,7 @@ Use when: You are mid-task and context is running low.
 - Same as Protocol A Step 2.
 
 **Step 5 — Session Summary (MANDATORY):**
-- Same as Protocol A Step 3. Create session summary following `<session_summary_protocol>` below.
+- Same as Protocol A Step 3. Create session summary following `using-second-brain` `<session_summary_protocol>` (canonical).
    - Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in the project's configured language**.
 
 **Step 6 — Generate and present handoff prompt** using `<handoff_template>` below.
@@ -129,37 +129,12 @@ Use when: You are mid-task and context is running low.
 <session_summary_protocol>
 ## Session Summary Generation Protocol
 
-This protocol creates a structured wiki page that persists the session's conversational context. In Karpathy LLM Wiki terms, this is the session-level query write-back artifact: future sessions answer "what did we discuss last time?" through `_SEARCH_INDEX.md`, Obsidian links, and optional Qdrant ingestion.
+The session-summary write+ingest procedure is CANONICAL in `using-second-brain` `<session_summary_protocol>` (single source of truth — shared with `finishing-a-development-branch` so the two triggers never drift). READ and FOLLOW it; do NOT re-specify the fields/steps here.
 
-### When to create
-- ALWAYS during context-handoff (Protocol A Step 3, Protocol B Step 5).
-- OPTIONALLY when the user explicitly asks to save a session summary mid-session.
-
-### File location
-`docs/second-brain/wiki/session-summaries/YYYY-MM-DD-<topic>.md`
-
-### Content extraction
-From the current session context, extract:
-1. **Topics discussed** — What subjects came up? (2-5 bullet points)
-2. **Decisions made** — Any architectural, design, or workflow decisions (with rationale)
-3. **Work completed** — Tasks finished, commits made, files changed
-4. **Open questions** — Unresolved items for next session
-5. **Related wiki pages** — Cross-links to existing wiki pages touched or referenced
-
-### Steps
-1. Read `_SCHEMA.md` Session Summary template (if not already in context).
-2. Create the file at `wiki/session-summaries/YYYY-MM-DD-<topic>.md` using the template.
-3. Update `_SEARCH_INDEX.md` with a new row for the session summary.
-4. Update `_INDEX.md` Session Summaries section if this is the first session summary or a significant milestone.
-5. Append to `_LOG.md` only if an actual loggable operation occurred. The session summary itself is usually the durable record; do not add a separate log entry just to say a handoff happened.
-
-### Naming convention
-- `<topic>` = primary activity of the session in kebab-case
-- Examples: `memory-architecture-review`, `sprint-10-hardening`, `auth-refactor-debugging`
-- If multiple unrelated topics: use the dominant one
-
-### Token budget
-Session summaries should be **concise** — 200-400 words max. They are a pointer to what happened, not a transcript.
+What is specific to context-handoff:
+- **When:** ALWAYS during context-handoff (Protocol A Step 3, Protocol B Step 5); also when the user explicitly asks to save a session mid-session.
+- The canonical protocol stamps the queryable frontmatter (`developer` from `git config user.name`, `domains` from `.sumela/local.md`, `spec_artifact`/`plan_artifact`, `session_date`, `session_topics`), writes `wiki/session-summaries/YYYY-MM-DD-<topic>.md` per the `_SCHEMA.md` Session Summary Page Template, updates `_SEARCH_INDEX.md`/`_INDEX.md`, and ingests into Qdrant `chat_history`.
+- Capture substantive detail (decisions + rationale, concrete work + commits/files, artifact links) — a pointer-only stub defeats the memory. A handoff summary is mid-task context; be detailed enough that the NEXT session resumes exactly where you stopped.
 </session_summary_protocol>
 
 <session_memory_ingestion>
@@ -167,8 +142,7 @@ Session summaries should be **concise** — 200-400 words max. They are a pointe
 
 During context-handoff, the agent runs the appropriate steps below without offloading manual decisions to the user, and **presents the output as a summary in the project's configured language**:
 
-1. **Create Session Summary**
-   - Summarize the session's main topic, decisions, and open questions
+1. **Create Session Summary** — per `using-second-brain` `<session_summary_protocol>` (canonical: substantive content + the queryable `developer`/`domains`/`spec_artifact`/`plan_artifact` frontmatter). Do NOT write a thin "main topic + decisions" stub.
    - Format: `wiki/session-summaries/YYYY-MM-DD-topic.md`
 
 2. **Auto-Index to Qdrant**

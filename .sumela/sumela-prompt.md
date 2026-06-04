@@ -74,6 +74,7 @@ FAMILY A — Tier-1 (Qdrant `chat_history`) — for past-decision / "why" / "wha
 - Contains "previously" / "last time" / "before".
 - References a past sprint, refactor, decision, ADR, or architectural choice (e.g., "why Sprint 12", "how does AD-XX work", "the auth refactor").
 - Asks about an entity/method/file that has likely been discussed in prior sessions.
+- **WHO / WHEN / WHICH-DOMAIN** — "what did developer X do last week", "which sessions touched the Card domain", "what happened between two dates". Use Tier-1 with the session-summary metadata FILTERS (`--developer`, `--domain`, `--since`, `--until`); pass `"*"` as the query for a filter-only listing (all matches, not top-K). For exact commit-level attribution, `git log --author=… --since=…` is the authoritative fallback (the summary captures the session narrative; git captures the commits).
 
 FAMILY B — Tier-2 (Graphify code graph at `graphify-out/graph.json`) — for structural / call-graph / impact / dependency questions:
 - "where is X used" / "who calls X" (or the equivalent in any language).
@@ -89,6 +90,8 @@ CONCRETE PROTOCOL (run in order, stop as soon as you have a complete answer):
 STEP 1A — Tier-1 query (Qdrant `chat_history`, MANDATORY for FAMILY A):
   Bash:        `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<verbatim user query>" --limit 3`
   PowerShell:  `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<verbatim user query>" --limit 3`
+  WHO/WHEN/DOMAIN: add `--developer "<name>"`, `--domain <Domain>`, `--since YYYY-MM-DD`, `--until YYYY-MM-DD`. For a pure "list everything X did" (no semantic query), pass `"*"` as the query → filter-only listing of ALL matching sessions, e.g.
+    `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "*" --developer "Ada" --since 2026-06-01`
 
 STEP 1B — Tier-2 query (Graphify code graph, MANDATORY for FAMILY B):
 

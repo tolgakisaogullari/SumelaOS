@@ -9,6 +9,23 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ### Added
 
+- **Rich, queryable session memory** — session summaries now carry structured metadata so
+  memory answers "which developer did what, in which domain, when". A canonical
+  `session-summary` page type + template lands in `_SCHEMA.md` (frontmatter: `developer`,
+  `developer_email`, `domains`, `spec_artifact`, `plan_artifact`, `session_date`,
+  `session_topics`; required detailed sections). `session-ingest.py` ingests these into the
+  `chat_history` payload (incl. `date_int` for range filters); `query-qdrant.py` gains
+  `--developer` / `--domain` / `--since` / `--until` filters plus a filter-only listing mode
+  (`"*"` query → all matches via scroll, not top-K). The post-merge hook passes the commit's
+  git author/date as `--fallback-developer`/`--fallback-date` so even un-stamped summaries are
+  attributed. `sumela-prompt.md` routes who/when/domain questions to these filters (git log as
+  the authoritative commit-level fallback).
+- **Session summary written at task completion, not only on handoff** — the
+  `<session_summary_protocol>` is now canonical in `using-second-brain` (single source);
+  `context-handoff` references it, and `finishing-a-development-branch` Step 7 also writes +
+  ingests a session summary. Previously a clean task finish with no context-pressure handoff
+  left no conversational `chat_history` record (only curated-wiki ADR/commit-log updates).
+
 - **Business-domain rule scope** — a third rule axis, orthogonal to stack scope.
   In team mode, setup / `/initSumela` asks the project's domain taxonomy (e.g. Card,
   Payments); each domain gets a tracked `RULE_REGISTRY.md` `<domain_scopes>` entry +

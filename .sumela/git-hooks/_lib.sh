@@ -167,7 +167,15 @@ sumela_memory_sync() {
         continue
       fi
       echo ">>> ingesting: $f"
-      python3 "$ingest" "$repo/$f" || echo "WARN: ingest failed for $f"
+      # Attribution fallback: if the summary's frontmatter has no `developer`/`session_date`,
+      # stamp the commit's git author + date (the work this summary records arrived in this
+      # range). Frontmatter, when present, always wins inside session-ingest.py.
+      fa="$(git -C "$repo" log -1 --format='%an' "$from..$to" -- "$f" 2>/dev/null)" || fa=""
+      fd="$(git -C "$repo" log -1 --format='%ad' --date=short "$from..$to" -- "$f" 2>/dev/null)" || fd=""
+      ingest_args=("$repo/$f")
+      [ -n "$fa" ] && ingest_args+=(--fallback-developer "$fa")
+      [ -n "$fd" ] && ingest_args+=(--fallback-date "$fd")
+      python3 "$ingest" "${ingest_args[@]}" || echo "WARN: ingest failed for $f"
     done
     echo "===== memory-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &
