@@ -385,7 +385,7 @@ Read `RULE_REGISTRY.md.template` and fill:
 - `{{stack_scopes}}` → generate from detected stacks + path patterns
 - `{{stack_rules}}` → generate XML rule entries for each detected stack
 - `{{domain_scopes}}` → from `DOMAINS` (PHASE 2a). One row per domain: `` | `<Domain>` | Work scoped to the <Domain> domain … | ``. If `DOMAINS` is empty, emit the single fallback row `` | `(none)` | No domains configured — add via /onboardSumela or /evolve | ``.
-- `{{domain_rules}}` → for each domain, a `<rule activation="domain-conditional" applies_phases="all" domain="<Domain>">` entry whose `<path>` is `.sumela/rules/domains/<slug>.md`. SLUG RULE (must match `setup.sh` `slugify()` exactly so both install routes agree): transliterate accented/Turkish letters to ASCII (Ödeme→odeme), lowercase, collapse each run of non-alphanumeric chars to a SINGLE `-`, and trim leading/trailing `-`. Empty when `DOMAINS` is empty.
+- `{{domain_rules}}` → for each domain, a `<rule activation="domain-conditional" applies_phases="all" domain="<Domain>">` entry whose `<path>` is `.sumela/rules/domains/<slug>.md`. SLUG RULE (must match `setup.sh` `slugify()` exactly so both install routes agree): transliterate non-ASCII letters to ASCII via Unicode NFKD (e.g. Cafe-with-accent → cafe), lowercase, collapse each run of non-alphanumeric chars to a SINGLE `-`, and trim leading/trailing `-`. Empty when `DOMAINS` is empty.
 - `{{phase_matrix_rows}}` → fill the phase-to-rule matrix; every row has FIVE columns (Phase | Universal | Phase-conditional | Stack-conditional | Domain-conditional), with the trailing two cells `(load matching stack rules) | (load matching domain rules)`.
 
 ### Step 3.3: Generate Rules

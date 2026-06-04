@@ -1,6 +1,6 @@
 ---
 name: onboard-sumela
-description: "Use when a developer joins a project that ALREADY has SumelaOS committed — '/onboardSumela', 'onboard SumelaOS', 'join this project', 'set up my clone', 'projeye katıl', 'kurulumumu yap'. Wires git hooks, sets the per-developer interaction language + domains, and offers the optional memory runtime — WITHOUT re-running install or touching team-wide config. NOT for first-time install (that is /initSumela)."
+description: "Use when a developer joins a project that ALREADY has SumelaOS committed — '/onboardSumela', 'onboard SumelaOS', 'join this project', 'set up my clone' (or the equivalent in any language). Wires git hooks, sets the per-developer interaction language + domains, and offers the optional memory runtime — WITHOUT re-running install or touching team-wide config. NOT for first-time install (that is /initSumela)."
 ---
 
 <purpose>
@@ -23,7 +23,7 @@ are committed and owned by the team. This is the teammate counterpart to /initSu
 
 <activation>
 LAZY — loaded on demand when the user invokes /onboardSumela or an equivalent ("onboard
-me", "set up my clone", "projeye katıl"). It is ALSO the single source of truth that the
+me", "set up my clone", or the equivalent in any language). It is ALSO the single source of truth that the
 `<onboarding_gate>` in `sumela-prompt.md` defers to: when the gate detects an un-onboarded
 clone it follows THIS skill rather than duplicating the steps.
 </activation>

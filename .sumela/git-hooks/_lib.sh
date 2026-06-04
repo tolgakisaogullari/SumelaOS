@@ -114,7 +114,7 @@ sumela_memory_sync() {
 
   # Which summaries were Added/Modified in this range? (Deletes are ignored —
   # removing a summary file does not retract a past decision from memory.)
-  # core.quotePath=false: keep non-ASCII paths raw (Turkish/Unicode filenames)
+  # core.quotePath=false: keep non-ASCII paths raw (accented / Unicode filenames)
   # instead of git's default octal-escaped, double-quoted form — otherwise the
   # file-existence guard below would silently skip them. (Newline-in-filename
   # is still unsupported — unrealistic for committed summary slugs.)

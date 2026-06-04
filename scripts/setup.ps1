@@ -315,12 +315,14 @@ if ($Governance -ne "team") { $Governance = "solo" }
 
 # Slugify a domain name -> filesystem-safe slug (lowercase, non-alnum -> single hyphen).
 function Get-Slug {
-    # Transliterate accented Latin + Turkish letters to ASCII first ('Ödeme'->'odeme',
-    # 'Café'->'cafe'), then lowercase, non-alnum runs -> single hyphen, trim. Mirrors
-    # bash slugify(). ASCII input yields the same slug as a plain replace.
+    # NFD (FormD) strips diacritics across languages; a few Latin letters that do NOT
+    # decompose (dotless i, eszett, slashed/stroked letters) are mapped first so they are
+    # not dropped. Mirrors bash slugify(). ASCII input yields the same slug as a plain replace.
     param([string]$s)
-    $map = @{ 'ı' = 'i'; 'İ' = 'i'; 'ş' = 's'; 'Ş' = 's'; 'ğ' = 'g'; 'Ğ' = 'g'; 'ç' = 'c'; 'Ç' = 'c'; 'ö' = 'o'; 'Ö' = 'o'; 'ü' = 'u'; 'Ü' = 'u' }
-    foreach ($k in $map.Keys) { $s = $s.Replace($k, $map[$k]) }
+    # Chained String.Replace (ordinal, case-sensitive) — NOT a hashtable: PowerShell
+    # hashtable keys are case-insensitive, so paired-case entries would collide. Single
+    # line on purpose: trailing-dot method-chain continuation isn't valid in PS 5.1.
+    $s = $s.Replace('ı','i').Replace('ß','ss').Replace('ø','o').Replace('Ø','o').Replace('ł','l').Replace('Ł','l').Replace('đ','d').Replace('Đ','d')
     $d = $s.Normalize([Text.NormalizationForm]::FormD)
     $sb = New-Object System.Text.StringBuilder
     foreach ($ch in $d.ToCharArray()) {

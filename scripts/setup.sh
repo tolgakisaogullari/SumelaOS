@@ -149,18 +149,19 @@ with open(sys.argv[2], 'w') as f:
 " "$template" "$output"
 }
 
-# Slugify a domain name -> filesystem-safe slug. Transliterates accented Latin +
-# Turkish letters to ASCII FIRST (so 'Ödeme'->'odeme', 'Çek'->'cek', 'Café'->'cafe'
-# rather than lossy 'deme'/'ek'/'caf'), then lowercases, maps runs of non-alnum to a
-# single hyphen, and trims. Uses python3 (already required by render_template) for
-# reliable Unicode handling; ASCII input yields the same slug as a plain tr pipeline.
+# Slugify a domain name -> filesystem-safe slug. Unicode NFKD strips diacritics across
+# languages (umlauts, accents, cedillas, breves -> ASCII, e.g. Cafe/o/u/n variants), then
+# lowercases, maps runs of non-alphanumeric chars to a single hyphen, and trims. A few
+# Latin letters NFKD does NOT decompose (dotless i, eszett, slashed/stroked letters) are
+# mapped first so they are not dropped. Uses python3 (already required by render_template);
+# ASCII input yields the same slug as a plain tr pipeline.
 slugify() {
   python3 -c '
 import sys, unicodedata, re
 s = sys.argv[1]
-# Turkish letters NFKD does not reduce to ASCII (esp. dotless i) — map explicitly first.
-tr = {"ı":"i","İ":"i","ş":"s","Ş":"s","ğ":"g","Ğ":"g","ç":"c","Ç":"c","ö":"o","Ö":"o","ü":"u","Ü":"u"}
-s = "".join(tr.get(ch, ch) for ch in s)
+# Latin letters NFKD leaves intact (so encode("ascii","ignore") would drop them) -> map.
+nd = {"ı":"i","ß":"ss","ø":"o","Ø":"o","ł":"l","Ł":"l","đ":"d","Đ":"d"}
+s = "".join(nd.get(ch, ch) for ch in s)
 s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 print(re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-"))
 ' "$1"

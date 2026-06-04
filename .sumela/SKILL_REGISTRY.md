@@ -175,7 +175,7 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="lazy">
 <name>onboard-sumela</name>
-<description>Use when a developer joins a project that ALREADY has SumelaOS committed — '/onboardSumela', 'onboard SumelaOS', 'join this project', 'set up my clone', 'projeye katıl', 'kurulumumu yap'. Wires git hooks, sets the per-developer interaction language + domains, and offers the optional memory runtime — WITHOUT re-running install or touching team-wide config. NOT for first-time install (that is /initSumela).</description>
+<description>Use when a developer joins a project that ALREADY has SumelaOS committed — '/onboardSumela', 'onboard SumelaOS', 'join this project', 'set up my clone' (or the equivalent in any language). Wires git hooks, sets the per-developer interaction language + domains, and offers the optional memory runtime — WITHOUT re-running install or touching team-wide config. NOT for first-time install (that is /initSumela).</description>
 <path>.sumela/skills/onboard-sumela/SKILL.md</path>
 </skill>
 

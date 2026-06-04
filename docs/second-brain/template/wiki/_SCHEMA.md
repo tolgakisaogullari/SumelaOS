@@ -121,7 +121,7 @@ plan_artifact: ../artifacts/plans/2026-06-04-card-limits.md          # optional 
 
 **Rules:**
 - Lowercase only, separated by hyphens (`kebab-case`)
-- ASCII only — transliterate non-ASCII letters (e.g. Turkish ı→i, ş→s, ç→c, ğ→g, ö→o, ü→u; German ä→a, ß→ss; French é→e)
+- ASCII only — transliterate non-ASCII letters to ASCII via Unicode NFKD (accents/umlauts/cedillas → base letter; e.g. a-with-umlaut → a, e-with-acute → e, n-with-tilde → n; non-decomposable letters like dotless-i → i, eszett → ss)
 - NO spaces
 - In dated files, the date ALWAYS comes first
 

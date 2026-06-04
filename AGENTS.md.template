@@ -143,7 +143,7 @@ Active four-tier search stack. Routing rules live in `using-second-brain` skill;
 
 | Tier | System | What it indexes | Trigger |
 |---|---|---|---|
-| 1 | Qdrant `chat_history` collection | Session summaries (semantic chunks via Ollama `qwen3-embedding:0.6b`) | Past conversations, "geçen hafta ne konuştuk", prior decisions |
+| 1 | Qdrant `chat_history` collection | Session summaries (semantic chunks via Ollama `qwen3-embedding:0.6b`) | Past conversations, "what did we discuss last week", prior decisions |
 | 2 | Graphify graph (`graphify-out/graph.json`, `calls` edges) — agent reads via `scripts/query-graph.py` (primary) or `graphify` CLI (secondary for cluster/path) | Code AST + call graph + communities | Function/class lookups, callers/callees, impact analysis |
 | 3 | Obsidian wiki (`_SEARCH_INDEX.md` + pages) | Curated knowledge — ADRs, sprint plans, entity definitions | Architectural rationale, sprint state, domain entities |
 | 4 | Grep / Read fallback | Exact string match | When Tiers 1–3 return no hits |
