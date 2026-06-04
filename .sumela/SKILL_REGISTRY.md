@@ -174,6 +174,12 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 </skill>
 
 <skill activation="lazy">
+<name>onboard-sumela</name>
+<description>Use when a developer joins a project that ALREADY has SumelaOS committed — '/onboardSumela', 'onboard SumelaOS', 'join this project', 'set up my clone', 'projeye katıl', 'kurulumumu yap'. Wires git hooks, sets the per-developer interaction language + domains, and offers the optional memory runtime — WITHOUT re-running install or touching team-wide config. NOT for first-time install (that is /initSumela).</description>
+<path>.sumela/skills/onboard-sumela/SKILL.md</path>
+</skill>
+
+<skill activation="lazy">
 <name>qdrant-session-memory</name>
 <description>Use when answering questions about past decisions, prior sessions, or 'why' questions — semantic search over Qdrant session history. Also use for code and wiki ingestion into Qdrant. Activates Tier-1 routing.</description>
 <path>.sumela/memory-plugins/qdrant-session-memory/SKILL.md</path>

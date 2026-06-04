@@ -1,0 +1,50 @@
+---
+type: rule
+tags: [{{domain_name}}, domain, standards, template]
+date_created: {{date_created}}
+status: active
+---
+
+# {{domain_name}} Domain Standards
+
+> This rule defines business rules, conventions, and constraints specific to the
+> **{{domain_name}}** domain. It is loaded (in addition to phase + stack rules) whenever
+> a task is scoped to this domain — see `RULE_REGISTRY.md` `<domain_scopes>`.
+> Domain is orthogonal to stack: this rule applies to backend, frontend, and mobile
+> work alike when the task touches the {{domain_name}} domain.
+> Customize the sections below for your domain; delete what does not apply.
+
+## Domain Vocabulary & Entities
+
+Define the core entities, value objects, and ubiquitous-language terms of this domain
+(so code naming and conversation stay consistent across the team).
+
+<!-- Write your {{domain_name}} domain standards here -->
+
+## Business Rules & Invariants
+
+Define the invariants, state transitions, and validation rules that MUST always hold
+for this domain (e.g., limits, lifecycle states, irreversible operations).
+
+<!-- Write your {{domain_name}} domain standards here -->
+
+## Boundaries & Integrations
+
+Define this domain's boundaries, owned data, and how it integrates with other domains
+or external systems (contracts, events, anti-corruption layers).
+
+<!-- Write your {{domain_name}} domain standards here -->
+
+## Conventions & Patterns
+
+Define naming, module layout, and domain-specific patterns expected in this area of
+the codebase.
+
+<!-- Write your {{domain_name}} domain standards here -->
+
+## Edge Cases & Risks
+
+Define the known edge cases, failure modes, and security/compliance concerns particular
+to this domain.
+
+<!-- Write your {{domain_name}} domain standards here -->

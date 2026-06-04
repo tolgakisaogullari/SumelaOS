@@ -6,19 +6,32 @@
 #
 #   cp .sumela/local.md.example .sumela/local.md
 #
-# Only the keys listed below are honored. Anything else is ignored.
+# Only the keys listed below — interaction_language and domains — are honored.
+# Anything else is ignored.
 
 # Interaction language — the language the agent talks to YOU in (explanations,
 # questions, status, the Context Manifest header). Overrides AGENTS.md Section 2's
 # project default for your clone only.
 interaction_language: English
+
+# Domains — the business domain(s) YOU work in (comma-separated). The agent loads the
+# matching domain rules from .sumela/rules/domains/ in ADDITION to phase + stack rules.
+# Must be names from the project taxonomy in RULE_REGISTRY.md <domain_scopes>; an
+# unknown value is warned-and-skipped, never fatal. Leave blank if you don't work in a
+# specific domain. Example:
+# domains: Card, Payments
 ---
 
 <!--
-  Why only interaction_language?
+  Why only interaction_language and domains?
 
   Code NAMING and code DOCUMENTATION languages are deliberately NOT overridable
   here — they must stay consistent across the whole team, so they live only in
   AGENTS.md Section 2 (committed, team-wide). This file changes how the agent
   speaks to you, never what lands in the shared codebase.
+
+  `domains` is per-developer because WHICH domain you work in is personal — but the
+  domain TAXONOMY (valid names) and the domain RULES are team-wide and tracked
+  (RULE_REGISTRY.md <domain_scopes> + .sumela/rules/domains/). Setting your domain
+  here just tells the agent which of those tracked rule sets to load for you.
 -->

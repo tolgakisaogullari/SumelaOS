@@ -20,6 +20,9 @@
 #     --plugins "qdrant-session-memory,graphify-code-graph" \
 #     --ides "claude,cursor,cline,kilo-code,trae,opencode" \
 #     --governance "solo"                   # or "team" (PR-gated /evolve)
+#     --domains "Card,Payments"             # team mode only: business-domain taxonomy (optional)
+#     --hooks-only                          # wire core.hooksPath ONLY (no config generation);
+#                                           #   used by /onboardSumela for a teammate's clone
 #     --ci                                  # opt in to the GitHub Actions workflow (default: off)
 # -----------------------------------------------------------------------------
 
@@ -50,8 +53,10 @@ NI_RULE_VARIANT="best-practice"
 NI_PLUGINS=""
 NI_IDES=""
 NI_GOVERNANCE="solo"
+NI_DOMAINS=""   # comma-separated business-domain taxonomy (team mode only)
 WITH_CI=false   # CI workflow is opt-in (--ci, or 'y' at the interactive prompt)
 HOOKS_WIRED=false
+HOOKS_ONLY=false   # --hooks-only: wire core.hooksPath ONLY, no config generation (teammate onboarding)
 
 # --- Parse CLI args ---
 while [[ $# -gt 0 ]]; do
@@ -68,6 +73,8 @@ while [[ $# -gt 0 ]]; do
     --plugins)         NI_PLUGINS="$2"; shift 2 ;;
     --ides)            NI_IDES="$2"; shift 2 ;;
     --governance)      NI_GOVERNANCE="$2"; shift 2 ;;
+    --domains)         NI_DOMAINS="$2"; shift 2 ;;
+    --hooks-only)      HOOKS_ONLY=true; shift ;;
     --ci)              WITH_CI=true; shift ;;
     *) err "Unknown option: $1"; exit 1 ;;
   esac
@@ -135,6 +142,84 @@ with open(sys.argv[2], 'w') as f:
 " "$template" "$output"
 }
 
+# Slugify a domain name -> filesystem-safe slug (lowercase, non-alnum -> single
+# hyphen, trimmed). bash 3.2 / BSD-tr compatible.
+slugify() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-' | tr -s '-' | sed 's/^-//; s/-$//'
+}
+
+# --- Git hook wiring (core.hooksPath) — used by the full install AND by --hooks-only ---
+# Helpers for the multi-install (monorepo) dispatcher. core.hooksPath holds ONE path,
+# so a second SumelaOS install in the same repo is handled by a root dispatcher that
+# fans each git event out to every registered install (see .sumela/git-hooks/_dispatch.sh).
+sumela_register_install() {        # $1 = git_root, $2 = install_rel ("" => repo root)
+  local reg="$1/.sumela-hooks/installs" entry="${2:-.}"
+  [ -z "$entry" ] && entry="."
+  touch "$reg"
+  grep -qxF "$entry" "$reg" 2>/dev/null || printf '%s\n' "$entry" >> "$reg"
+}
+sumela_setup_dispatch() {          # $1 = git_root, $2 = install_abs (source of _dispatch.sh)
+  local dh="$1/.sumela-hooks" hk
+  mkdir -p "$dh"
+  for hk in pre-commit post-merge post-checkout; do
+    cp "$2/.sumela/git-hooks/_dispatch.sh" "$dh/$hk"
+    chmod +x "$dh/$hk" 2>/dev/null || true
+  done
+}
+# Wire core.hooksPath for THIS install, handling unset / already-this-install /
+# existing-dispatcher / other-SumelaOS-install / non-SumelaOS (e.g. Husky) cases.
+# Sets the global HOOKS_WIRED. NEVER regenerates project config — so it is safe for
+# `--hooks-only` (teammate onboarding) as well as the full install flow.
+wire_git_hooks() {
+  if [ -d ".sumela/git-hooks" ]; then
+    info "Wiring git hooks (pre-commit validation + memory sync)..."
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+      INSTALL_ABS="$(pwd)"
+      # --show-prefix gives cwd relative to the repo root ("packages/app/" or "" at root),
+      # avoiding fragile path subtraction (e.g. macOS /var vs /private/var symlinks).
+      INSTALL_REL="$(git rev-parse --show-prefix 2>/dev/null)"
+      INSTALL_REL="${INSTALL_REL%/}"                          # strip trailing slash; "" at repo root
+      HOOKS_REL="${INSTALL_REL:+$INSTALL_REL/}.sumela/git-hooks"
+      chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
+      EXISTING_HOOKS_PATH="$(git config --local --get core.hooksPath 2>/dev/null || true)"
+      if [ -z "$EXISTING_HOOKS_PATH" ] || [ "$EXISTING_HOOKS_PATH" = "$HOOKS_REL" ]; then
+        # Unset, or already pointing at THIS install → wire directly (idempotent).
+        git config core.hooksPath "$HOOKS_REL"
+        HOOKS_WIRED=true
+        ok "Git hooks enabled (core.hooksPath = $HOOKS_REL) — pre-commit validation active (bypass: git commit --no-verify)"
+      else
+        case "$EXISTING_HOOKS_PATH" in
+          .sumela-hooks|*/.sumela-hooks)
+            # A SumelaOS dispatcher already owns hooks → just register this install.
+            sumela_setup_dispatch "$GIT_ROOT" "$INSTALL_ABS"   # refresh dispatcher scripts
+            sumela_register_install "$GIT_ROOT" "$INSTALL_REL"
+            HOOKS_WIRED=true
+            ok "Registered this install with the existing SumelaOS hook dispatcher (.sumela-hooks/)." ;;
+          *.sumela/git-hooks)
+            # Another SumelaOS install owns core.hooksPath → promote to a dispatcher that
+            # runs BOTH (this + the other) on every git event (multi-install monorepo).
+            OTHER_REL="${EXISTING_HOOKS_PATH%/.sumela/git-hooks}"
+            [ "$OTHER_REL" = "$EXISTING_HOOKS_PATH" ] && OTHER_REL=""   # other install at root
+            sumela_setup_dispatch "$GIT_ROOT" "$INSTALL_ABS"
+            sumela_register_install "$GIT_ROOT" "$OTHER_REL"
+            sumela_register_install "$GIT_ROOT" "$INSTALL_REL"
+            git config core.hooksPath ".sumela-hooks"
+            HOOKS_WIRED=true
+            ok "Multiple SumelaOS installs detected — installed a hook dispatcher at .sumela-hooks/ that runs all of them."
+            info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)." ;;
+          *)
+            warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' (non-SumelaOS) — not overriding."
+            warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$EXISTING_HOOKS_PATH', or unset it and re-run setup." ;;
+        esac
+      fi
+    else
+      warn "Not a git repository — skipping git hook setup."
+      warn "After 'git init', run setup again (it wires core.hooksPath automatically)."
+    fi
+  fi
+}
+
 # --- Helper: prompt with default ---
 prompt_default() {
   local prompt="$1"
@@ -180,6 +265,16 @@ prompt_yn() {
   result="${result:-$default}"
   [[ "$result" =~ ^[yY] ]]
 }
+
+# --- --hooks-only: wire git hooks and stop (no config generation). Used by
+# /onboardSumela so a teammate's clone gets the SAME hook-wiring logic (incl. the
+# monorepo dispatcher + non-SumelaOS-hooksPath cases) WITHOUT regenerating any
+# tracked team config. ---
+if [ "$HOOKS_ONLY" = true ]; then
+  info "Wiring git hooks only (no config generation)..."
+  wire_git_hooks
+  exit 0
+fi
 
 # =============================================================================
 # 1. COLLECT CONFIGURATION
@@ -260,6 +355,45 @@ fi
 GOVERNANCE="$(echo "$GOVERNANCE" | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
 if [ "$GOVERNANCE" != "team" ]; then GOVERNANCE="solo"; fi
 
+# --- Business-domain taxonomy (team mode only) ---
+# The SET of domains is team-wide and TRACKED — rendered into RULE_REGISTRY
+# <domain_scopes> + one rule file each. Which domain(s) a given developer works in
+# is per-developer and UNTRACKED (.sumela/local.md `domains:`), asked during
+# onboarding (/onboardSumela), NOT here. Blank/solo => no domains; add later.
+DOMAINS=()
+if [ "$GOVERNANCE" = "team" ]; then
+  if [ "$NON_INTERACTIVE" = true ]; then
+    IFS=',' read -ra DOMAINS <<< "$NI_DOMAINS"
+  else
+    echo ""
+    echo "Does your team organize work by business domain (e.g. Card, Payments, Onboarding)?"
+    echo "Each one gets a rule file the agent loads for developers who work in that domain."
+    echo "Leave blank to skip — domains can be added later via /onboardSumela or /evolve."
+    DOMAIN_CSV=$(prompt_default "Domains (comma-separated)" "")
+    IFS=',' read -ra DOMAINS <<< "$DOMAIN_CSV"
+  fi
+fi
+
+# Validate the domain taxonomy BEFORE generating anything: reject names that would
+# corrupt the registry (table/XML metacharacters) or collide on their slug (two
+# distinct names -> one file + duplicate <name>/<path>, which would otherwise pass
+# every parity check silently). Fail fast with a clear rename message.
+_seen_slugs=""
+for dom in ${DOMAINS[@]+"${DOMAINS[@]}"}; do
+  dom="$(echo "$dom" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -z "$dom" ] && continue
+  case "$dom" in
+    *'|'*|*'<'*|*'>'*|*'"'*)
+      err "Domain name '$dom' contains an unsupported character (one of | < > \"). Rename it and re-run."; exit 1 ;;
+  esac
+  _slug="$(slugify "$dom")"
+  [ -z "$_slug" ] && { err "Domain name '$dom' has no usable (alphanumeric) characters. Rename it and re-run."; exit 1; }
+  case " $_seen_slugs " in
+    *" $_slug "*) err "Domain names collide on slug '$_slug' (e.g. '$dom'). Pick names that stay distinct after lowercasing + hyphenation."; exit 1 ;;
+  esac
+  _seen_slugs="$_seen_slugs $_slug"
+done
+
 # --- Validate inputs ---
 if [ -z "$PROJECT_NAME" ]; then
   err "Project name cannot be empty"
@@ -271,6 +405,7 @@ DATE_CREATED="$(date +%Y-%m-%d)"
 info "Project: $PROJECT_NAME"
 info "Governance: $GOVERNANCE"
 info "Stacks: ${STACKS[*]:-none}"
+[ "$GOVERNANCE" = "team" ] && info "Domains: ${DOMAINS[*]:-none}"
 info "Rule variant: $RULE_VARIANT"
 info "Plugins: ${PLUGINS[*]:-none}"
 info "IDEs: ${IDES[*]:-none}"
@@ -450,19 +585,42 @@ for stack in ${STACKS[@]+"${STACKS[@]}"}; do
   esac
 done
 
-# Build phase matrix rows
-PHASE_MATRIX='| `ideation` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) |
-| `specification` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) |
-| `planning` | engineering_philosophy, identity_and_behavior | architecture_patterns, operational_excellence_maintenance | (load matching stack rules) |
-| `implementation` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |
-| `verification` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |
-| `code_review` | engineering_philosophy, identity_and_behavior | audit_and_output, git_workflow_mandatory_review_protocol | (load matching stack rules) |
-| `branch_finish` | engineering_philosophy, identity_and_behavior | git_workflow_mandatory_review_protocol, operational_excellence_maintenance | (load matching stack rules) |
-| `shipping` | engineering_philosophy, identity_and_behavior | operational_excellence_maintenance | (load matching stack rules) |
-| `debugging` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |'
+# Build domain scopes + domain-conditional rule entries (team-mode taxonomy).
+DOMAIN_SCOPES=""
+DOMAIN_RULES=""
+for dom in ${DOMAINS[@]+"${DOMAINS[@]}"}; do
+  dom="$(echo "$dom" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -z "$dom" ] && continue
+  dom_slug="$(slugify "$dom")"
+  [ -z "$dom_slug" ] && continue
+  dom_name="${dom_slug//-/_}_domain"
+  [ -n "$DOMAIN_SCOPES" ] && DOMAIN_SCOPES="$DOMAIN_SCOPES"$'\n'
+  DOMAIN_SCOPES="${DOMAIN_SCOPES}| \`${dom}\` | Work scoped to the ${dom} domain (from a developer's \`domains:\` or an explicit mention) |"
+  DOMAIN_RULES="${DOMAIN_RULES}
+<rule activation=\"domain-conditional\" applies_phases=\"all\" domain=\"${dom}\">
+<name>${dom_name}</name>
+<description>Use when the task scope includes the ${dom} domain — business rules, vocabulary, invariants, and conventions specific to ${dom} (applies across all stacks).</description>
+<path>.sumela/rules/domains/${dom_slug}.md</path>
+</rule>
+"
+done
+[ -z "$DOMAIN_SCOPES" ] && DOMAIN_SCOPES="| \`(none)\` | No domains configured — add via /onboardSumela or /evolve |"
+
+# Build phase matrix rows (5 columns: Phase | Universal | Phase-conditional | Stack-conditional | Domain-conditional)
+PHASE_MATRIX='| `ideation` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) | (load matching domain rules) |
+| `specification` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) | (load matching domain rules) |
+| `planning` | engineering_philosophy, identity_and_behavior | architecture_patterns, operational_excellence_maintenance | (load matching stack rules) | (load matching domain rules) |
+| `implementation` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) | (load matching domain rules) |
+| `verification` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) | (load matching domain rules) |
+| `code_review` | engineering_philosophy, identity_and_behavior | audit_and_output, git_workflow_mandatory_review_protocol | (load matching stack rules) | (load matching domain rules) |
+| `branch_finish` | engineering_philosophy, identity_and_behavior | git_workflow_mandatory_review_protocol, operational_excellence_maintenance | (load matching stack rules) | (load matching domain rules) |
+| `shipping` | engineering_philosophy, identity_and_behavior | operational_excellence_maintenance | (load matching stack rules) | (load matching domain rules) |
+| `debugging` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) | (load matching domain rules) |'
 
 export TMPL_STACK_SCOPES="$STACK_SCOPES"
 export TMPL_STACK_RULES="$STACK_RULES"
+export TMPL_DOMAIN_SCOPES="$DOMAIN_SCOPES"
+export TMPL_DOMAIN_RULES="$DOMAIN_RULES"
 export TMPL_PHASE_MATRIX_ROWS="$PHASE_MATRIX"
 export TMPL_EXAMPLE_OVERRIDE="backend"
 
@@ -514,6 +672,31 @@ if [ -f "$OP_SRC" ]; then
 else
   warn "Template not found: $OP_SRC — skipping"
 fi
+
+# Copy domain rule templates (team-mode taxonomy). One .empty file per domain; NEVER
+# clobber an existing (possibly customized) domain rule — generation is idempotent.
+DOMAIN_TMPL=".sumela/rules/templates/domain_standards.md.empty"
+for dom in ${DOMAINS[@]+"${DOMAINS[@]}"}; do
+  dom="$(echo "$dom" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  [ -z "$dom" ] && continue
+  dom_slug="$(slugify "$dom")"
+  [ -z "$dom_slug" ] && continue
+  dst=".sumela/rules/domains/${dom_slug}.md"
+  if [ -f "$dst" ]; then
+    info "Domain rule exists, leaving as-is: $dst"
+    continue
+  fi
+  if [ -f "$DOMAIN_TMPL" ]; then
+    mkdir -p .sumela/rules/domains
+    export TMPL_DATE_CREATED="$DATE_CREATED"
+    export TMPL_DOMAIN_NAME="$dom"
+    render_template "$DOMAIN_TMPL" "$dst"
+    ok "Copied $dst"
+  else
+    warn "Template not found: $DOMAIN_TMPL — skipping"
+  fi
+done
+unset TMPL_DOMAIN_NAME 2>/dev/null || true
 
 # =============================================================================
 # 5. GENERATE IDE POINTER FILES
@@ -747,72 +930,8 @@ fi
 # Wired whenever the project is a git repo: the pre-commit validation hook is
 # useful for everyone, and the post-merge/post-checkout memory hooks self-gate
 # (they no-op unless the Qdrant plugin + summaries + a reachable Qdrant exist).
-# Helpers for the multi-install (monorepo) dispatcher. core.hooksPath holds ONE path,
-# so a second SumelaOS install in the same repo is handled by a root dispatcher that
-# fans each git event out to every registered install (see .sumela/git-hooks/_dispatch.sh).
-sumela_register_install() {        # $1 = git_root, $2 = install_rel ("" => repo root)
-  local reg="$1/.sumela-hooks/installs" entry="${2:-.}"
-  [ -z "$entry" ] && entry="."
-  touch "$reg"
-  grep -qxF "$entry" "$reg" 2>/dev/null || printf '%s\n' "$entry" >> "$reg"
-}
-sumela_setup_dispatch() {          # $1 = git_root, $2 = install_abs (source of _dispatch.sh)
-  local dh="$1/.sumela-hooks" hk
-  mkdir -p "$dh"
-  for hk in pre-commit post-merge post-checkout; do
-    cp "$2/.sumela/git-hooks/_dispatch.sh" "$dh/$hk"
-    chmod +x "$dh/$hk" 2>/dev/null || true
-  done
-}
-
-if [ -d ".sumela/git-hooks" ]; then
-  info "Wiring git hooks (pre-commit validation + memory sync)..."
-  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
-    INSTALL_ABS="$(pwd)"
-    # --show-prefix gives cwd relative to the repo root ("packages/app/" or "" at root),
-    # avoiding fragile path subtraction (e.g. macOS /var vs /private/var symlinks).
-    INSTALL_REL="$(git rev-parse --show-prefix 2>/dev/null)"
-    INSTALL_REL="${INSTALL_REL%/}"                          # strip trailing slash; "" at repo root
-    HOOKS_REL="${INSTALL_REL:+$INSTALL_REL/}.sumela/git-hooks"
-    chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
-    EXISTING_HOOKS_PATH="$(git config --local --get core.hooksPath 2>/dev/null || true)"
-
-    if [ -z "$EXISTING_HOOKS_PATH" ] || [ "$EXISTING_HOOKS_PATH" = "$HOOKS_REL" ]; then
-      # Unset, or already pointing at THIS install → wire directly (idempotent).
-      git config core.hooksPath "$HOOKS_REL"
-      HOOKS_WIRED=true
-      ok "Git hooks enabled (core.hooksPath = $HOOKS_REL) — pre-commit validation active (bypass: git commit --no-verify)"
-    else
-      case "$EXISTING_HOOKS_PATH" in
-        .sumela-hooks|*/.sumela-hooks)
-          # A SumelaOS dispatcher already owns hooks → just register this install.
-          sumela_setup_dispatch "$GIT_ROOT" "$INSTALL_ABS"   # refresh dispatcher scripts
-          sumela_register_install "$GIT_ROOT" "$INSTALL_REL"
-          HOOKS_WIRED=true
-          ok "Registered this install with the existing SumelaOS hook dispatcher (.sumela-hooks/)." ;;
-        *.sumela/git-hooks)
-          # Another SumelaOS install owns core.hooksPath → promote to a dispatcher that
-          # runs BOTH (this + the other) on every git event (multi-install monorepo).
-          OTHER_REL="${EXISTING_HOOKS_PATH%/.sumela/git-hooks}"
-          [ "$OTHER_REL" = "$EXISTING_HOOKS_PATH" ] && OTHER_REL=""   # other install at root
-          sumela_setup_dispatch "$GIT_ROOT" "$INSTALL_ABS"
-          sumela_register_install "$GIT_ROOT" "$OTHER_REL"
-          sumela_register_install "$GIT_ROOT" "$INSTALL_REL"
-          git config core.hooksPath ".sumela-hooks"
-          HOOKS_WIRED=true
-          ok "Multiple SumelaOS installs detected — installed a hook dispatcher at .sumela-hooks/ that runs all of them."
-          info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)." ;;
-        *)
-          warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' (non-SumelaOS) — not overriding."
-          warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$EXISTING_HOOKS_PATH', or unset it and re-run setup." ;;
-      esac
-    fi
-  else
-    warn "Not a git repository — skipping git hook setup."
-    warn "After 'git init', run setup again (it wires core.hooksPath automatically)."
-  fi
-fi
+# Logic lives in wire_git_hooks() near the top (shared with the --hooks-only path).
+wire_git_hooks
 
 # =============================================================================
 # 7d. GOVERNANCE — CODEOWNERS for the agent-control surface (team mode only)

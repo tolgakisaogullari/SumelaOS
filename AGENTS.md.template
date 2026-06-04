@@ -107,6 +107,8 @@ Review command: `/evolve`.
 - `solo` — `/evolve` applies approved changes directly to the working tree (the default; one developer owns the agent config).
 - `team` — `/evolve` routes changes to the **agent-control surface** (`.sumela/rules/`, `.sumela/skills/`, `.sumela/sumela-prompt.md`, `wiki/_SCHEMA.md`, the registries, `.sumela/git-hooks/`) through a **pull request** so a code owner reviews them before they become everyone's standard. Lower-stakes `wiki`/`active-context` changes still apply directly. See `self-improvement-curator/SKILL.md` `<evolve_review_workflow>` and `.github/CODEOWNERS`.
 
+**Business domains:** the team-wide domain taxonomy (if any) lives in `.sumela/RULE_REGISTRY.md` `<domain_scopes>` with one rule file each under `.sumela/rules/domains/` (tracked). Which domain(s) a given developer works in is per-developer and lives untracked in `.sumela/local.md` (`domains:`), set during onboarding (`/onboardSumela`). This file is not the source of truth for either — see RULE_REGISTRY.
+
 ---
 
 ## 9. Security Mandate

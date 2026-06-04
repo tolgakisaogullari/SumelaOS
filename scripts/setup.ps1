@@ -44,6 +44,14 @@
     Governance mode: solo (apply /evolve changes directly) or team (PR-gate the
     agent-control surface). Default: solo.
 
+.PARAMETER Domains
+    Team mode only: comma-separated business-domain taxonomy (e.g. "Card,Payments").
+    Optional — domains can be added later via /onboardSumela or /evolve.
+
+.PARAMETER HooksOnly
+    Wire core.hooksPath ONLY (no config generation). Used by /onboardSumela for a
+    teammate's clone — never regenerates tracked team config.
+
 .PARAMETER Ci
     Opt in to creating the GitHub Actions validation workflow (default: off).
 
@@ -67,6 +75,8 @@ param(
     [string]$Plugins = "",
     [string]$IDEs = "",
     [string]$Governance = "solo",
+    [string]$Domains = "",
+    [switch]$HooksOnly,
     [switch]$Ci
 )
 
@@ -77,6 +87,77 @@ function Write-Info  { param([string]$msg) Write-Host "[INFO] $msg" -ForegroundC
 function Write-Ok    { param([string]$msg) Write-Host "[OK]   $msg" -ForegroundColor Green }
 function Write-Warn  { param([string]$msg) Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Write-Err   { param([string]$msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
+
+# --- Git hook wiring (core.hooksPath) — used by the full install AND by -HooksOnly ---
+$HooksWired = $false
+# Helpers for the multi-install (monorepo) dispatcher — core.hooksPath holds ONE path,
+# so a second SumelaOS install in the same repo is handled by a root dispatcher that
+# fans each git event out to every registered install (see .sumela/git-hooks/_dispatch.sh).
+function Register-SumelaInstall($gitRoot, $installRel) {   # $installRel "" => repo root
+    $reg = Join-Path $gitRoot ".sumela-hooks/installs"
+    $entry = if ([string]::IsNullOrEmpty($installRel)) { "." } else { $installRel }
+    if (-not (Test-Path $reg)) { New-Item -ItemType File -Path $reg -Force | Out-Null }
+    # Whole-line match (parity with bash `grep -qxF`): a substring match would wrongly
+    # skip "packages/app" when "packages/app-extra" is already listed.
+    if (-not (@(Get-Content $reg) -contains $entry)) { Add-Content $reg $entry }
+}
+function Setup-SumelaDispatch($gitRoot, $installAbs) {     # copy _dispatch.sh as the 3 hooks
+    $dh = Join-Path $gitRoot ".sumela-hooks"
+    New-Item -ItemType Directory -Path $dh -Force | Out-Null
+    foreach ($hk in @("pre-commit", "post-merge", "post-checkout")) {
+        Copy-Item (Join-Path $installAbs ".sumela/git-hooks/_dispatch.sh") (Join-Path $dh $hk) -Force
+    }
+}
+# Wire core.hooksPath for THIS install (unset / already-this-install / existing-dispatcher /
+# other-SumelaOS-install / non-SumelaOS cases). Sets $script:HooksWired. NEVER regenerates
+# config — safe for -HooksOnly (teammate onboarding) as well as the full install flow.
+function Wire-GitHooks {
+    if (Test-Path ".sumela/git-hooks") {
+        Write-Info "Wiring git hooks (pre-commit validation + memory sync)..."
+        $isGitRepo = $false
+        try { $null = & git rev-parse --is-inside-work-tree 2>$null; if ($LASTEXITCODE -eq 0) { $isGitRepo = $true } } catch { $isGitRepo = $false }
+        if ($isGitRepo) {
+            $gitRoot = (& git rev-parse --show-toplevel 2>$null | Out-String).Trim()
+            $installAbs = (Get-Location).Path
+            # --show-prefix gives cwd relative to the repo root ("packages/app/" or "" at root).
+            $installRel = (& git rev-parse --show-prefix 2>$null | Out-String).Trim().TrimEnd('/')
+            $hooksRel = if ($installRel) { "$installRel/.sumela/git-hooks" } else { ".sumela/git-hooks" }
+            # .Trim() because `& git` keeps the trailing newline that bash $(...) strips.
+            $existingHooksPath = (& git config --local --get core.hooksPath 2>$null | Out-String).Trim()
+
+            if ((-not $existingHooksPath) -or ($existingHooksPath -eq $hooksRel)) {
+                & git config core.hooksPath $hooksRel
+                $script:HooksWired = $true
+                Write-Ok "Git hooks enabled (core.hooksPath = $hooksRel) — pre-commit validation active (bypass: git commit --no-verify)"
+            }
+            elseif ($existingHooksPath -eq ".sumela-hooks" -or $existingHooksPath -like "*/.sumela-hooks") {
+                Setup-SumelaDispatch $gitRoot $installAbs   # refresh dispatcher scripts
+                Register-SumelaInstall $gitRoot $installRel
+                $script:HooksWired = $true
+                Write-Ok "Registered this install with the existing SumelaOS hook dispatcher (.sumela-hooks/)."
+            }
+            elseif ($existingHooksPath -like "*.sumela/git-hooks") {
+                # Another SumelaOS install owns core.hooksPath → promote to a dispatcher running BOTH.
+                $otherRel = $existingHooksPath -replace '/?\.sumela/git-hooks$', ''
+                Setup-SumelaDispatch $gitRoot $installAbs
+                Register-SumelaInstall $gitRoot $otherRel
+                Register-SumelaInstall $gitRoot $installRel
+                & git config core.hooksPath ".sumela-hooks"
+                $script:HooksWired = $true
+                Write-Ok "Multiple SumelaOS installs detected — installed a hook dispatcher at .sumela-hooks/ that runs all of them."
+                Write-Info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)."
+            }
+            else {
+                Write-Warn "core.hooksPath already set to '$existingHooksPath' (non-SumelaOS) — not overriding."
+                Write-Warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$existingHooksPath', or unset it and re-run setup."
+            }
+        }
+        else {
+            Write-Warn "Not a git repository — skipping git hook setup."
+            Write-Warn "After 'git init', run setup again (it wires core.hooksPath automatically)."
+        }
+    }
+}
 
 # --- Cleanup on Ctrl+C ---
 $cleanupRegistered = $false
@@ -153,6 +234,15 @@ function Read-YesNo {
     return $result -match '^[yY]'
 }
 
+# --- -HooksOnly: wire git hooks and stop (no config generation). Used by
+# /onboardSumela so a teammate's clone gets the SAME hook-wiring logic WITHOUT
+# regenerating any tracked team config. ---
+if ($HooksOnly) {
+    Write-Info "Wiring git hooks only (no config generation)..."
+    Wire-GitHooks
+    exit 0
+}
+
 # =============================================================================
 # 1. COLLECT CONFIGURATION
 # =============================================================================
@@ -221,11 +311,52 @@ if ([string]::IsNullOrWhiteSpace($DocumentationLanguage)) { $DocumentationLangua
 $Governance = $Governance.ToLower().Trim()
 if ($Governance -ne "team") { $Governance = "solo" }
 
+# Slugify a domain name -> filesystem-safe slug (lowercase, non-alnum -> single hyphen).
+function Get-Slug { param([string]$s) ($s.ToLower() -replace '[^a-z0-9]+', '-').Trim('-') }
+
+# --- Business-domain taxonomy (team mode only) ---
+# The SET of domains is team-wide and TRACKED; which domain(s) a developer works in
+# is per-developer and UNTRACKED (.sumela/local.md), asked during onboarding.
+$DomainArray = @()
+if ($Governance -eq "team") {
+    if ($NonInteractive) {
+        $DomainArray = if ($Domains) { $Domains -split "," } else { @() }
+    }
+    else {
+        Write-Host ""
+        Write-Host "Does your team organize work by business domain (e.g. Card, Payments, Onboarding)?"
+        Write-Host "Each one gets a rule file the agent loads for developers who work in that domain."
+        Write-Host "Leave blank to skip — domains can be added later via /onboardSumela or /evolve."
+        $domainCsv = Read-WithDefault "Domains (comma-separated)" ""
+        $DomainArray = if ($domainCsv) { $domainCsv -split "," } else { @() }
+    }
+}
+
+# Validate the domain taxonomy BEFORE generating: reject metacharacters + slug collisions
+# (two distinct names -> one file would pass every parity check silently). Fail fast.
+$seenSlugs = @{}
+foreach ($dom in $DomainArray) {
+    $dom = $dom.Trim()
+    if ([string]::IsNullOrWhiteSpace($dom)) { continue }
+    if ($dom -match '[|<>"]') {
+        Write-Err "Domain name '$dom' contains an unsupported character (one of | < > `"). Rename it and re-run."; exit 1
+    }
+    $slug = Get-Slug $dom
+    if ([string]::IsNullOrWhiteSpace($slug)) {
+        Write-Err "Domain name '$dom' has no usable (alphanumeric) characters. Rename it and re-run."; exit 1
+    }
+    if ($seenSlugs.ContainsKey($slug)) {
+        Write-Err "Domain names collide on slug '$slug' (e.g. '$dom'). Pick names that stay distinct after lowercasing + hyphenation."; exit 1
+    }
+    $seenSlugs[$slug] = $true
+}
+
 $DateCreated = Get-Date -Format "yyyy-MM-dd"
 
 Write-Info "Project: $ProjectName"
 Write-Info "Governance: $Governance"
 Write-Info "Stacks: $(if ($StackArray.Count) { $StackArray -join ', ' } else { 'none' })"
+if ($Governance -eq "team") { Write-Info "Domains: $(if ($DomainArray.Count) { $DomainArray -join ', ' } else { 'none' })" }
 Write-Info "Rule variant: $RuleVariant"
 Write-Info "Plugins: $(if ($PluginArray.Count) { $PluginArray -join ', ' } else { 'none' })"
 Write-Info "IDEs: $(if ($IDEArray.Count) { $IDEArray -join ', ' } else { 'none' })"
@@ -384,22 +515,45 @@ foreach ($stack in $StackArray) {
     }
 }
 
-# Build phase matrix
+# Build domain scopes + domain-conditional rule entries (team-mode taxonomy).
+$DomainScopes = @()
+$DomainRules = ""
+foreach ($dom in $DomainArray) {
+    $dom = $dom.Trim()
+    if ([string]::IsNullOrWhiteSpace($dom)) { continue }
+    $domSlug = Get-Slug $dom
+    if ([string]::IsNullOrWhiteSpace($domSlug)) { continue }
+    $domName = ($domSlug -replace '-', '_') + "_domain"
+    $DomainScopes += "| ``$dom`` | Work scoped to the $dom domain (from a developer's ``domains:`` or an explicit mention) |"
+    $DomainRules += @"
+
+<rule activation="domain-conditional" applies_phases="all" domain="$dom">
+<name>$domName</name>
+<description>Use when the task scope includes the $dom domain — business rules, vocabulary, invariants, and conventions specific to $dom (applies across all stacks).</description>
+<path>.sumela/rules/domains/$domSlug.md</path>
+</rule>
+"@
+}
+$DomainScopesStr = if ($DomainScopes.Count) { $DomainScopes -join "`n" } else { "| ``(none)`` | No domains configured — add via /onboardSumela or /evolve |" }
+
+# Build phase matrix (5 columns: Phase | Universal | Phase-conditional | Stack-conditional | Domain-conditional)
 $PhaseMatrix = @"
-| ``ideation`` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) |
-| ``specification`` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) |
-| ``planning`` | engineering_philosophy, identity_and_behavior | architecture_patterns, operational_excellence_maintenance | (load matching stack rules) |
-| ``implementation`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |
-| ``verification`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |
-| ``code_review`` | engineering_philosophy, identity_and_behavior | audit_and_output, git_workflow_mandatory_review_protocol | (load matching stack rules) |
-| ``branch_finish`` | engineering_philosophy, identity_and_behavior | git_workflow_mandatory_review_protocol, operational_excellence_maintenance | (load matching stack rules) |
-| ``shipping`` | engineering_philosophy, identity_and_behavior | operational_excellence_maintenance | (load matching stack rules) |
-| ``debugging`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) |
+| ``ideation`` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) | (load matching domain rules) |
+| ``specification`` | engineering_philosophy, identity_and_behavior | architecture_patterns | (load matching stack rules) | (load matching domain rules) |
+| ``planning`` | engineering_philosophy, identity_and_behavior | architecture_patterns, operational_excellence_maintenance | (load matching stack rules) | (load matching domain rules) |
+| ``implementation`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) | (load matching domain rules) |
+| ``verification`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) | (load matching domain rules) |
+| ``code_review`` | engineering_philosophy, identity_and_behavior | audit_and_output, git_workflow_mandatory_review_protocol | (load matching stack rules) | (load matching domain rules) |
+| ``branch_finish`` | engineering_philosophy, identity_and_behavior | git_workflow_mandatory_review_protocol, operational_excellence_maintenance | (load matching stack rules) | (load matching domain rules) |
+| ``shipping`` | engineering_philosophy, identity_and_behavior | operational_excellence_maintenance | (load matching stack rules) | (load matching domain rules) |
+| ``debugging`` | engineering_philosophy, identity_and_behavior | audit_and_output | (load matching stack rules) | (load matching domain rules) |
 "@
 
 $content = Get-Content ".sumela/RULE_REGISTRY.md.template" -Raw
 $content = $content -replace '\{\{stack_scopes\}\}', $StackScopesStr
 $content = $content -replace '\{\{stack_rules\}\}', $StackRules
+$content = $content -replace '\{\{domain_scopes\}\}', $DomainScopesStr
+$content = $content -replace '\{\{domain_rules\}\}', $DomainRules
 $content = $content -replace '\{\{phase_matrix_rows\}\}', $PhaseMatrix
 $content = $content -replace '\{\{example_override\}\}', "backend"
 $content | Set-Content ".sumela/RULE_REGISTRY.md" -NoNewline
@@ -449,6 +603,32 @@ if (Test-Path $OpSrc) {
 }
 else {
     Write-Warn "Template not found: $OpSrc — skipping"
+}
+
+# Copy domain rule templates (team-mode taxonomy). One .empty file per domain; NEVER
+# clobber an existing (possibly customized) domain rule — generation is idempotent.
+$DomainTmpl = ".sumela/rules/templates/domain_standards.md.empty"
+foreach ($dom in $DomainArray) {
+    $dom = $dom.Trim()
+    if ([string]::IsNullOrWhiteSpace($dom)) { continue }
+    $domSlug = Get-Slug $dom
+    if ([string]::IsNullOrWhiteSpace($domSlug)) { continue }
+    $dst = ".sumela/rules/domains/$domSlug.md"
+    if (Test-Path $dst) {
+        Write-Info "Domain rule exists, leaving as-is: $dst"
+        continue
+    }
+    if (Test-Path $DomainTmpl) {
+        New-Item -ItemType Directory -Force -Path ".sumela/rules/domains" | Out-Null
+        $content = Get-Content $DomainTmpl -Raw
+        $content = $content -replace '\{\{date_created\}\}', $DateCreated
+        $content = $content -replace '\{\{domain_name\}\}', $dom
+        $content | Set-Content $dst -NoNewline
+        Write-Ok "Copied $dst"
+    }
+    else {
+        Write-Warn "Template not found: $DomainTmpl — skipping"
+    }
 }
 
 # =============================================================================
@@ -666,74 +846,9 @@ if ($PluginArray.Count -gt 0 -and (Test-Path "scripts/setup-memory.ps1") -and (-
 # =============================================================================
 # 7c. INSTALL GIT HOOKS (core.hooksPath — pre-commit validation + memory sync)
 # =============================================================================
-# Wired whenever the project is a git repo: pre-commit validation is useful for
-# everyone, and the memory hooks self-gate (no-op without Qdrant + summaries).
-$HooksWired = $false
-
-# Helpers for the multi-install (monorepo) dispatcher — core.hooksPath holds ONE path,
-# so a second SumelaOS install in the same repo is handled by a root dispatcher that
-# fans each git event out to every registered install (see .sumela/git-hooks/_dispatch.sh).
-function Register-SumelaInstall($gitRoot, $installRel) {   # $installRel "" => repo root
-    $reg = Join-Path $gitRoot ".sumela-hooks/installs"
-    $entry = if ([string]::IsNullOrEmpty($installRel)) { "." } else { $installRel }
-    if (-not (Test-Path $reg)) { New-Item -ItemType File -Path $reg -Force | Out-Null }
-    # Whole-line match (parity with bash `grep -qxF`): a substring match would wrongly
-    # skip "packages/app" when "packages/app-extra" is already listed.
-    if (-not (@(Get-Content $reg) -contains $entry)) { Add-Content $reg $entry }
-}
-function Setup-SumelaDispatch($gitRoot, $installAbs) {     # copy _dispatch.sh as the 3 hooks
-    $dh = Join-Path $gitRoot ".sumela-hooks"
-    New-Item -ItemType Directory -Path $dh -Force | Out-Null
-    foreach ($hk in @("pre-commit", "post-merge", "post-checkout")) {
-        Copy-Item (Join-Path $installAbs ".sumela/git-hooks/_dispatch.sh") (Join-Path $dh $hk) -Force
-    }
-}
-
-if (Test-Path ".sumela/git-hooks") {
-    Write-Info "Wiring git hooks (pre-commit validation + memory sync)..."
-    $isGitRepo = $false
-    try { $null = & git rev-parse --is-inside-work-tree 2>$null; if ($LASTEXITCODE -eq 0) { $isGitRepo = $true } } catch { $isGitRepo = $false }
-    if ($isGitRepo) {
-        $gitRoot = (& git rev-parse --show-toplevel 2>$null | Out-String).Trim()
-        $installAbs = (Get-Location).Path
-        # --show-prefix gives cwd relative to the repo root ("packages/app/" or "" at root).
-        $installRel = (& git rev-parse --show-prefix 2>$null | Out-String).Trim().TrimEnd('/')
-        $hooksRel = if ($installRel) { "$installRel/.sumela/git-hooks" } else { ".sumela/git-hooks" }
-        # .Trim() because `& git` keeps the trailing newline that bash $(...) strips.
-        $existingHooksPath = (& git config --local --get core.hooksPath 2>$null | Out-String).Trim()
-
-        if ((-not $existingHooksPath) -or ($existingHooksPath -eq $hooksRel)) {
-            & git config core.hooksPath $hooksRel
-            $HooksWired = $true
-            Write-Ok "Git hooks enabled (core.hooksPath = $hooksRel) — pre-commit validation active (bypass: git commit --no-verify)"
-        }
-        elseif ($existingHooksPath -eq ".sumela-hooks" -or $existingHooksPath -like "*/.sumela-hooks") {
-            Setup-SumelaDispatch $gitRoot $installAbs   # refresh dispatcher scripts
-            Register-SumelaInstall $gitRoot $installRel
-            $HooksWired = $true
-            Write-Ok "Registered this install with the existing SumelaOS hook dispatcher (.sumela-hooks/)."
-        }
-        elseif ($existingHooksPath -like "*.sumela/git-hooks") {
-            # Another SumelaOS install owns core.hooksPath → promote to a dispatcher running BOTH.
-            $otherRel = $existingHooksPath -replace '/?\.sumela/git-hooks$', ''
-            Setup-SumelaDispatch $gitRoot $installAbs
-            Register-SumelaInstall $gitRoot $otherRel
-            Register-SumelaInstall $gitRoot $installRel
-            & git config core.hooksPath ".sumela-hooks"
-            $HooksWired = $true
-            Write-Ok "Multiple SumelaOS installs detected — installed a hook dispatcher at .sumela-hooks/ that runs all of them."
-            Write-Info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)."
-        }
-        else {
-            Write-Warn "core.hooksPath already set to '$existingHooksPath' (non-SumelaOS) — not overriding."
-            Write-Warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$existingHooksPath', or unset it and re-run setup."
-        }
-    }
-    else {
-        Write-Warn "Not a git repository — skipping git hook setup."
-        Write-Warn "After 'git init', run setup again (it wires core.hooksPath automatically)."
-    }
-}
+# Wired whenever the project is a git repo. Logic lives in Wire-GitHooks near the
+# top (shared with the -HooksOnly path).
+Wire-GitHooks
 
 # =============================================================================
 # 7d. GOVERNANCE — CODEOWNERS for the agent-control surface (team mode only)

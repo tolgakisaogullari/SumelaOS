@@ -136,16 +136,17 @@ Triggered by the user invoking `/evolve` (or explicitly asking to show pending i
        This gate prevents the historical pattern where the same Anti-Enumeration block or Windows-CMD block was appended multiple times across `/evolve` runs.
      - Apply the change to the target file (Edit tool for existing content, Write tool if the file is empty).
      - **REGISTRY UPDATE (MANDATORY when target is a registered rule or skill):**
-       - **If `scope: rule` AND `target` matches `.sumela/rules/<file>.md`:**
+       - **If `scope: rule` AND `target` matches `.sumela/rules/<file>.md` OR `.sumela/rules/domains/<slug>.md`:**
          - If the file is NEW (BOOTSTRAP triggered earlier): you MUST add a `<rule>` entry to `.sumela/RULE_REGISTRY.md`.
            1. Ask the user for:
-              - Activation pattern: `universal` | `phase-conditional` | `stack-conditional` | `security-mandate` | `pointer`.
-              - `applies_phases`: subset of `ideation, specification, planning, implementation, verification, code_review, branch_finish, shipping, debugging` (or `all` for universal).
+              - Activation pattern: `universal` | `phase-conditional` | `stack-conditional` | `domain-conditional` | `security-mandate` | `pointer`.
+              - `applies_phases`: subset of `ideation, specification, planning, implementation, verification, code_review, branch_finish, shipping, debugging` (or `all` for universal / domain-conditional).
               - `stack`: only if `stack-conditional` — one of `backend, frontend, mobile, ai, infra`.
+              - `domain`: only if `domain-conditional` — the business domain (original case, e.g. `Card`). The rule file MUST live at `.sumela/rules/domains/<slug>.md` (slug = lowercase, non-alphanumeric → `-`); render it from `.sumela/rules/templates/domain_standards.md.empty` (substituting `{{domain_name}}`/`{{date_created}}`) if BOOTSTRAP made only a stub. If the domain is NOT already a row in `<domain_scopes>`, you MUST ALSO add a `<domain_scopes>` row for it (that block is the source of truth for valid `domain=` values).
            2. Generate a description in "Use when..." form from the entry's `proposed_change` (max ~250 chars, third person).
-           3. Show the proposed `<rule>` block as a DIFF PREVIEW. Get explicit user yes BEFORE writing.
+           3. Show the proposed `<rule>` block (plus any new `<domain_scopes>` row) as a DIFF PREVIEW. Get explicit user yes BEFORE writing.
            4. Insert the new `<rule>` entry into `<available_rules>` at a sensible position (group with similar activation patterns).
-           5. Update `<phase_to_rule_matrix>` — add the new rule name under EACH applicable phase row, in the correct column (Universal / Phase-conditional / Stack-conditional).
+           5. Update `<phase_to_rule_matrix>` — add the new rule name under EACH applicable phase row, in the correct column (Universal / Phase-conditional / Stack-conditional / Domain-conditional).
          - If the file is EXISTING: re-read the rule's current `<description>` in `RULE_REGISTRY.md`. If the new content introduces a meaningful pattern, technology, or term that the description does NOT mention (e.g., new `AsSplitQuery` guidance added to `backend_standards.md` but the description's enumeration omits it), propose a refreshed description with a DIFF PREVIEW. User approves; then update.
        - **If `scope: skill` AND `target` matches `.sumela/skills/<name>/SKILL.md`:**
          - If the file is NEW: add a `<skill>` entry to `.sumela/SKILL_REGISTRY.md` using the same DIFF-PREVIEW + user-approval pattern. Activation = `eager` | `lazy`. Then ENFORCE PARITY: the registry `<description>` MUST be byte-identical to the skill's frontmatter `description:` field.

@@ -28,7 +28,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+WORK_TEAM=""
+trap 'rm -rf "$WORK" ${WORK_TEAM:+"$WORK_TEAM"}' EXIT
 
 PASS=0 FAIL=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS + 1)); }
@@ -47,8 +48,22 @@ echo "  work:  $WORK"
 
 # --- Stage a clean copy (no .git, no nested temp/test output) ----------------
 # Copy tracked + untracked source but exclude .git so setup's git wiring starts fresh.
-( cd "$REPO_ROOT" && tar --exclude='./.git' --exclude='./tests/.out' -cf - . ) | ( cd "$WORK" && tar -xf - )
-( cd "$WORK" && git init -q && git add -A && git -c user.email=smoke@test -c user.name=smoke commit -qm init ) || true
+stage_copy() {
+  # Exclude generated overlay (never in framework source; regenerated per fixture). Without
+  # this, a maintainer's prior local `setup.sh` run would leak generated rule files into the
+  # fixture and spuriously fail the domain-parity check. (AGENTS.md / RULE_REGISTRY.md are
+  # already gitignored, but tar copies the working tree, so exclude them explicitly too.)
+  ( cd "$REPO_ROOT" && tar --exclude='./.git' --exclude='./tests/.out' \
+      --exclude='./AGENTS.md' --exclude='./.sumela/RULE_REGISTRY.md' \
+      --exclude='./.sumela/rules/domains' --exclude='./.github/CODEOWNERS' \
+      --exclude='./.sumela/rules/operational_excellence_maintenance.md' \
+      --exclude='./.sumela/rules/backend_standards.md' \
+      --exclude='./.sumela/rules/frontend_standards.md' \
+      --exclude='./.sumela/rules/mobile_standards.md' \
+      -cf - . ) | ( cd "$1" && tar -xf - )
+  ( cd "$1" && git init -q && git add -A && git -c user.email=smoke@test -c user.name=smoke commit -qm init ) || true
+}
+stage_copy "$WORK"
 
 run_setup() {
   ( cd "$WORK" && bash scripts/setup.sh --non-interactive \
@@ -99,6 +114,45 @@ echo ""
 echo "Run 2 — idempotency (re-run must not duplicate)"
 if run_setup; then ok "second setup.sh run exited 0"; else bad "second setup.sh run exited non-zero"; sed 's/^/    /' "$WORK/setup.log" | tail -25; fi
 assert_count "<name>qdrant-session-memory</name>" ".sumela/SKILL_REGISTRY.md" 1 "plugin still registered exactly once after re-run"
+
+echo ""
+echo "Run 3 — team mode + domains (domain-scope generation + parity)"
+WORK_TEAM="$(mktemp -d)"
+stage_copy "$WORK_TEAM"
+if ( cd "$WORK_TEAM" && bash scripts/setup.sh --non-interactive \
+      --project-name "SmokeTeam" \
+      --project-purpose "smoke team fixture" \
+      --stacks "backend" \
+      --ides "claude" \
+      --governance "team" \
+      --domains "Card, Payments" ) >"$WORK_TEAM/setup.log" 2>&1; then
+  ok "team+domains setup exited 0"
+else
+  bad "team+domains setup exited non-zero"; sed 's/^/    /' "$WORK_TEAM/setup.log" | tail -25
+fi
+# Domain rule files are generated, slugified (Card -> card, "Payments" -> payments).
+[ -f "$WORK_TEAM/.sumela/rules/domains/card.md" ]     && ok "domain rule card.md generated"     || bad "domain rule card.md missing"
+[ -f "$WORK_TEAM/.sumela/rules/domains/payments.md" ] && ok "domain rule payments.md generated" || bad "domain rule payments.md missing"
+# Exactly two registered domain rule paths + the scopes section. Count real
+# <path> entries (the example comment uses <slug>, which this pattern won't match).
+dom_n="$(grep -cE '<path>\.sumela/rules/domains/[^<]+</path>' "$WORK_TEAM/.sumela/RULE_REGISTRY.md" 2>/dev/null || echo 0)"
+if [ "$dom_n" = "2" ]; then ok "2 registered domain rule paths (=2)"; else bad "expected 2 domain rule paths, got $dom_n"; fi
+if grep -qF '<domain_scopes>' "$WORK_TEAM/.sumela/RULE_REGISTRY.md"; then ok "<domain_scopes> section present"; else bad "<domain_scopes> section missing"; fi
+# The {{domain_name}} placeholder must be rendered (no stray braces) in the rule file.
+if grep -qF '{{' "$WORK_TEAM/.sumela/rules/domains/card.md" 2>/dev/null; then bad "unrendered placeholder in domain rule file"; else ok "domain rule placeholders rendered"; fi
+# Validation + parity must pass on the team project (domain rule <-> registry).
+if ( cd "$WORK_TEAM" && bash scripts/validate-structure.sh --check-placeholders --post-setup ) >"$WORK_TEAM/validate.log" 2>&1; then
+  ok "team: validate-structure passed (incl. domain parity)"
+else
+  bad "team: validate-structure failed"; sed 's/^/    /' "$WORK_TEAM/validate.log" | tail -20
+fi
+if command -v python3 >/dev/null 2>&1; then
+  if ( cd "$WORK_TEAM" && python3 scripts/reconcile-registry.py --check ) >"$WORK_TEAM/reconcile.log" 2>&1; then
+    ok "team: reconcile --check in sync (domain parity)"
+  else
+    bad "team: reconcile --check drift"; sed 's/^/    /' "$WORK_TEAM/reconcile.log" | tail -10
+  fi
+fi
 
 echo ""
 echo "-------------------------------------------"

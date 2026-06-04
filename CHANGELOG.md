@@ -9,6 +9,24 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ### Added
 
+- **Business-domain rule scope** — a third rule axis, orthogonal to stack scope.
+  In team mode, setup / `/initSumela` asks the project's domain taxonomy (e.g. Card,
+  Payments); each domain gets a tracked `RULE_REGISTRY.md` `<domain_scopes>` entry +
+  a `.sumela/rules/domains/<slug>.md` rule file (generated from a new
+  `domain_standards.md.empty` template). Which domain(s) a developer works in is
+  per-developer and untracked (`.sumela/local.md` `domains:`); `sumela-prompt.md`
+  STEP 4 loads the union of matching domain rules (a developer can be `backend` +
+  `Card` at once), warning-and-skipping any domain not in the taxonomy. The Context
+  Manifest gains a `[Domain: …]` header. `reconcile-registry.py` and
+  `validate-structure.sh` now enforce domain rule↔registry parity (and `--stats`
+  reports `domain_rules`).
+- **`/onboardSumela` teammate onboarding** — a new skill (the single source of truth)
+  for a developer who pulls an already-installed repo. It wires git hooks, sets the
+  per-developer interaction language + domains in `.sumela/local.md`, and offers the
+  optional memory runtime — without re-running install or touching team-wide config
+  (use `/initSumela` only for first-time install). A non-nagging `STEP 0` onboarding
+  gate in `sumela-prompt.md` detects a fresh clone (hooks unwired AND no `local.md`)
+  and offers it once, deferring to the skill rather than duplicating its steps.
 - **Parallel code-review panel** — `requesting-code-review` now dispatches three
   lane reviewers concurrently instead of one generalist: Correctness & Security
   (incl. auth/credential token lifecycle + security-boundary tests), Design &

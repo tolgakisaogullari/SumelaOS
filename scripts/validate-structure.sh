@@ -63,6 +63,7 @@ EXPECTED_SKILLS=(
   "executing-plans"
   "finishing-a-development-branch"
   "init-sumela"
+  "onboard-sumela"
   "performance-optimization"
   "receiving-code-review"
   "requesting-code-review"
@@ -219,6 +220,7 @@ EXPECTED_RULE_TEMPLATES=(
   "mobile_standards.md.best-practice"
   "operational_excellence_maintenance.md.empty"
   "operational_excellence_maintenance.md.best-practice"
+  "domain_standards.md.empty"
 )
 
 RTMPL_FOUND=0
@@ -235,6 +237,45 @@ if [ -z "$RTMPL_MISSING" ]; then
   pass "Rule templates ($RTMPL_FOUND/${#EXPECTED_RULE_TEMPLATES[@]})"
 else
   fail "Rule templates ($RTMPL_FOUND/${#EXPECTED_RULE_TEMPLATES[@]}) — missing:$RTMPL_MISSING"
+fi
+
+# -----------------------------------------------------------------------------
+# 6b. Domain rule parity (generated projects only). Every domain-conditional rule
+#     registered in RULE_REGISTRY.md must have its file on disk, and every
+#     .sumela/rules/domains/*.md must be registered. The `.sumela/rules/domains/`
+#     path prefix is EXCLUSIVE to domain rules, so a path match alone identifies
+#     them. Skipped on the framework SOURCE repo (no generated RULE_REGISTRY.md)
+#     and silent when no domains are configured.
+# -----------------------------------------------------------------------------
+if [ -f ".sumela/RULE_REGISTRY.md" ]; then
+  # `|| true`: grep exits 1 on no-match, which under `set -euo pipefail` would
+  # otherwise abort the whole script (e.g. a solo project with no domains).
+  DOMAIN_REG_PATHS="$(grep -oE '<path>\.sumela/rules/domains/[^<]+</path>' .sumela/RULE_REGISTRY.md 2>/dev/null | sed 's#<path>##; s#</path>##' | sort -u || true)"
+  DOMAIN_DISK_PATHS=""
+  if [ -d ".sumela/rules/domains" ]; then
+    DOMAIN_DISK_PATHS="$(find .sumela/rules/domains -maxdepth 1 -type f -name '*.md' | sort -u || true)"
+  fi
+  DOMAIN_PARITY_OK=true
+  DOMAIN_PARITY_MSG=""
+  for p in $DOMAIN_REG_PATHS; do
+    [ -z "$p" ] && continue
+    if [ ! -f "$p" ]; then
+      DOMAIN_PARITY_OK=false
+      DOMAIN_PARITY_MSG="$DOMAIN_PARITY_MSG registered-but-missing:$p"
+    fi
+  done
+  for p in $DOMAIN_DISK_PATHS; do
+    [ -z "$p" ] && continue
+    if ! printf '%s\n' "$DOMAIN_REG_PATHS" | grep -Fxq "$p"; then
+      DOMAIN_PARITY_OK=false
+      DOMAIN_PARITY_MSG="$DOMAIN_PARITY_MSG on-disk-but-unregistered:$p"
+    fi
+  done
+  if [ "$DOMAIN_PARITY_OK" = true ]; then
+    [ -n "$DOMAIN_REG_PATHS$DOMAIN_DISK_PATHS" ] && pass "Domain rule parity (RULE_REGISTRY ↔ .sumela/rules/domains/)"
+  else
+    fail "Domain rule parity —$DOMAIN_PARITY_MSG (fix RULE_REGISTRY.md domain-conditional entries or the .sumela/rules/domains/ files)"
+  fi
 fi
 
 # -----------------------------------------------------------------------------
@@ -260,7 +301,7 @@ done
 # -----------------------------------------------------------------------------
 # 9. Doc skill-count drift guard (framework repo only — README isn't copied into
 #    user projects, so this is a silent no-op there). The README carries a marker:
-#      <!-- sumela:skill-count workflows=21 loadable=26 ... -->
+#      <!-- sumela:skill-count workflows=22 loadable=27 ... -->
 #    whose numbers MUST match reconcile-registry.py --stats (the source of truth),
 #    so the headline count can never silently drift when a skill is added/removed.
 # -----------------------------------------------------------------------------

@@ -212,6 +212,26 @@ Your choice (solo/team): ___
 
 **Store as `GOVERNANCE_MODE`** → `solo` (default) or `team`. If the user is unsure or working alone, choose `solo`. Note: this is independent of whether the repo has CODEOWNERS — a solo developer may still use CODEOWNERS on GitHub/Azure, so we ask explicitly rather than auto-detecting.
 
+### Business domains (ONLY when `GOVERNANCE_MODE` is `team`)
+
+If — and only if — the user chose `team`, also ask whether the team organizes work by business **domain**:
+
+```
+## 🗂️ Business Domains (optional)
+
+Does your team split work into business domains (e.g. Card, Payments, Onboarding)?
+Each domain gets its own rule file that the agent loads — in ADDITION to phase and
+stack rules — for developers who work in that domain. Domain is an INDEPENDENT axis
+from tech stack (a developer can be backend + Card at once).
+
+List your domains comma-separated, or leave blank to skip (you can add them later
+via /onboardSumela or /evolve).
+
+Your domains: ___
+```
+
+**Store as `DOMAINS`** (a possibly-empty list). The domain SET is the team-wide, TRACKED taxonomy (it goes into `RULE_REGISTRY.md` `<domain_scopes>` + one rule file each). Which domain(s) a given developer works in is PER-DEVELOPER and UNTRACKED — that is asked during onboarding (`/onboardSumela`), NOT here, and is stored in `.sumela/local.md` `domains:`. In `solo` mode, do NOT ask — leave `DOMAINS` empty.
+
 ## PHASE 2b — Memory Plugin Selection (MANDATORY)
 
 After the user confirms the analysis, MUST ask about optional memory plugins. NEVER skip this step.
@@ -308,10 +328,10 @@ For each row: (1) apply as proposed, (2) skip (leave as-is), (3) modify the acti
 Every import MUST conform to our contracts. An import that would break our structure is normalized first or preserved-only — NEVER force-fit:
 
 - **Skill imports** must become a VALID `.sumela/skills/<name>/SKILL.md`: proper frontmatter (`name` = unique kebab-case, `description`) + body in our shape; then registered with a correct `<skill>` entry — run `reconcile-registry.py` (it adds on-disk skills verbatim) or hand-write a matching `<path>`. An import MUST NOT collide with a built-in name (keep ours), alter the registry's pseudo-XML structure, or claim authority over `sumela-prompt.md`.
-- **Rule imports** must become a VALID `.sumela/rules/<name>.md` AND get a RULE_REGISTRY entry WITH phase / stack / activation metadata — `reconcile-registry.py` does NOT handle rules, so add the matrix row by hand. The `stack=` value MUST be one of the generated `<stack_scopes>` (Step 3.2): if a rule targets a stack not in scope, either register it under an existing scope or EXTEND `<stack_scopes>` first — otherwise the matrix row is invalid. Project-wide (non-stack) rules need no `stack=` and live in `operational_excellence_maintenance.md` — but note that rule's matrix row has a LIMITED `applies_phases` (planning/branch_finish/shipping by default): if the imported rule must apply in other phases (e.g., code_review, debugging), WIDEN that row's `applies_phases` accordingly, or it won't load when relevant. Project-specific conventions only; the universal rules are off-limits.
-- **Skill name clash with a built-in** (one of the 21): NEVER overwrite ours. Quarantine theirs; offer to merge only genuinely-unique steps, or keep theirs as `<name>-legacy`.
+- **Rule imports** must become a VALID `.sumela/rules/<name>.md` AND get a RULE_REGISTRY entry WITH phase / stack / activation metadata — `reconcile-registry.py` checks domain-conditional rule↔file parity but NOT stack rules or matrix rows, so add the matrix row by hand. The `stack=` value MUST be one of the generated `<stack_scopes>` (Step 3.2): if a rule targets a stack not in scope, either register it under an existing scope or EXTEND `<stack_scopes>` first — otherwise the matrix row is invalid. A **domain**-specific rule uses `activation="domain-conditional"` + `domain="<Domain>"` (the `domain=` value MUST be one of the generated `<domain_scopes>`) and lives at `.sumela/rules/domains/<slug>.md`. Project-wide (non-stack, non-domain) rules need no scope and live in `operational_excellence_maintenance.md` — but note that rule's matrix row has a LIMITED `applies_phases` (planning/branch_finish/shipping by default): if the imported rule must apply in other phases (e.g., code_review, debugging), WIDEN that row's `applies_phases` accordingly, or it won't load when relevant. Project-specific conventions only; the universal rules are off-limits.
+- **Skill name clash with a built-in** (one of the 22): NEVER overwrite ours. Quarantine theirs; offer to merge only genuinely-unique steps, or keep theirs as `<name>-legacy`.
 - **Cannot normalize without guessing** (unknown execution model, contradictory directives): preserve-only + flag; do not jam it into our format.
-- **PROVE integrity after import**: once imports are applied, `python3 scripts/reconcile-registry.py --check` AND `bash scripts/validate-structure.sh --post-setup` MUST pass. These prove the SKILL side and repo-hygiene side are intact. NOTE they do NOT deep-validate RULE_REGISTRY rows (reconcile skips rules), so for each imported rule ALSO eyeball that its matrix row is well-formed (valid `stack=`/`activation=`, a real phase). If anything fails, fix or revert the offending import before continuing.
+- **PROVE integrity after import**: once imports are applied, `python3 scripts/reconcile-registry.py --check` AND `bash scripts/validate-structure.sh --post-setup` MUST pass. These prove the SKILL side, the domain-conditional rule↔file parity, and the repo-hygiene side are intact. NOTE they do NOT deep-validate stack rows or the matrix (reconcile checks only domain rule files), so for each imported stack rule ALSO eyeball that its matrix row is well-formed (valid `stack=`/`activation=`, a real phase). If anything fails, fix or revert the offending import before continuing.
 
 ## PHASE 3 — File Generation (after confirmation)
 
@@ -364,7 +384,9 @@ Read `AGENTS.md.template` and fill all `{{placeholders}}`:
 Read `RULE_REGISTRY.md.template` and fill:
 - `{{stack_scopes}}` → generate from detected stacks + path patterns
 - `{{stack_rules}}` → generate XML rule entries for each detected stack
-- `{{phase_matrix_rows}}` → fill phase-to-rule matrix with stack columns
+- `{{domain_scopes}}` → from `DOMAINS` (PHASE 2a). One row per domain: `` | `<Domain>` | Work scoped to the <Domain> domain … | ``. If `DOMAINS` is empty, emit the single fallback row `` | `(none)` | No domains configured — add via /onboardSumela or /evolve | ``.
+- `{{domain_rules}}` → for each domain, a `<rule activation="domain-conditional" applies_phases="all" domain="<Domain>">` entry whose `<path>` is `.sumela/rules/domains/<slug>.md` (slug = lowercase, non-alphanumeric → `-`). Empty when `DOMAINS` is empty.
+- `{{phase_matrix_rows}}` → fill the phase-to-rule matrix; every row has FIVE columns (Phase | Universal | Phase-conditional | Stack-conditional | Domain-conditional), with the trailing two cells `(load matching stack rules) | (load matching domain rules)`.
 
 ### Step 3.3: Generate Rules
 
@@ -373,6 +395,7 @@ Based on detected stack:
   - Ask user: "Empty template (fill yourself) or best-practice (industry standards)?"
   - Copy selected variant to `.sumela/rules/<stack>_standards.md`
 - Copy `operational_excellence_maintenance.md.template` → `.sumela/rules/operational_excellence_maintenance.md`
+- For each domain in `DOMAINS` (team mode): `mkdir -p .sumela/rules/domains` and render `.sumela/rules/templates/domain_standards.md.empty` → `.sumela/rules/domains/<slug>.md`, substituting `{{domain_name}}` (the domain, original case) and `{{date_created}}`. NEVER overwrite an existing domain rule file (idempotent). There is no `.best-practice` variant for domains — they are project-specific.
 - Fill project-specific sections based on detected conventions
 
 ### Step 3.4: Generate Wiki Pages
@@ -452,9 +475,10 @@ summaries + a reachable Qdrant all exist). Wire it regardless of plugin choice:
      warn the user that hook installation must be merged manually.
    - Otherwise run: `git config core.hooksPath .sumela/git-hooks`
 3. Ensure the hooks are executable: `chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout`
-4. Tell the user each teammate must run the `git config core.hooksPath` command
-   once per clone (hooks are not shared by git automatically), that `setup.sh`
-   / `setup.ps1` do this step for them, and that a single commit can bypass the
+4. Tell the user each teammate who later pulls the repo should run **`/onboardSumela`**
+   once per clone — it wires this hook for them and sets their per-developer language +
+   domains (hooks are not shared by git automatically). The by-hand equivalent is the
+   `git config core.hooksPath` command above. Also mention a single commit can bypass the
    pre-commit check with `git commit --no-verify`.
 
 ### Step 3.8: CODEOWNERS for the agent-control surface (only if `GOVERNANCE_MODE` is `team`)

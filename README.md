@@ -4,7 +4,7 @@
   <img src="sumela.jpeg" alt="Sumela Monastery, Trabzon, Turkey" width="500" height="625">
 </p>
 
-A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 21 skill workflows, structured rules, and a living knowledge base from the first session.
+A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 22 skill workflows, structured rules, and a living knowledge base from the first session.
 
 Built to scale from **a single developer to a whole team** — with git-native shared memory, governed self-improvement, enforced structure, per-developer overrides, and a versioned upgrade path. See [Working as a Team](#working-as-a-team).
 
@@ -68,8 +68,24 @@ Just run /initSumela and answer its prompts — do not re-ask what it already as
 The agent will:
 1. Copy the framework into your project (bootstrap, or a complete manual copy)
 2. Auto-detect your tech stack, architecture, and code conventions
-3. Ask your languages, governance mode, and optional memory plugins (Qdrant, Graphify)
+3. Ask your languages, governance mode, optional memory plugins (Qdrant, Graphify), and — in team mode — your business-domain taxonomy
 4. Generate AGENTS.md, rules, registries, wiki, and IDE pointers — then wire git hooks, seed the per-developer/runtime + secret .gitignore baselines and the .gitattributes union-merge, and (team mode) CODEOWNERS + optional CI
+
+### Joining a Project — Teammate Onboarding Prompt
+
+Different from the install prompt above. Use this when the project **already has SumelaOS committed** and you just `git clone`d / `git pull`ed it. The shared, tracked config (AGENTS.md, rules, the domain taxonomy, registries, hooks files) is already there — you only need to wire the **per-developer** pieces. Paste this to your agent:
+
+```
+Onboard me onto this project's SumelaOS setup. Run /onboardSumela — if it doesn't resolve
+as a slash command, read and follow .sumela/skills/onboard-sumela/SKILL.md. It will:
+  • wire my git hooks (core.hooksPath) so pre-commit validation + memory-sync run;
+  • ask only MY per-developer settings — interaction language and which business domain(s)
+    I work in — and write them to .sumela/local.md (gitignored);
+  • offer to set up the optional memory runtime (Qdrant/Ollama/graphify) if the team uses it.
+Do NOT run /initSumela and do NOT regenerate any team-wide/tracked config.
+```
+
+> **Do not run `/initSumela` as a teammate** — that is the first-time installer; it re-detects and regenerates the team-wide config. As a teammate you want `/onboardSumela`, which only touches your local, untracked setup.
 
 ### Alternative: One-Command Bootstrap
 
@@ -102,8 +118,8 @@ it anytime is safe (idempotent).
 
 ## Features
 
-<!-- sumela:skill-count workflows=21 loadable=26 (verified by validate-structure.sh against reconcile-registry.py --stats) -->
-- **21 skill workflows** (26 loadable skill files incl. sub-skills) — brainstorming, planning, TDD, debugging, code review, shipping, and more
+<!-- sumela:skill-count workflows=22 loadable=27 (verified by validate-structure.sh against reconcile-registry.py --stats) -->
+- **22 skill workflows** (27 loadable skill files incl. sub-skills) — brainstorming, planning, TDD, debugging, code review, shipping, and more
 - **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile)
 - **Second-brain wiki** — Karpathy LLM Wiki pattern with structured knowledge capture
 - **Memory plugins** — optional Qdrant session memory (Tier-1) and Graphify code graph (Tier-2)
@@ -126,12 +142,12 @@ SumelaOS started as a single-developer tool; these layers make the same setup sa
 | **Conflict-free wiki** | The append-only `_LOG.md` uses git's `union` merge; the self-improvement queue is a directory (one `IMP-YYYYMMDD-<short>.md` per signal, no shared counter) so concurrent captures never collide; `active-project-context.md` has a per-developer "Active Work" convention. |
 | **Governed self-improvement** | `governance: solo \| team` in `AGENTS.md`. In **team** mode, `/evolve` routes changes to the agent-control surface (rules, skills, prompt, schema) through a **pull request** reviewed by `CODEOWNERS` — one developer's learning can't become everyone's standard without review. Lower-stakes wiki/context changes still apply directly. |
 | **Enforcement** | A `pre-commit` hook runs the structure validation (and an IDE-mirror drift check) before commits touching the agent surface; an **opt-in** GitHub Actions workflow (`setup.sh --ci`) runs the same on push/PR. Bypass a commit with `git commit --no-verify`. |
-| **Per-developer config** | Each developer can override **only** their interaction language via a gitignored `.sumela/local.md` (copy `.sumela/local.md.example`). Code naming/documentation languages stay team-wide for codebase consistency. |
+| **Per-developer config** | Each developer overrides **only** their interaction language and active business **domain(s)** via a gitignored `.sumela/local.md` (copy `.sumela/local.md.example`) — set fastest by running `/onboardSumela` on a fresh clone. Code naming/documentation languages and the domain **taxonomy** stay team-wide for consistency. |
 | **Versioned upgrades** | `.sumela/VERSION` + `scripts/update.sh` (and `.ps1`) refresh the framework **core** (prompt, skills, scripts, hooks, universal rules, templates) from upstream — with a per-file diff and your consent — while never touching your **overlay** (AGENTS.md, stack rules, wiki, registries, governance/CI choices). |
 | **IDE mirror sync** | Some IDEs need the prompt body verbatim. List those files in `.sumela/mirrors.conf`; `scripts/sync-mirrors.sh` keeps a marker block in each one byte-equal to `sumela-prompt.md`, and pre-commit + CI fail on drift. |
 | **Monorepo-ready** | Install at the repo root **or** a subdir — hooks self-anchor to their install. Multiple installs in one repo auto-promote to a root dispatcher (`.sumela-hooks/`) that runs every install's hooks. Rules shared across packages live once in `.sumela-shared/rules/` and `sync-shared-rules.py` distributes + registers them (universal) into each install. See the [ADOPTION_GUIDE §13](docs/second-brain/template/ADOPTION_GUIDE.md). |
 
-Setup tooling wires these per clone (`setup.sh` / `setup.ps1` / `/initSumela`). For step-by-step team adoption, see the [ADOPTION_GUIDE](docs/second-brain/template/ADOPTION_GUIDE.md).
+Setup tooling wires these per clone — the first developer installs with `setup.sh` / `setup.ps1` / `/initSumela`; each teammate who later pulls the repo runs `/onboardSumela` (see [Joining a Project](#joining-a-project--teammate-onboarding-prompt) above). For step-by-step team adoption, see the [ADOPTION_GUIDE](docs/second-brain/template/ADOPTION_GUIDE.md).
 
 ## The Sumela Prompt — Your Agent's Constitution
 
@@ -161,7 +177,7 @@ Every other file in `.sumela/` defers to this prompt when instructions conflict.
 │  │         .sumela/             │            │
 │  │  SKILL_REGISTRY.md               │            │
 │  │  RULE_REGISTRY.md                │            │
-│  │  skills/        (21 workflows)   │            │
+│  │  skills/        (22 workflows)   │            │
 │  │  rules/         (7+ rules)       │            │
 │  │  memory-plugins/ (optional)      │            │
 │  └──────────────────────────────────┘            │
@@ -227,7 +243,7 @@ All pointer files are ≤15 lines (the shipped ones are ~9) and redirect to `AGE
 │   ├── VERSION                     # Core framework version (for update.sh)
 │   ├── SKILL_REGISTRY.md           # Skill catalog
 │   ├── RULE_REGISTRY.md.template   # Rule catalog template
-│   ├── skills/                     # 21 workflows · 26 loadable skill files
+│   ├── skills/                     # 22 workflows · 27 loadable skill files
 │   ├── rules/                      # Universal + stack-specific rules
 │   ├── git-hooks/                  # pre-commit validation + memory-sync hooks
 │   ├── local.md.example            # Per-developer override template (gitignored when copied)
@@ -251,7 +267,7 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 
 | Problem | Without SumelaOS | With SumelaOS |
 |---|---|---|
-| **No workflow structure** | Agent improvises each task | 21 skill workflows define structured procedures (brainstorm → plan → implement → review → ship) |
+| **No workflow structure** | Agent improvises each task | 22 skill workflows define structured procedures (brainstorm → plan → implement → review → ship) |
 | **No coding standards** | Agent uses its own defaults | Project-specific rules enforce your conventions |
 | **No session memory** | Every session starts from zero | Qdrant plugin remembers past decisions; on a team, summaries sync to every developer via git hooks |
 | **No code structure awareness** | Agent greps blindly | Graphify plugin understands call graphs and dependencies |
@@ -264,11 +280,11 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 
 ## How SumelaOS Extends Superpowers
 
-SumelaOS's skill engine is a fork of [obra/superpowers](https://github.com/obra/superpowers) — the project that pioneered structured agent workflows. We kept all 14 of its skill workflows verbatim and built **7 more** on top, then layered on systems Superpowers does not ship (rules, knowledge base, memory, governance). The table below is an honest side-by-side — including where Superpowers is still broader.
+SumelaOS's skill engine is a fork of [obra/superpowers](https://github.com/obra/superpowers) — the project that pioneered structured agent workflows. We kept all 14 of its skill workflows verbatim and built **8 more** on top, then layered on systems Superpowers does not ship (rules, knowledge base, memory, governance). The table below is an honest side-by-side — including where Superpowers is still broader.
 
 | Capability | [Superpowers](https://github.com/obra/superpowers) | SumelaOS |
 |---|---|---|
-| **Skill workflows** | 14 | **21** — the same 14 + 7 added: `secure-coding-standard`, `performance-optimization`, `shipping-and-launch`, `using-second-brain`, `self-improvement-curator`, `context-handoff`, `init-sumela` |
+| **Skill workflows** | 14 | **22** — the same 14 + 8 added: `secure-coding-standard`, `performance-optimization`, `shipping-and-launch`, `using-second-brain`, `self-improvement-curator`, `context-handoff`, `init-sumela`, `onboard-sumela` |
 | **Code review** | Single reviewer subagent | **3-lane parallel panel** — Correctness & Security (incl. auth/credential token lifecycle) · Design & Contracts · Integration & Operations — synthesized with an AND-gate (any lane's Critical blocks) |
 | **Rule framework** | TDD / YAGNI / DRY as methodology | Phase-to-rule matrix: universal + stack-specific rules loaded per active phase & stack |
 | **Knowledge base** | — | Second-brain wiki (Karpathy LLM-Wiki pattern): raw sources → artifacts → live wiki |

@@ -20,10 +20,19 @@ qdrant-storage/
 **/scripts/.superpowers/
 
 # Generated files (created by setup.sh)
+# NOTE: framework-repo only — bootstrap.sh does NOT copy this .gitignore into user
+# projects, so these are tracked deliverables THERE but generated artifacts HERE.
+# They keep a maintainer/CI `setup.sh` run in the framework root from polluting/leaking.
 AGENTS.md
 RULE_REGISTRY.md
 docs/second-brain/wiki/
 .claude/
+.github/CODEOWNERS
+.sumela/rules/domains/
+.sumela/rules/backend_standards.md
+.sumela/rules/frontend_standards.md
+.sumela/rules/mobile_standards.md
+.sumela/rules/operational_excellence_maintenance.md
 # Memory-sync / graph-sync hook local logs + state (per-developer)
 .sumela/.memory-sync.log
 .sumela/.graph-sync.log

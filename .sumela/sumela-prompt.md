@@ -16,10 +16,15 @@ If two skill bodies appear to disagree, the one whose `<execution_workflow>` is 
 <session_bootstrap>
 EXECUTE this sequence at the first user turn of every session as concrete tool calls — NOT as instructions to remember. Bootstrap is silent: do not narrate the steps, and do NOT print a Context Manifest at session start. Once all steps complete, answer the user's prompt directly. The Context Manifest is printed only on the narrowed triggers in `<context_manifest_protocol>` (explicit user request, or immediately before a high-stakes action).
 
+STEP 0 — ONBOARDING GATE (fresh-clone teammate only; cheap, runs before STEP 1):
+  ☐ This catches a developer who pulled an already-installed repo but hasn't done their per-developer local setup. Trigger ONLY when BOTH are true: (a) `.sumela/git-hooks/` exists but `git config --get core.hooksPath` is NOT wired to this install, AND (b) `.sumela/local.md` is absent. This precise pairing avoids nagging the first developer (who ran setup.sh → hooks wired) and anyone who has done any partial setup.
+  ☐ If the trigger fires, ONCE on this first turn tell the user (in the AGENTS.md Section 2 default language, since `local.md` isn't set yet): *"This clone isn't onboarded yet — I can run `/onboardSumela` to wire your git hooks and set your interaction language + domains, or say 'skip for now'."* If they accept, READ and FOLLOW `.sumela/skills/onboard-sumela/SKILL.md` (the single source of truth — do NOT inline its steps here); once it completes, CONTINUE this bootstrap from STEP 1 (now that `.sumela/local.md` exists, so the freshly-set interaction language + domains apply to the rest of this session) before answering the user's original request. If they decline or just continue with another request, proceed normally and do NOT re-prompt this session.
+  ☐ If the trigger does NOT fire, say nothing — continue silently to STEP 1. (This gate is agent-driven and reads files regardless of whether hooks are wired, so it works on a pristine clone.)
+
 STEP 1 — DISCOVERY SURFACES — execute these reads BEFORE drafting any answer:
   ☐ Read `.sumela/SKILL_REGISTRY.md` (skip if already in context)
   ☐ Read `.sumela/RULE_REGISTRY.md` (skip if already in context — defines phase definitions, stack scopes, phase-to-rule matrix; needed to compute manifest GAPS at STEP 5)
-  ☐ Read `.sumela/local.md` IF it exists (per-developer, gitignored). Honor ONLY the `interaction_language` key — ignore any other key it may contain (naming/documentation are team-wide and not locally overridable). If it sets `interaction_language`, that value OVERRIDES the project default for this developer — use it for ALL user-facing output including the Context Manifest header. It does NOT override naming/documentation languages (those stay team-wide, from AGENTS.md Section 2). If `.sumela/local.md` is absent or sets no `interaction_language`, fall back to the AGENTS.md Section 2 project default; if neither is present, default to English. Resolve this BEFORE writing any user-facing text.
+  ☐ Read `.sumela/local.md` IF it exists (per-developer, gitignored). Honor ONLY two keys — `interaction_language` and `domains` — ignore any other key it may contain (naming/documentation are team-wide and not locally overridable). If it sets `interaction_language`, that value OVERRIDES the project default for this developer — use it for ALL user-facing output including the Context Manifest header. It does NOT override naming/documentation languages (those stay team-wide, from AGENTS.md Section 2). If `.sumela/local.md` is absent or sets no `interaction_language`, fall back to the AGENTS.md Section 2 project default; if neither is present, default to English. The `domains` key (comma-separated) is this developer's default active business-domain scope(s) — used in STEP 4 to load domain-conditional rules; it changes no team-wide config. Resolve interaction_language BEFORE writing any user-facing text.
 
   Do NOT proceed to STEP 2 until both registries are visible in your context. Do NOT load individual rule files yet — only the registry index.
 
@@ -49,7 +54,8 @@ STEP 3 — EAGER SKILLS — load these BEFORE the first response (skip any alrea
 STEP 4 — PROJECT RULES — driven by `RULE_REGISTRY.md`:
   ☐ Determine the active PHASE from the active skill (per `<phase_definitions>` in RULE_REGISTRY.md). If no phase is determinable yet, mark `<none-yet>`.
   ☐ Determine the active STACK SCOPE from file paths in the task / current worktree / sprint plan (per `<stack_scopes>`). Hybrid: path-based inference, with explicit user statement always overriding ("mobile sprint 16" → `mobile`).
-  ☐ Consult `<phase_to_rule_matrix>` and READ every universal rule, every phase-conditional rule whose phase matches, and every stack-conditional rule whose stack matches. Skip rules already in context.
+  ☐ Determine the active DOMAIN(s) — an axis INDEPENDENT of stack (per `<domain_scopes>`). Start from `.sumela/local.md` `domains` (this developer's default, may list several); an explicit user statement always overrides ("Card sprint" → `Card`). A task may span multiple domains — union them. FALLBACK: if a `domains` value is NOT present in `<domain_scopes>`, warn the user ONCE (`Domain '<X>' is not in the project taxonomy — skipping; add it via /onboardSumela or /evolve`) and skip that value. Never fail bootstrap over an unknown domain.
+  ☐ Consult `<phase_to_rule_matrix>` and READ every universal rule, every phase-conditional rule whose phase matches, every stack-conditional rule whose stack matches, and every domain-conditional rule whose domain matches the active domain(s). Skip rules already in context.
   ☐ Load nothing else — do NOT pre-load all rules.
 
 STEP 5 — COMPLETE BOOTSTRAP SILENTLY — do NOT print a Context Manifest here.
@@ -165,25 +171,25 @@ Outside these two triggers, do NOT print the manifest — answering directly (in
 FORMAT — header in the project's configured language, content in English (skill/rule names + structural tags):
 
 ```
-📋 CONTEXT MANIFEST  [YYYY-MM-DD HH:MM]  [Phase: <phase>]  [Stack: <scope>]
+📋 CONTEXT MANIFEST  [YYYY-MM-DD HH:MM]  [Phase: <phase>]  [Stack: <scope>]  [Domain: <scope>]
 
 SKILLS
-  ✓ <name>                    [eager|lazy]              <reason loaded>
+  ✓ <name>                    [eager|lazy]                    <reason loaded>
 RULES
-  ✓ <name>                    [universal|phase|stack]   <reason loaded>
+  ✓ <name>                    [universal|phase|stack|domain]  <reason loaded>
 GAPS (expected by registry, NOT loaded — verify intent)
-  ⚠ <name>                    [<expected-trigger>]      <hint or path>
+  ⚠ <name>                    [<expected-trigger>]            <hint or path>
 
 ALIGNMENT  Skills N/M · Rules N/M · Gaps K   (if K > 0, investigate GAPS above)
 ```
 
 GAP COMPUTATION (the lint layer):
 - `expected_skills` = 2 eager (`using-superpowers` + `context-handoff`) + lazy skills required by the active phase.
-- `expected_rules` = universal rules + phase-conditional rules for the current phase + stack-conditional rules for the active stack scope (per `RULE_REGISTRY.md` matrix).
+- `expected_rules` = universal rules + phase-conditional rules for the current phase + stack-conditional rules for the active stack scope + domain-conditional rules for the active domain(s) (per `RULE_REGISTRY.md` matrix).
 - `gaps = expected − actual`. Each gap line names the trigger that should have loaded it.
 
 NOTES:
-- The Phase/Stack headers MUST reflect the agent's actual current phase/stack — list every active stack (e.g., `[Stack: backend, mobile]`). Use `[Phase: <none-yet>]` if not yet determinable.
+- The Phase/Stack/Domain headers MUST reflect the agent's actual current phase/stack/domain — list every active stack (e.g., `[Stack: backend, mobile]`) and every active domain (e.g., `[Domain: Card, Payments]`). Use `[Phase: <none-yet>]` / `[Domain: <none>]` if not determinable or none configured.
 - If `RULE_REGISTRY.md` is not in context when a manifest is triggered, print a degraded manifest noting the registry is missing rather than skipping it.
 </context_manifest_protocol>
 

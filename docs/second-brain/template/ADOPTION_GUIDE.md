@@ -209,19 +209,20 @@ Use this mode when a **new team member** joins a project that already has Sumela
 
 ### C.1. One-Time Local Setup (run once per clone)
 
-Fastest path — re-run setup; it wires everything idempotently and won't overwrite the project's committed config:
+Fastest path — let the agent onboard you. Do NOT re-run `/initSumela` or `setup.sh` (those are the first-time **installer** — they re-detect and regenerate the team-wide, committed config). As a teammate you only need the per-developer pieces, which `/onboardSumela` handles:
 
-```bash
-bash scripts/setup.sh        # or: powershell scripts/setup.ps1
-bash scripts/status.sh       # confirm everything wired up (read-only health check)
 ```
+/onboardSumela
+```
+
+(If it doesn't resolve as a slash command, tell the agent to read and follow `.sumela/skills/onboard-sumela/SKILL.md`.) It wires your git hooks, asks only YOUR interaction language + business domain(s), writes the gitignored `.sumela/local.md`, and offers the optional memory runtime — without touching any tracked team config. Then `bash scripts/status.sh` confirms the green state.
 
 Or do the equivalent by hand:
 
 1. **Wire the git hooks** (required — hooks are NOT shared by git). Enables the pre-commit validation, the IDE-mirror drift check, and team memory sync:
-   `git config core.hooksPath .sumela/git-hooks`
+   `git config core.hooksPath .sumela/git-hooks` (monorepo subdir: prefix the install path; multi-install dispatcher: run `bash scripts/setup.sh` once to re-register).
 2. **Shared memory** (only if your team uses the Qdrant plugin): so teammates' committed session summaries sync into *your* local Qdrant on `git pull`, install Python 3.10+, a local Qdrant, and Ollama with `qwen3-embedding:0.6b`, then `pip install -r .sumela/memory-plugins/qdrant-session-memory/requirements.txt`. See [Plugin Activation](#11-plugin-activation). Without it, the lower memory tiers still work.
-3. **Your interaction language** (optional): copy `.sumela/local.md.example` to `.sumela/local.md` and set `interaction_language`. It's gitignored, so your choice doesn't change the team config; code naming/documentation stay team-wide.
+3. **Your interaction language + domains** (optional): copy `.sumela/local.md.example` to `.sumela/local.md` and set `interaction_language` and `domains:` (the business domain(s) you work in, from the taxonomy in `RULE_REGISTRY.md` `<domain_scopes>`). It's gitignored, so your choices don't change team config; code naming/documentation languages and the domain taxonomy stay team-wide. Work in a domain that doesn't exist yet? In **solo** mode the agent adds it directly; in **team** mode it routes the new domain through `/evolve` (a CODEOWNERS-reviewed PR) — your `domains:` is still set locally so you're unblocked, and it activates once that PR merges.
 4. **Know the governance mode:** check `AGENTS.md` §8 (`governance: solo | team`). In **team** mode, your `/evolve` changes to the agent-control surface (rules, skills, prompt, schema) open a **pull request** for a code owner to review instead of applying directly.
 
 ### C.2. Read the Core Files
@@ -309,7 +310,7 @@ After copying the template, customize these project-specific values:
 ### In `AGENTS.md`:
 - **Project name** — replace with your project's name
 - **Project purpose** — one-line description
-- **Language protocol** — set the team-wide interaction language (e.g., Turkish, English, Japanese) plus code naming and documentation languages (typically English). The interaction language is a **default**: each developer can override their own by copying `.sumela/local.md.example` to `.sumela/local.md` (gitignored) and setting `interaction_language`. Code naming/documentation stay team-wide and are not locally overridable.
+- **Language protocol** — set the team-wide interaction language (e.g., Turkish, English, Japanese) plus code naming and documentation languages (typically English). The interaction language is a **default**: each developer can override their own (and set their active business `domain(s)`) by copying `.sumela/local.md.example` to `.sumela/local.md` (gitignored) and setting `interaction_language` / `domains`. Code naming/documentation languages and the domain taxonomy stay team-wide and are not locally overridable.
 - **Tech stack summary** — frameworks, languages, databases
 
 ### In `active-project-context.md`:

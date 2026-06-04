@@ -49,9 +49,38 @@ if not ROOT:
 
 REGISTRY = os.path.join(ROOT, ".sumela", "SKILL_REGISTRY.md")
 SKILLS_DIR = os.path.join(ROOT, ".sumela", "skills")
+RULE_REGISTRY = os.path.join(ROOT, ".sumela", "RULE_REGISTRY.md")
+DOMAINS_DIR = os.path.join(ROOT, ".sumela", "rules", "domains")
 if not os.path.isfile(REGISTRY):
     print(f"reconcile-registry: {REGISTRY} not found — nothing to do.")
     sys.exit(0)
+
+
+def domain_rule_parity():
+    """Domain-conditional rule <-> file parity.
+
+    The `.sumela/rules/domains/` path prefix is exclusive to domain rules, so a
+    registered <path> under it identifies a domain rule without needing the
+    activation attribute. Returns (missing_files, unregistered_files):
+      * missing_files     — registered in RULE_REGISTRY.md but absent on disk
+      * unregistered_files — present under .sumela/rules/domains/ but not registered
+    Returns ([], []) when there is nothing to check (no generated RULE_REGISTRY.md).
+    """
+    if not os.path.isfile(RULE_REGISTRY):
+        return [], []
+    with open(RULE_REGISTRY, encoding="utf-8") as f:
+        rr = f.read()
+    reg_paths = set(
+        m.strip() for m in re.findall(r"<path>\s*(\.sumela/rules/domains/[^<]+?)\s*</path>", rr)
+    )
+    disk_paths = set()
+    if os.path.isdir(DOMAINS_DIR):
+        for entry in sorted(os.listdir(DOMAINS_DIR)):
+            if entry.endswith(".md") and os.path.isfile(os.path.join(DOMAINS_DIR, entry)):
+                disk_paths.add(f".sumela/rules/domains/{entry}")
+    missing = sorted(p for p in reg_paths if not os.path.isfile(os.path.join(ROOT, p)))
+    unregistered = sorted(disk_paths - reg_paths)
+    return missing, unregistered
 
 
 def read_frontmatter(path):
@@ -102,9 +131,16 @@ if STATS:
                 dir_count += 1
     loadable = [p for p in registered_paths if p.startswith(".sumela/skills/")]
     plugins = [p for p in registered_paths if "memory-plugins/" in p]
+    # Domain rules live in RULE_REGISTRY.md (not the skill registry) — count their
+    # registered paths under the exclusive .sumela/rules/domains/ prefix.
+    dom_count = 0
+    if os.path.isfile(RULE_REGISTRY):
+        with open(RULE_REGISTRY, encoding="utf-8") as f:
+            dom_count = len(re.findall(r"<path>\s*\.sumela/rules/domains/[^<]+?</path>", f.read()))
     print(f"skill_workflows={dir_count}")      # one SKILL.md dir = one workflow
     print(f"loadable_skills={len(loadable)}")   # registry skills/ paths (incl. sub-skills)
     print(f"plugin_skills={len(plugins)}")      # memory-plugin entries (conditional)
+    print(f"domain_rules={dom_count}")          # domain-conditional rule entries (team taxonomy)
     sys.exit(0)
 
 # 1) Skills on disk (core skills dir) missing from the registry.
@@ -134,7 +170,12 @@ if os.path.isdir(SKILLS_DIR):
 # 2) Registry entries whose path no longer exists (orphans) — report, don't delete.
 orphans = [p for p in registered_paths if not os.path.isfile(os.path.join(ROOT, p))]
 
-if not unregistered and not orphans:
+# 3) Domain-conditional rule <-> file parity (RULE_REGISTRY.md). Not auto-fixable
+#    here (a domain rule needs a scope name + description + matrix row written
+#    together by setup / init-sumela / onboard-sumela / evolve) — report only.
+dom_missing, dom_unregistered = domain_rule_parity()
+
+if not unregistered and not orphans and not dom_missing and not dom_unregistered:
     print("reconcile-registry: SKILL_REGISTRY.md is in sync with skills on disk.")
     sys.exit(0)
 
@@ -142,6 +183,10 @@ for name, _desc, relpath in unregistered:
     print(f"  unregistered skill: {name}  ({relpath})")
 for p in orphans:
     print(f"  ORPHAN registry entry (path missing): {p}")
+for p in dom_missing:
+    print(f"  MISSING domain rule file (registered in RULE_REGISTRY, not on disk): {p}")
+for p in dom_unregistered:
+    print(f"  UNREGISTERED domain rule file (on disk, no RULE_REGISTRY entry): {p}")
 
 if CHECK:
     print("reconcile-registry: registry is OUT OF SYNC (run: python3 scripts/reconcile-registry.py).")
@@ -170,4 +215,8 @@ if unregistered:
 if orphans:
     print(f"reconcile-registry: {len(orphans)} orphan entry(ies) above were NOT removed — "
           "delete them by hand if the skill was intentionally removed, or restore the file.")
+if dom_missing or dom_unregistered:
+    print(f"reconcile-registry: {len(dom_missing) + len(dom_unregistered)} domain rule parity "
+          "issue(s) above were NOT auto-fixed — resolve via /onboardSumela or /evolve "
+          "(register the rule + add its <domain_scopes> row + matrix cell, or remove the file).")
 sys.exit(0)
