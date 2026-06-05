@@ -184,10 +184,45 @@ if want graphify-code-graph && [ -d "$PLUGDIR/graphify-code-graph" ]; then
   fi
 
   if command -v graphify >/dev/null 2>&1; then
-    if confirm "Build the code graph now (graphify update .)?"; then
-      graphify update . >/dev/null 2>&1 && ok "Code graph built (graphify-out/)" || todo "build failed — run: graphify update ."
+    if confirm "Build the code graph now (graphify .)?"; then
+      # Canonical first build is `graphify .` — NOT `graphify update`, which is the
+      # incremental (--update) path and is the wrong command for an empty graph.
+      # Output is intentionally NOT suppressed: graphify prints its own viz/limit
+      # warnings (e.g. "graph has N nodes > 5000 limit — skipped graph.html") and we
+      # must surface them. Success is gated on the artifact, not exit 0 — graphify can
+      # exit 0 yet silently skip the interactive graph.html.
+      graphify .; build_rc=$?
+      if [ -f graphify-out/graph.html ]; then
+        ok "Code graph built (graphify-out/, incl. interactive graph.html)"
+      elif [ "$build_rc" -eq 0 ] && [ -f graphify-out/graph.json ]; then
+        # graph.json built but graph.html skipped (node count over graphify's viz limit).
+        # Force it: read the real node count, raise GRAPHIFY_VIZ_NODE_LIMIT above it, and
+        # regenerate the viz from the existing graph (cluster-only is cheap — no re-extract).
+        nodes="$(python3 - <<'PY'
+import json
+try:
+    d = json.load(open("graphify-out/graph.json"))
+    n = d.get("nodes")
+    if n is None: n = d.get("graph", {}).get("nodes", [])
+    print(len(n) if isinstance(n, list) else int(n))
+except Exception:
+    print(0)
+PY
+)"
+        case "$nodes" in (*[!0-9]*|"") nodes=0 ;; esac   # guard arithmetic under `set -u`
+        limit=$(( nodes + 1000 ))
+        info "graph.html skipped by graphify's viz limit (${nodes:-?} nodes); raising to $limit and regenerating…"
+        GRAPHIFY_VIZ_NODE_LIMIT="$limit" graphify cluster-only .
+        if [ -f graphify-out/graph.html ]; then
+          ok "Code graph built (graphify-out/, interactive graph.html via raised viz limit=$limit)"
+        else
+          manual "graph.html still missing — run: GRAPHIFY_VIZ_NODE_LIMIT=$limit graphify cluster-only .   (or accept JSON-only: graphify . --no-viz)"
+        fi
+      else
+        manual "build failed — run: graphify ."
+      fi
     else
-      manual "Build the code graph: graphify update ."
+      manual "Build the code graph: graphify ."
     fi
   fi
 fi

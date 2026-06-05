@@ -167,10 +167,43 @@ if ((Want "graphify-code-graph") -and (Test-Path (Join-Path $plugDir "graphify-c
     }
 
     if (Get-Command graphify -ErrorAction SilentlyContinue) {
-        if (Confirm-Step "Build the code graph now (graphify update .)?") {
-            graphify update . *> $null
-            if ($LASTEXITCODE -eq 0) { Ok "Code graph built (graphify-out/)" } else { Todo "build failed — run: graphify update ." }
-        } else { Todo "Build the code graph: graphify update ." }
+        if (Confirm-Step "Build the code graph now (graphify .)?") {
+            # Canonical first build is `graphify .` — NOT `graphify update`, which is the
+            # incremental (--update) path. Output is intentionally NOT suppressed so
+            # graphify's own viz/limit warnings reach the user. Success is gated on the
+            # artifact, not exit 0 — graphify can exit 0 yet silently skip graph.html.
+            graphify .
+            $built = $LASTEXITCODE
+            if (Test-Path "graphify-out/graph.html") {
+                Ok "Code graph built (graphify-out/, incl. interactive graph.html)"
+            } elseif (($built -eq 0) -and (Test-Path "graphify-out/graph.json")) {
+                # graph.json built but graph.html skipped (node count over graphify's viz
+                # limit). Force it: read the real node count, raise GRAPHIFY_VIZ_NODE_LIMIT
+                # above it, and regenerate the viz from the existing graph (cluster-only).
+                $nodes = 0
+                try {
+                    $g = Get-Content "graphify-out/graph.json" -Raw | ConvertFrom-Json
+                    $nv = if ($g.PSObject.Properties.Name -contains 'nodes') { $g.nodes } elseif ($g.graph) { $g.graph.nodes } else { $null }
+                    # Mirror the Python/bash hedge: a scalar count is the value itself; a
+                    # list/collection of node objects is counted. (Counting a scalar would
+                    # wrongly yield 1, leaving the raised limit below the real node count.)
+                    if ($nv -is [int] -or $nv -is [long] -or $nv -is [double]) { $nodes = [int]$nv }
+                    elseif ($null -ne $nv) { $nodes = @($nv).Count }
+                } catch { $nodes = 0 }
+                $limit = $nodes + 1000
+                Info "graph.html skipped by graphify's viz limit ($nodes nodes); raising to $limit and regenerating…"
+                $env:GRAPHIFY_VIZ_NODE_LIMIT = "$limit"
+                graphify cluster-only .
+                Remove-Item Env:\GRAPHIFY_VIZ_NODE_LIMIT -ErrorAction SilentlyContinue
+                if (Test-Path "graphify-out/graph.html") {
+                    Ok "Code graph built (graphify-out/, interactive graph.html via raised viz limit=$limit)"
+                } else {
+                    Todo ('graph.html still missing — run: $env:GRAPHIFY_VIZ_NODE_LIMIT=' + $limit + '; graphify cluster-only .   (or accept JSON-only: graphify . --no-viz)')
+                }
+            } else {
+                Todo "build failed — run: graphify ."
+            }
+        } else { Todo "Build the code graph: graphify ." }
     }
 }
 

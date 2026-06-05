@@ -7,7 +7,7 @@ Usage:
     python auto-update-memory.py --project-root /path/to/repo --graph-dir graphify-out --wiki-path docs/second-brain/wiki
 
 What it does:
-    1. Runs `graphify update .` to rebuild the code graph.
+    1. Rebuilds the code graph (`graphify .`, or `graphify . --update` incrementally).
     2. Syncs Graphify insights to Obsidian wiki (with noise filter).
     3. Verifies Qdrant is reachable and appends a status line to _LOG.md.
     4. Prints a structured status report for the agent to relay to the user.
@@ -29,6 +29,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import os
+import json
 import argparse
 import datetime
 from pathlib import Path
@@ -46,10 +47,15 @@ def print_report(summary_lines: list):
     print("=" * 60 + "\n")
 
 
-def report_success(graphify_ok: bool, sync_ok: bool, qdrant_ok: bool, log_warning: str | None = None):
+def report_success(graphify_ok: bool, sync_ok: bool, qdrant_ok: bool, log_warning: str | None = None,
+                   graph_note: str | None = None):
     lines = [
         "Status: COMPLETE",
         f"1. Graphify code graph: {'OK' if graphify_ok else 'FAIL'}",
+    ]
+    if graph_note:
+        lines.append(f"   note: {graph_note}")
+    lines += [
         f"2. Wiki sync (graphify -> Obsidian): {'OK' if sync_ok else 'FAIL'}",
         f"3. Qdrant health check: {'OK' if qdrant_ok else 'FAIL'}",
     ]
@@ -73,17 +79,83 @@ def get_script_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
-def run_graphify(project_root: Path) -> bool:
-    print("[1/4] Running graphify update...")
-    result = subprocess.run(
-        ["graphify", "update", "."],
-        capture_output=True, text=True, cwd=str(project_root)
-    )
+def _node_count(graph_json: Path) -> int:
+    """Best-effort node count from graphify's graph.json (0 if unreadable)."""
+    try:
+        with open(graph_json) as f:
+            d = json.load(f)
+        n = d.get("nodes")
+        if n is None:
+            n = d.get("graph", {}).get("nodes", [])
+        return len(n) if isinstance(n, list) else int(n)
+    except Exception:
+        return 0
+
+
+def _echo_viz_warnings(*streams: str) -> None:
+    """Best-effort surface graphify's own graph.html/viz warnings even though we
+    capture its output — they explain a silently-skipped graph.html. Anchored on the
+    viz/graph.html concept so unrelated lines (e.g. 'Rate limit: none (AST only)') are
+    NOT echoed as if they were warnings. The synthesized viz_note in run_graphify is the
+    guaranteed signal; this is the nice-to-have echo of graphify's exact wording."""
+    for s in streams:
+        for line in (s or "").splitlines():
+            low = line.lower()
+            if ("graph.html" in low or "visualiz" in low or "too large" in low
+                    or "graphify_viz_node_limit" in low
+                    or (("skip" in low or "viz" in low) and ("graph" in low or "html" in low))):
+                print("      " + line.strip())
+
+
+def run_graphify(project_root: Path, graph_dir: str = "graphify-out"):
+    """Rebuild the code graph. Returns (ok, viz_note).
+
+    `ok` is True when the query-critical graph.json is present — graph.html is a
+    human-only interactive viz, so a skipped viz is reported as a NOTE, not a build
+    failure (mirrors setup-memory.{sh,ps1}, which treat a missing graph.html as a
+    flagged to-do, not a failed build, and never as a silent success).
+    """
+    out_dir = project_root / graph_dir
+    have_graph = (out_dir / "graph.json").exists()
+    # First build is the canonical `graphify .`; later runs use the incremental
+    # `--update` FLAG (not the legacy `graphify update` subcommand form).
+    cmd = ["graphify", ".", "--update"] if have_graph else ["graphify", "."]
+    print(f"[1/4] Running {' '.join(cmd)} ...")
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(project_root))
     if result.returncode != 0:
         print("ERROR: graphify failed:", result.stderr)
-        return False
-    print("OK    graphify updated.")
-    return True
+        return False, None
+    _echo_viz_warnings(result.stdout, result.stderr)
+    # graphify can exit 0 yet silently skip the interactive graph.html when the node
+    # count exceeds its viz limit. Force it: raise the limit above the real node count
+    # and regenerate the viz from the existing graph (cluster-only — no re-extraction).
+    html = out_dir / "graph.html"
+    if not html.exists() and (out_dir / "graph.json").exists():
+        nodes = _node_count(out_dir / "graph.json")
+        env = {**os.environ, "GRAPHIFY_VIZ_NODE_LIMIT": str(nodes + 1000)}
+        cl = subprocess.run(["graphify", "cluster-only", "."], cwd=str(project_root),
+                            capture_output=True, text=True, env=env)
+        if cl.returncode != 0:
+            # Don't bury a cluster-only failure (e.g. the subcommand missing in this
+            # graphify version) — the keyword echo would filter the error out otherwise.
+            err = (cl.stderr or cl.stdout or "").strip().splitlines()
+            print(f"WARN  graphify cluster-only failed (rc={cl.returncode}): "
+                  f"{err[0] if err else 'no output'}")
+        else:
+            _echo_viz_warnings(cl.stdout, cl.stderr)
+    if not (out_dir / "graph.json").exists():
+        # No graph data at all — nothing for the query pipeline to read.
+        print("ERROR: graphify produced no graph.json")
+        return False, None
+    viz_note = None
+    if not html.exists():
+        nodes = _node_count(out_dir / "graph.json")
+        viz_note = (f"interactive graph.html skipped ({nodes} nodes exceeds graphify's "
+                    f"~5000-node viz limit); Tier-2 queries still work off graph.json. To build "
+                    f"it: GRAPHIFY_VIZ_NODE_LIMIT={nodes + 1000} graphify cluster-only .")
+        print("WARN  " + viz_note)
+    print("OK    graphify graph updated.")
+    return True, viz_note
 
 
 def check_qdrant(host: str, port: int) -> bool:
@@ -168,7 +240,7 @@ def main():
     parser.add_argument("--qdrant-port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")),
                         help="Qdrant port (default: 6333 or QDRANT_PORT env)")
     parser.add_argument("--graph-only", action="store_true",
-                        help="Only rebuild the code graph (graphify update). Skips the wiki sync "
+                        help="Only rebuild the code graph (graphify . --update). Skips the wiki sync "
                              "and the _LOG.md append, so it is safe to run from a git pull/checkout "
                              "hook: it writes ONLY to the gitignored graph dir, never the tracked "
                              "working tree.")
@@ -191,23 +263,26 @@ def main():
     # git hook must never do (a pull would otherwise leave the tree dirty). The
     # graph dir is gitignored, so this stays clean.
     if args.graph_only:
-        g_ok = run_graphify(project_root)
-        print_report([
+        g_ok, g_viz = run_graphify(project_root, args.graph_dir)
+        lines = [
             "Status: COMPLETE (graph-only)",
             f"1. Graphify code graph: {'OK' if g_ok else 'FAIL'}",
-            "(wiki sync + _LOG append skipped — graph-only mode)",
-        ])
+        ]
+        if g_viz:
+            lines.append(f"   note: {g_viz}")
+        lines.append("(wiki sync + _LOG append skipped — graph-only mode)")
+        print_report(lines)
         sys.exit(0 if g_ok else 1)
 
     wiki_path = project_root / args.wiki_path
 
-    g_ok = run_graphify(project_root)
+    g_ok, g_viz = run_graphify(project_root, args.graph_dir)
     s_ok = sync_graphify_wiki(script_dir, project_root, args.graph_dir, args.wiki_path)
     q_ok = check_qdrant(args.qdrant_host, args.qdrant_port)
 
     log_status(wiki_path, g_ok, s_ok, q_ok)
     log_warning = check_log_size(wiki_path)
-    report_success(g_ok, s_ok, q_ok, log_warning)
+    report_success(g_ok, s_ok, q_ok, log_warning, g_viz)
 
     if not g_ok or not s_ok or not q_ok:
         sys.exit(1)

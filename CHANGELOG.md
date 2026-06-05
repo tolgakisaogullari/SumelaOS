@@ -79,6 +79,33 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   `sumela-prompt.md`. Dependent references (using-superpowers, RULE_REGISTRY
   template, AGENTS.md template, init-sumela, README) updated to match.
 
+### Fixed
+
+- **Graphify build no longer reports false success or silently skips `graph.html`.**
+  `setup-memory.{sh,ps1}`, `auto-update-memory.py`, and a downstream sync error message used
+  `graphify update .` — the incremental path — for the initial build, and the setup scripts
+  suppressed all output (`*> $null` / `>/dev/null 2>&1`) and declared "Code graph built" on
+  exit 0 alone. On any repo over graphify's ~5000-node viz limit, the interactive `graph.html`
+  was skipped with a warning the user never saw, yet setup still reported success. Now:
+  - **All paths** use the canonical `graphify .` for the first build (`graphify . --update` only
+    for incremental re-runs — `--update` is a flag, not the legacy `update` subcommand).
+  - **`setup-memory.{sh,ps1}` (interactive setup):** output is no longer suppressed, so graphify's
+    own viz/limit warnings reach the user; the "Code graph built" success is gated on `graph.html`
+    actually existing, not exit 0; when graphify skips the viz on a large graph, setup reads the
+    real node count, raises `GRAPHIFY_VIZ_NODE_LIMIT` above it, and regenerates the viz via
+    `graphify cluster-only .` — falling back to a flagged to-do with the exact command if it still
+    can't, never a fake "built".
+  - **`auto-update-memory.py` (the git-hook / background path):** same canonical command + viz
+    auto-raise/regenerate; graphify's own viz/`graph.html` warnings are best-effort echoed from
+    captured output (and a `cluster-only` failure is reported with its exit code), while the
+    structured report ALWAYS carries an explicit `note:` line distinguishing "graph updated" (the
+    query-critical `graph.json` is fresh) from "interactive `graph.html` skipped" + the exact
+    remediation. A skipped viz is reported, not silently treated as full success, and not treated as
+    a hard failure (which would falsely fail the background hook on every large-repo commit).
+  - The graphify plugin README now documents the AST-only nature (semantic extraction needs a
+    generative backend SumelaOS does not wire up), that Tier-2 queries work off `graph.json` even
+    when the viz is skipped, and why `graphify-out/` is gitignored.
+
 ## [0.4.0] - 2026-06-02
 
 ### Added — less manual work, monorepo support

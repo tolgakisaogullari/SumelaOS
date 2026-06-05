@@ -260,7 +260,7 @@ def main():
     index = wiki_dir / "_INDEX.md"
 
     if not graph_report.exists():
-        report_failure("Input", f"{graph_report} not found. Run 'graphify update .' first.")
+        report_failure("Input", f"{graph_report} not found. Run 'graphify .' first.")
         sys.exit(1)
 
     print("[1/5] Parsing GRAPH_REPORT.md...")

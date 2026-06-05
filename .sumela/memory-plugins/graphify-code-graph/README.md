@@ -64,6 +64,28 @@ graphify hook install
 
 This sets up git hooks that auto-rebuild the AST graph after every commit (no API cost — AST only).
 
+## What the graph contains, and the `graph.html` / large-repo note
+
+- **AST-only by design.** SumelaOS builds a *structural* (AST) code graph locally — no API key, no
+  network, no cost. This is exactly what powers caller/callee/impact queries. graphify's *semantic*
+  layer (extracting "why" from docs/PDFs/images) needs a **generative** LLM backend, which SumelaOS
+  does **not** wire up — the Qdrant embedding model (`qwen3-embedding:0.6b`) is for vector search,
+  not graph extraction. An AST-only graph is the expected, sufficient result; nothing is "missing".
+- **`graph.html` on large repos.** graphify skips the interactive `graph.html` when the node count
+  exceeds its viz limit (~5000 nodes). This affects only the human-facing visualization —
+  **Tier-2 queries (callers/callees/impact) read `graph.json`, so they work fully even when the viz
+  is skipped.** `setup-memory.{sh,ps1}` detects a missing `graph.html` (in the default
+  `graphify-out/` location), auto-raises `GRAPHIFY_VIZ_NODE_LIMIT` above the real node count, and
+  regenerates the viz from the existing graph (`graphify cluster-only .`). If it still can't produce
+  `graph.html`, it prints the exact command instead of reporting a false "built" — success is gated
+  on the artifact, never on exit 0. Extra views: `graphify tree --label "<Name>"` (D3 tree),
+  `graphify export callflow-html` (Mermaid).
+- **`graphify-out/` is gitignored on purpose.** It is a per-developer, regenerable runtime artifact
+  (and can be multiple MB). Rebuild it locally with `graphify .`. If your team prefers a shared
+  snapshot, remove the `graphify-out/` line from `.gitignore` and commit it deliberately — **but
+  then disable the background graph-sync git hook** (it runs `auto-update-memory.py --graph-only`,
+  which assumes the dir is gitignored; otherwise every `git pull` would dirty the tracked tree).
+
 ## Configuration
 
 All scripts accept CLI arguments and environment variables. CLI args take precedence.

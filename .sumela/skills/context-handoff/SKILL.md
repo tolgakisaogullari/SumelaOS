@@ -174,7 +174,7 @@ During context-handoff, the agent runs the appropriate steps below without offlo
    - Cases where running it would create misleading `_LOG.md` churn without a real code/wiki sync operation.
 
    This script:
-   - Runs `graphify update .` (updates code graph)
+   - Rebuilds the code graph (`graphify .`, or `graphify . --update` incrementally)
    - Syncs to wiki via `sync-graphify-to-obsidian.py`
    - Runs Qdrant health check
    - Writes real maintenance/sync results to `_LOG.md` when applicable
