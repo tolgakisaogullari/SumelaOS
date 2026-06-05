@@ -4,7 +4,7 @@
   <img src="sumela.jpeg" alt="Sumela Monastery, Trabzon, Turkey" width="500" height="625">
 </p>
 
-A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 22 skill workflows, structured rules, and a living knowledge base from the first session.
+A portable skill engine, rule framework, and second-brain wiki system for AI coding agents. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, OpenCode, and any IDE that reads `AGENTS.md`. Copy into any project, run setup, and your agent has 22 skill workflows, structured rules, and a living knowledge base from the first session.
 
 Built to scale from **a single developer to a whole team** — with git-native shared memory, governed self-improvement, enforced structure, per-developer overrides, and a versioned upgrade path. See [Working as a Team](#working-as-a-team).
 
@@ -119,7 +119,7 @@ it anytime is safe (idempotent).
 ## Features
 
 <!-- sumela:skill-count workflows=22 loadable=27 (verified by validate-structure.sh against reconcile-registry.py --stats) -->
-- **22 skill workflows** (27 loadable skill files incl. sub-skills) — brainstorming, planning, TDD, debugging, code review, shipping, and more
+- **22 skill workflows** (27 loadable skill files incl. sub-skills) — open-ended ideation (`idea-explore`), brainstorming, planning, TDD, debugging, code review, shipping, and more
 - **Rule framework** — 7 universal rules + stack-specific rule templates (backend, frontend, mobile)
 - **Second-brain wiki** — Karpathy LLM Wiki pattern with structured knowledge capture
 - **Memory plugins** — optional Qdrant session memory (Tier-1) and Graphify code graph (Tier-2)
@@ -171,7 +171,7 @@ Every other file in `.sumela/` defers to this prompt when instructions conflict.
 │  AGENTS.md  ◄── IDE pointer files                │
 │      │           (CLAUDE.md, .cursor/rules/,     │
 │      │            .clinerules, .kilocode/,        │
-│      │            .trae/rules/)                   │
+│      │            .trae/rules/, .opencode/)       │
 │      ▼                                           │
 │  ┌──────────────────────────────────┐            │
 │  │         .sumela/             │            │
@@ -267,7 +267,7 @@ AI coding agents (Claude Code, Cursor, Cline, etc.) are powerful but unstructure
 
 | Problem | Without SumelaOS | With SumelaOS |
 |---|---|---|
-| **No workflow structure** | Agent improvises each task | 22 skill workflows define structured procedures (brainstorm → plan → implement → review → ship) |
+| **No workflow structure** | Agent improvises each task | 22 skill workflows define structured procedures (ideate → brainstorm → plan → implement → review → ship) |
 | **No coding standards** | Agent uses its own defaults | Project-specific rules enforce your conventions |
 | **No session memory** | Every session starts from zero | Qdrant plugin remembers past decisions; on a team, summaries sync to every developer via git hooks |
 | **No code structure awareness** | Agent greps blindly | Graphify plugin understands call graphs and dependencies |

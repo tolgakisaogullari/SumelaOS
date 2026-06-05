@@ -132,7 +132,7 @@ STEP 4 — Tier-4 (exact fallback, ONLY if Tiers 1-3 yielded nothing):
 
 SELF-CHECK BEFORE READ — before issuing ANY `Read`, `grep`, or `git log` tool call, silently confirm:
   *"Did I run Tier-1 (Qdrant via `query-qdrant.py`) for past-decision questions? Did I run Tier-2 (`query-graph.py` primary; `graphify` CLI secondary) for structural/call-graph questions? For hybrid, did I run both?"*
-  If the answer is no for any applicable family, run the missing tier immediately. Do not rationalize ("grep will be faster", "the file is small", "I remember this", "the script might not exist") — `bash: allow` is enabled in this agent's frontmatter; both `python .sumela/scripts/auto-update-memory.py` after every commit).
+  If the answer is no for any applicable family, run the missing tier immediately. Do not rationalize ("grep will be faster", "the file is small", "I remember this", "the script might not exist") — `bash` is allowed in this agent's frontmatter, and the memory scripts ARE present and active (the code graph is rebuilt via `scripts/auto-update-memory.py`, and session summaries are ingested via `session-ingest.py`).
 
 WHY THIS MATTERS: when the memory plugins are active, this project (a) ingests every session summary into Qdrant via `session-ingest.py`, and (b) maintains a fresh code graph (nodes + edges, including a large set of `calls` edges) via `auto-update-memory.py`. Tier-1 answers "why we did X" instantly with citation, where `git log` would take a multi-step search. Tier-2 answers "who calls X" with full callers + callees + transitive impact closure — `grep` cannot provide this because it only matches the literal token, not the call relationship. `query-graph.py` reads the graph directly because the upstream `graphify` CLI hides call edges in BFS/explain modes; the script is a thin, fast view onto edges that already exist on disk. The agent that bypasses these tiers re-derives knowledge slowly and incompletely from less reliable sources.
 </information_gap_routing>
@@ -205,6 +205,8 @@ The `context-handoff` skill is eager-loaded. It monitors pressure throughout the
 - User requests handoff.
 
 When triggered, complete the smallest meaningful unit first, then run the assessment. Always update Second Brain (active-project-context + session-summary) and run `/evolve` pre-check before generating the handoff prompt. Always confirm with the user before switching modes.
+
+Session summaries are NOT exclusive to handoff: per `using-second-brain` `<session_summary_protocol>` (the canonical single source), one is ALSO written at task/branch completion (`finishing-a-development-branch` Step 7), so every finished task leaves a queryable `chat_history` record even when no handoff fires. `context-handoff` adds the handoff prompt on top; `finishing-a-development-branch` writes the summary but does NOT generate a handoff prompt.
 </context_handoff>
 
 <strict_constraints>

@@ -144,14 +144,14 @@ Active four-tier search stack. Routing rules live in `using-second-brain` skill;
 | Tier | System | What it indexes | Trigger |
 |---|---|---|---|
 | 1 | Qdrant `chat_history` collection | Session summaries (semantic chunks via Ollama `qwen3-embedding:0.6b`) | Past conversations, "what did we discuss last week", prior decisions |
-| 2 | Graphify graph (`graphify-out/graph.json`, `calls` edges) — agent reads via `scripts/query-graph.py` (primary) or `graphify` CLI (secondary for cluster/path) | Code AST + call graph + communities | Function/class lookups, callers/callees, impact analysis |
+| 2 | Graphify graph (`graphify-out/graph.json`, `calls` edges) — agent reads via `.sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py` (primary) or `graphify` CLI (secondary for cluster/path) | Code AST + call graph + communities | Function/class lookups, callers/callees, impact analysis |
 | 3 | Obsidian wiki (`_SEARCH_INDEX.md` + pages) | Curated knowledge — ADRs, sprint plans, entity definitions | Architectural rationale, sprint state, domain entities |
 | 4 | Grep / Read fallback | Exact string match | When Tiers 1–3 return no hits |
 
 Maintenance scripts (auto-invoked by `finishing-a-development-branch` and `context-handoff`):
 - `scripts/auto-update-memory.py` — rebuilds Graphify graph + syncs to Obsidian + Qdrant health check.
-- `scripts/session-ingest.py <summary.md>` — chunks + embeds + upserts session summary to Qdrant.
-- `scripts/query-qdrant.py "<query>"` — Tier-1 semantic search CLI.
+- `.sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py <summary.md>` — chunks + embeds + upserts session summary to Qdrant.
+- `.sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>"` — Tier-1 semantic search CLI.
 
 Prerequisites: Ollama (with `qwen3-embedding:0.6b`), Qdrant on `localhost:6333`, `graphify` CLI on PATH. If any is unavailable, lower tiers degrade gracefully (Qdrant down → markdown summary fallback; Graphify down → grep fallback).
 
@@ -170,20 +170,21 @@ The agent control surface is split into two layers:
 - `docs/second-brain/template/*` — second brain skeleton, schema, adoption guide.
 - `.sumela/VERSION` — core framework version (consumed by `scripts/update.sh`).
 - `.sumela/git-hooks/*` — pre-commit validation + memory-sync hooks.
-- `scripts/*` — `setup.*`, `validate-structure.sh`, `update.*` (framework upgrade), `sync-mirrors.*` (IDE mirror sync), and the memory-plugin scripts (`auto-update-memory.py`, `query-qdrant.py`, `query-graph.py`, `session-ingest.py`, `sync-graphify-to-obsidian.py`, `setup-qdrant.py`).
+- `scripts/*` — `setup.*`, `validate-structure.sh`, `update.*` (framework upgrade), `sync-mirrors.*` (IDE mirror sync), and `auto-update-memory.py` (the cross-plugin memory orchestrator — the ONLY memory script under `scripts/`).
+- `.sumela/memory-plugins/<plugin>/scripts/*` — the per-plugin scripts: `query-qdrant.py`, `session-ingest.py`, `setup-qdrant.py` (qdrant-session-memory) and `query-graph.py`, `sync-graphify-to-obsidian.py` (graphify-code-graph).
 - **Upgrade:** run `scripts/update.sh` (or `update.ps1`) to refresh this CORE layer from upstream without touching the project OVERLAY (below). It version-gates on `.sumela/VERSION`, shows a diff + asks before overwriting any locally-changed core file, and never touches AGENTS.md / registries / stack rules / wiki / governance + CI choices.
 
 **A.1. IDE subagent mirrors (kept in lockstep with the runtime contract):**
 - Some IDE entrypoints must carry the body of `.sumela/sumela-prompt.md` **verbatim** (cross-LLM testing showed weaker models skip "read the canonical file first" loaders, breaking the contract). Each such mirror file contains a marker block:
   `<!-- SUMELA-MIRROR:BEGIN -->` … `<!-- SUMELA-MIRROR:END -->` — your IDE-specific frontmatter/wrapper lives OUTSIDE the markers; only the block between them is the mirrored prompt.
 - **Automated maintenance contract:** list each mirror file (repo-relative path) in `.sumela/mirrors.conf` (copy `.sumela/mirrors.conf.example`), then run `scripts/sync-mirrors.sh` to regenerate the marked blocks from `sumela-prompt.md` (`--init` scaffolds a missing mirror). **Drift is enforced automatically** — the `pre-commit` hook and the CI workflow run `sync-mirrors.sh --check` and fail if any mirror is out of sync. No more manual lockstep editing.
-- Other IDE pointer files (`.cursor/rules/00-agent.md`, `.trae/rules/00-agent.md`, `.kilocode/rules.md`, `.clinerules`, `CLAUDE.md`) remain thin pointers because their IDEs reliably follow the "read AGENTS.md" directive — no mirroring needed there.
+- Other IDE pointer files (`.cursor/rules/00-agent.md`, `.trae/rules/00-agent.md`, `.kilocode/rules.md`, `.clinerules`, `CLAUDE.md`, `.opencode/AGENTS.md`) remain thin pointers because their IDEs reliably follow the "read AGENTS.md" directive — no mirroring needed there.
 
 **B. Project overlay (edit per project):**
 - `AGENTS.md` Section 1 (identity), Section 3 (commands), Section 4 (infra), Section 5 (architecture & conventions), Section 9 (security mandate stack-specifics).
-- `.sumela/rules/*.md` (everything except `self_improvement_protocol.md`) — project coding standards (`backend_standards.md`, `frontend_standards.md`, `mobile_app_development_standards.md`, `architecture_patterns.md`, `engineering_philosophy.md`, `git_workflow_*.md`, `identity_and_behavior.md`, `operational_excellence_maintenance.md`, `security_protocol.md`, `audit_and_output.md`).
+- `.sumela/rules/*.md` (everything except `self_improvement_protocol.md`) — project coding standards (`backend_standards.md`, `frontend_standards.md`, `mobile_standards.md`, `architecture_patterns.md`, `engineering_philosophy.md`, `git_workflow_*.md`, `identity_and_behavior.md`, `operational_excellence_maintenance.md`, `security_protocol.md`, `audit_and_output.md`).
 - `docs/second-brain/wiki/*` — the project's living knowledge.
-- IDE pointer files: `CLAUDE.md`, `.cursor/rules/*`, `.clinerules`, `.kilocode/rules.md`, `.trae/rules/*`.
+- IDE pointer files: `CLAUDE.md`, `.cursor/rules/*`, `.clinerules`, `.kilocode/rules.md`, `.trae/rules/*`, `.opencode/AGENTS.md`.
 
 **Adoption steps for a new project:**
 1. Copy layer A into the target repo (no edits).
@@ -192,6 +193,6 @@ The agent control surface is split into two layers:
 4. Move `docs/second-brain/template/*` into `docs/second-brain/wiki/` / `raw_sources/` / `artifacts/` per `template/README.md`.
 5. Create the IDE pointer files the team uses.
 6. Run `scripts/setup.sh` or `.ps1` to validate structure before the first session.
-7. Optional: run `scripts/setup-qdrant.py` if activating Tier-1 + Tier-2 memory layers.
+7. Optional: run `.sumela/memory-plugins/qdrant-session-memory/scripts/setup-qdrant.py` if activating Tier-1 + Tier-2 memory layers.
 
 Sections 6 (bootstrap), 7 (skill resolution), 8 (signal capture), 10 (second brain), and 11 (memory architecture) of this file are project-agnostic and require zero edits.

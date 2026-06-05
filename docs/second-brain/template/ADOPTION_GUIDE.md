@@ -1,6 +1,6 @@
 # Second Brain Adoption Guide
 
-> **Primary audience:** AI coding agents (Claude Code, Cursor, Cline, Kilo Code, Trae, or any AGENTS.md-compatible agent). Secondary audience: human users reviewing the output.
+> **Primary audience:** AI coding agents (Claude Code, Cursor, Cline, Kilo Code, Trae, OpenCode, or any AGENTS.md-compatible agent). Secondary audience: human users reviewing the output.
 >
 > This guide provides step-by-step instructions for adopting the Karpathy LLM Wiki second brain template in both new (greenfield) and existing (brownfield) projects.
 
@@ -30,7 +30,7 @@ Companion components (not included in this template but required for full functi
 | Requirement | Purpose |
 |---|---|
 | Git | Version control — the agent uses git for branch management, history, and handoff |
-| Any AGENTS.md-compatible IDE | Agent runtime — Claude Code, Cursor, Cline, Kilo Code, Trae, or any IDE that reads `AGENTS.md` |
+| Any AGENTS.md-compatible IDE | Agent runtime — Claude Code, Cursor, Cline, Kilo Code, Trae, OpenCode, or any IDE that reads `AGENTS.md` |
 
 No build tools, databases, Python, or runtime dependencies are required for the core second brain + skill engine.
 
@@ -96,6 +96,7 @@ Files to create:
 - `.clinerules` — for Cline
 - `.kilocode/rules.md` — for Kilo Code
 - `.trae/rules/00-agent.md` — for Trae
+- `.opencode/AGENTS.md` — for OpenCode
 
 ### A.4. Initialize `active-project-context.md`
 
@@ -249,7 +250,7 @@ The agent will automatically:
    - Check `_improvement-queue/` pending count
    - Eager-load 2 skills: `using-superpowers` (dispatcher) + `context-handoff` (context-pressure guardian)
    - Load applicable rules based on phase + stack scope
-2. **Print a Context Manifest** — this is the first user-facing output. It shows: active skills, loaded rules, detected stack scope, and any rule gaps. Review it to confirm the agent understood the project correctly.
+2. **Complete bootstrap silently and answer directly** — the agent does NOT print a Context Manifest at session start. The manifest prints only on explicit request (`/context`, "show context") or immediately before a high-stakes action (commit, code-review dispatch, finishing a branch, shipping, `/evolve`); when shown, it lists active skills, loaded rules, detected stack scope, and any rule gaps.
 3. **Report readiness** — if any expected file is missing, the agent will flag the gap.
 
 ### C.4. How to Contribute
@@ -297,6 +298,7 @@ Each IDE has a different discovery mechanism. Create only the files relevant to 
 | Cline | `.clinerules` (root) | Yes — reads on session start |
 | Kilo Code | `.kilocode/rules.md` | Yes — reads on session start |
 | Trae | `.trae/rules/00-agent.md` | Yes — loads rule files from `.trae/rules/` |
+| OpenCode | `.opencode/AGENTS.md` | Yes — reads on session start |
 
 All pointer files use the identical template from Section 3.3 above. Updates go to `AGENTS.md` only; pointers never drift.
 
@@ -338,7 +340,7 @@ When an agent loads the project for the first time after adoption, it runs the f
 2. **Second-brain init** — `_INDEX.md` → `active-project-context.md` → last 5 `_LOG.md` entries → pending count in `_improvement-queue/`.
 3. **Eager-load 2 skills** — `using-superpowers` (top-level dispatcher) + `context-handoff` (context-pressure guardian). All other skills load lazily on demand.
 4. **Load applicable rules** — universal rules always, phase-conditional rules based on active phase, stack-conditional rules based on detected scope.
-5. **Print Context Manifest** — the first user-facing output. Shows: active skills, loaded rules, detected stack scope, and any rule gaps. Review it to confirm the agent understood the project correctly.
+5. **Complete bootstrap silently** — the agent does NOT print a Context Manifest at session start; it answers directly. The manifest prints only on explicit request (`/context`) or before a high-stakes action (commit, code-review, finishing a branch, shipping, `/evolve`), where it shows active skills, loaded rules, stack scope, and rule gaps.
 6. **Check `_improvement-queue/`** — if pending count > 0, the agent notifies you (in the project's interaction language) and offers to review via `/evolve`.
 
 If any expected file is missing, the agent flags the gap and offers to create it.
@@ -431,15 +433,15 @@ As your wiki and codebase grow, the search strategy evolves. Each tier activates
 | Wiki Size | Recommended Stack | Action |
 |---|---|---|
 | 0–300 pages | Tier 3 (`_SEARCH_INDEX.md`) + Tier 4 (grep) | None needed |
-| 300+ pages OR session memory needed | + Tier 1 (Qdrant) — semantic session search | Set up Ollama + Qdrant + run `scripts/session-ingest.py` after each session |
+| 300+ pages OR session memory needed | + Tier 1 (Qdrant) — semantic session search | Set up Ollama + Qdrant + run `.sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py` after each session |
 | Code-heavy projects (any size) | + Tier 2 (Graphify) — structural code search | Install `graphify` CLI; run `scripts/auto-update-memory.py` after each commit |
 | 1000+ pages | All four tiers; Qdrant + Graphify primary, `_SEARCH_INDEX.md` secondary | Multi-collection Qdrant (chat_history + wiki_pages + code_chunks) |
 
 To activate Tier 1 (Qdrant semantic session memory):
 1. Install Qdrant locally (`docker run -p 6333:6333 qdrant/qdrant`) and Ollama with `qwen3-embedding:0.6b`.
 2. `pip install qdrant-client requests` in your project's Python env.
-3. Run `scripts/setup-qdrant.py` once to create collections.
-4. Each session-end, agent runs `scripts/session-ingest.py <summary.md>` (auto-invoked by `context-handoff` skill).
+3. Run `.sumela/memory-plugins/qdrant-session-memory/scripts/setup-qdrant.py` once to create collections.
+4. Each session-end, agent runs `.sumela/memory-plugins/qdrant-session-memory/scripts/session-ingest.py <summary.md>` (auto-invoked by `context-handoff` and `finishing-a-development-branch`).
 
 To activate Tier 2 (Graphify structural search):
 1. Install `graphify` CLI: `uv tool install graphifyy` (PyPI package `graphifyy` — see [graphify repo](https://github.com/safishamsi/graphify)).

@@ -1,6 +1,6 @@
 # Second Brain Template — Karpathy LLM Wiki Pattern
 
-A portable, IDE-agnostic second brain starter kit implementing Andrej Karpathy's LLM Wiki pattern. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, and any AGENTS.md-compatible agent.
+A portable, IDE-agnostic second brain starter kit implementing Andrej Karpathy's LLM Wiki pattern. Works with Claude Code, Cursor, Cline, Kilo Code, Trae, OpenCode, and any AGENTS.md-compatible agent.
 
 ## Quick Start
 
@@ -17,7 +17,7 @@ A portable, IDE-agnostic second brain starter kit implementing Andrej Karpathy's
 3. **Verify `wiki/_SCHEMA.md`** — this is the canonical format reference. Do not modify unless you need project-specific schema extensions.
 
 4. **Start your first agent session.** The agent will:
-   - Read `_INDEX.md` → `_SCHEMA.md` → `active-project-context.md`
+   - Read `_INDEX.md` → `active-project-context.md` (`_SCHEMA.md` is loaded only when writing to the wiki, not at session start)
    - Begin building wiki pages as you work (entity pages, decision records, etc.)
    - Log activity to `_LOG.md`
 
@@ -36,6 +36,8 @@ docs/second-brain/
     ├── _SCHEMA.md         <- Canonical format rules (do not modify lightly).
     ├── _SEARCH_INDEX.md   <- Agent-optimized search index (tag + key term table).
     ├── _improvement-queue/ <- Self-improvement queue (one IMP-*.md per signal; team-safe).
+    ├── summaries/         <- One summary page per raw_sources/ file.
+    ├── session-summaries/ <- Per-session work records (ingested into Qdrant chat_history).
     └── active-project-context.md <- Current sprint snapshot (read every session).
 ```
 
@@ -45,7 +47,7 @@ This template covers `docs/second-brain/` only. For the full agent experience, y
 
 - **`AGENTS.md`** (repo root) — Canonical agent bootstrap file
 - **`.sumela/`** — Portable skill engine (SKILL_REGISTRY.md + skills/)
-- **IDE pointer files** — `.cursor/rules/00-agent.md`, `.clinerules`, `.kilocode/rules.md`, `.trae/rules/00-agent.md`
+- **IDE pointer files** — `CLAUDE.md`, `.cursor/rules/00-agent.md`, `.clinerules`, `.kilocode/rules.md`, `.trae/rules/00-agent.md`, `.opencode/AGENTS.md`
 
 See `ADOPTION_GUIDE.md` for complete setup instructions covering greenfield and brownfield projects.
 

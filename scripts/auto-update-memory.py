@@ -208,9 +208,9 @@ def log_status(wiki_path: Path, graphify_ok: bool, sync_ok: bool, qdrant_ok: boo
     print("OK    Logged.")
 
 
-def sync_graphify_wiki(script_dir: Path, project_root: Path, graph_dir: str, wiki_path: str) -> bool:
+def sync_graphify_wiki(project_root: Path, graph_dir: str, wiki_path: str) -> bool:
     print("[2/4] Syncing Graphify insights to Obsidian wiki...")
-    sync_script = script_dir / "sync-graphify-to-obsidian.py"
+    sync_script = project_root / ".sumela/memory-plugins/graphify-code-graph/scripts/sync-graphify-to-obsidian.py"
     if not sync_script.exists():
         print("WARN  sync-graphify-to-obsidian.py not found, skipping wiki sync.")
         return False
@@ -251,8 +251,8 @@ def main():
     if args.project_root:
         project_root = Path(args.project_root)
     else:
-        # Default: two levels up from scripts/ directory (repo root convention)
-        project_root = script_dir.parent.parent
+        # Default: the repo root is one level up from this scripts/ directory.
+        project_root = script_dir.parent
 
     if not project_root.exists():
         report_failure("Config", f"Project root not found: {project_root}")
@@ -277,7 +277,7 @@ def main():
     wiki_path = project_root / args.wiki_path
 
     g_ok, g_viz = run_graphify(project_root, args.graph_dir)
-    s_ok = sync_graphify_wiki(script_dir, project_root, args.graph_dir, args.wiki_path)
+    s_ok = sync_graphify_wiki(project_root, args.graph_dir, args.wiki_path)
     q_ok = check_qdrant(args.qdrant_host, args.qdrant_port)
 
     log_status(wiki_path, g_ok, s_ok, q_ok)

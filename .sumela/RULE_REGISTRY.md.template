@@ -34,7 +34,7 @@ Selection logic:
 
 What is NOT in this registry:
 - The `self_improvement_protocol` rule file is a pointer to `self-improvement-curator/SKILL.md`. The full self-improvement contract lives in the skill, not the rule.
-- Future learned rules added by `/evolve` SHOULD append to existing rule files (e.g., `backend_standards.md`, `mobile_app_development_standards.md`) rather than create new rule files; the `/evolve` workflow runs a duplicate check before writing.
+- Future learned rules added by `/evolve` SHOULD append to existing rule files (e.g., `backend_standards.md`, `mobile_standards.md`) rather than create new rule files; the `/evolve` workflow runs a duplicate check before writing.
 
 Registry maintenance is part of the `/evolve` contract:
 - When `/evolve` creates a NEW rule file, it MUST also add a `<rule>` entry here AND update `<phase_to_rule_matrix>` in the SAME approve transaction (with diff preview and explicit user approval). If the registry update is rejected, the rule file write rolls back. See `self-improvement-curator/SKILL.md` `<evolve_review_workflow>` REGISTRY UPDATE step for the full contract.

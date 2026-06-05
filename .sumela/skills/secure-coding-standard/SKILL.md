@@ -65,7 +65,7 @@ Execute these security constraints strictly. NEVER trust user input. Security ov
    **Positive Observations:** When reviewing, explicitly acknowledge security constraints that are correctly implemented — this reinforces good patterns alongside gaps.
 
 6. SECURITY REVIEW CHECKLIST (Pre-commit gate):
-   Before invoking `requesting-code-review`, verify each item. Stack-specific commands and framework names live in project rules under `.sumela/rules/` (e.g., `backend_standards.md`, `mobile_app_development_standards.md`); this skill defines the universal categories.
+   Before invoking `requesting-code-review`, verify each item. Stack-specific commands and framework names live in project rules under `.sumela/rules/` (e.g., `backend_standards.md`, `mobile_standards.md`); this skill defines the universal categories.
 
    **Authentication & Sessions:**
    - [ ] Passwords hashed via a memory-hard algorithm (bcrypt / Argon2 / scrypt). NEVER plaintext, MD5, or SHA1.

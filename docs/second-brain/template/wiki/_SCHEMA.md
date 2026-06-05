@@ -19,6 +19,7 @@ docs/second-brain/
     ├── archive/      ← Pages retired from the wiki but not deleted.
     ├── insights/     ← Analyses saved via query write-back.
     ├── summaries/    ← LLM-generated summary page for each raw_source file.
+    ├── session-summaries/ ← Per-session work records (ingested into Qdrant chat_history).
     ├── _INDEX.md          ← Special: human-optimized content catalog.
     ├── _LOG.md            ← Special: chronological activity log.
     ├── _SCHEMA.md         ← Special: this file.
