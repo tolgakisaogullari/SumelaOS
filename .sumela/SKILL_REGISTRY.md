@@ -31,13 +31,13 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="lazy">
 <name>idea-explore</name>
-<description>Use when an idea is raw or unclear — before any architectural decisions or code are written.</description>
+<description>Use for divergent product ideation — when the user wants help deciding WHAT to build ('what should I build', 'what do you suggest'), asks you to suggest or propose new features or product improvements (not code-level refactors), wants to discuss what would add value, or has only a raw, unclear, or not-yet-formed idea. Run BEFORE any architecture, design, or code; hand off to brainstorming once a direction is chosen.</description>
 <path>.sumela/skills/brainstorming/idea-explore.md</path>
 </skill>
 
 <skill activation="lazy">
 <name>brainstorming</name>
-<description>Use when starting any new feature, system, or architectural change — before any code is written, implementation skills are invoked, or project scaffolding begins.</description>
+<description>Use when starting a new feature, system, or architectural change that is already chosen and clear enough to design — to produce approved design options and a saved spec, before any code is written, implementation skills are invoked, or project scaffolding begins. If the idea is still open-ended or the user wants help deciding WHAT to build or what would add value, start with idea-explore first.</description>
 <path>.sumela/skills/brainstorming/SKILL.md</path>
 </skill>
 

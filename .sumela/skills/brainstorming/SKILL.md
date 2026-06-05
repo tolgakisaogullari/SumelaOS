@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: "Use when starting any new feature, system, or architectural change — before any code is written, implementation skills are invoked, or project scaffolding begins."
+description: "Use when starting a new feature, system, or architectural change that is already chosen and clear enough to design — to produce approved design options and a saved spec, before any code is written, implementation skills are invoked, or project scaffolding begins. If the idea is still open-ended or the user wants help deciding WHAT to build or what would add value, start with idea-explore first."
 ---
 
 <HARD-GATE>

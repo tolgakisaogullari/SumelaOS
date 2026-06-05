@@ -1,6 +1,6 @@
 ---
 name: idea-explore
-description: "Use when an idea is raw or unclear — before any architectural decisions or code are written."
+description: "Use for divergent product ideation — when the user wants help deciding WHAT to build ('what should I build', 'what do you suggest'), asks you to suggest or propose new features or product improvements (not code-level refactors), wants to discuss what would add value, or has only a raw, unclear, or not-yet-formed idea. Run BEFORE any architecture, design, or code; hand off to brainstorming once a direction is chosen."
 ---
 
 <HARD-GATE>

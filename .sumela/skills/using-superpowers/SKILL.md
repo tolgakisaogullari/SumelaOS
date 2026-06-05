@@ -69,6 +69,10 @@ Walk through the active task and load every skill whose `description` matches:
 - Quality gates: `verification-before-completion`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`.
 - Cross-cutting: `secure-coding-standard`, `performance-optimization`, `shipping-and-launch`.
 
+INTENT ANCHORS — match these explicitly; they are easy to miss because they sound like casual conversation, but they ARE task entry points:
+- "What should I build?" / "suggest a feature or improvement" / "what would add value?" / "let's discuss an idea" — INCLUDING when the user has NO concrete idea yet and just wants options — load `idea-explore` (divergent ideation), which hands off to `brainstorming`. Do NOT answer a feature / idea / "what do you suggest" / "let's discuss" request conversationally without entering this loop — a discussion tone is not an exemption.
+- A concrete, already-chosen feature ("add feature X", "build a Y") → `brainstorming` directly (design → spec).
+
 GLOBAL SECURITY MANDATE — If the task involves planning, writing, or reviewing code, load `secure-coding-standard` regardless of whether the user mentioned security.
 
 <EXTREMELY-IMPORTANT>If a skill might apply with even 1% probability, load it. Memory of a previously-read skill is NOT a substitute for re-reading the current file.</EXTREMELY-IMPORTANT>
