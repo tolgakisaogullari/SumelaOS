@@ -84,7 +84,7 @@ try {
         ".sumela/rules/git_workflow_mandatory_review_protocol.md",
         ".sumela/rules/self_improvement_protocol.md"
     )
-    $coreDirs = @(".sumela/skills", ".sumela/git-hooks", ".sumela/memory-plugins", ".sumela/rules/templates", "docs/second-brain/template", "scripts")
+    $coreDirs = @(".sumela/skills", ".sumela/git-hooks", ".sumela/memory-plugins", ".sumela/team-plugins", ".sumela/rules/templates", "docs/second-brain/template", "scripts")
     $selfDefer = @("scripts/update.sh", "scripts/update.ps1")
 
     # Flatten core dirs from the SOURCE into relative paths.
@@ -108,6 +108,13 @@ try {
             $rest = $rel.Substring(".sumela/memory-plugins/".Length)
             $plugin = $rest.Split('/')[0]
             return (-not (Test-Path (Join-Path $root ".sumela/memory-plugins/$plugin")))
+        }
+        # team-plugins gated the same way: declined teams never receive relay code on update,
+        # enabled teams DO get server/client patches (a security server must be updatable).
+        if ($rel -like ".sumela/team-plugins/*/*") {
+            $rest = $rel.Substring(".sumela/team-plugins/".Length)
+            $plugin = $rest.Split('/')[0]
+            return (-not (Test-Path (Join-Path $root ".sumela/team-plugins/$plugin")))
         }
         return $false
     }

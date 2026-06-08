@@ -41,6 +41,13 @@ docs/second-brain/wiki/
 # Per-developer overrides (personal; .example stays tracked)
 .sumela/local.md
 
+# Teammate relay — per-developer runtime + secrets (never commit). Public keys
+# (keys/*.pub) are intentionally NOT ignored: they are committed + CODEOWNERS-gated.
+.sumela/.relay/
+.sumela/team-plugins/teammate-relay/.relay/
+**/teammate-relay/session-token
+**/teammate-relay/*.identity.key
+
 # Brownfield migration quarantine + AGENTS.md backup (may hold legacy secrets — never commit)
 .sumela/_migration/
 AGENTS.md.bak*

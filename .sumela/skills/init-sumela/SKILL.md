@@ -276,6 +276,28 @@ configured `interaction_language` — the wording below is the English reference
 
 **IMPORTANT:** If the user declined a plugin (choice 2/3/4), do NOT copy its scripts, do NOT register it in SKILL_REGISTRY.md, do NOT run any of its scripts, and do NOT include it in `MEM_PLUGINS`. Never reference an unavailable plugin in generated files.
 
+### Optional Teammate Relay (team plugin — ONLY when `GOVERNANCE_MODE` is `team`)
+
+Skip entirely in `solo` mode. In `team` mode, after the memory-plugin step, ask ONE question
+(in the configured language):
+
+> *"Enable the optional **teammate relay** — a real-time, end-to-end-encrypted channel so an
+> agent can ask the teammate who owns an answer (any branch/network) and get a human+agent reply?
+> It needs a self-hosted relay server (one per team). [y/N]"*
+
+- **No (default):** do nothing — leave `.sumela/team-plugins/` unconfigured (the SKILL stays
+  dormant; `validate-structure.sh §8b` is a no-op without `relay-config.md`). Tell them they can
+  enable it later with `bash scripts/setup-relay.sh`.
+- **Yes:** ask for the **relay server URL** (`wss://…`; "I'll self-host" → guide them to
+  `.sumela/team-plugins/teammate-relay/server/docker-compose.yml` + `server/DEPLOY.md`, which
+  prints the URL + the JWT verify-key on first start). Then run
+  `bash scripts/setup-relay.sh --server-url "<url>" [--verify-key-file <pem>]` (PowerShell:
+  `pwsh scripts/setup-relay.ps1 -ServerUrl "<url>"`). It registers the skill (description copied
+  from the SKILL.md frontmatter — parity), writes the committed `relay-config.md` (no secrets),
+  and gates the key-trust surface in CODEOWNERS (see Step 3.8). **Relay its summary verbatim** —
+  any `todo` line carries the exact command to finish. Set `RELAY_ENABLED=true`.
+- Per-developer identity + daemon are NOT set up here — each teammate runs `/onboardSumela`.
+
 ## PHASE 2c — Brownfield Merge (ONLY if Step 1.6 found pre-existing artifacts)
 
 Skip this entire phase on a clean greenfield project. When existing agent artifacts were detected, run a **non-destructive, propose-and-approve** merge. Governing principles (do NOT violate):
@@ -502,6 +524,16 @@ ensures those PRs require a code owner's review. Skip entirely in `solo` mode.
    ```
 2. Ask the user for their owner handle and replace `@OWNER`; if unknown, leave the
    placeholder and tell them to set it before enabling branch protection.
+3. **If `RELAY_ENABLED` (PHASE 2b):** `setup-relay.sh` already appended the relay key-trust
+   gate to `CODEOWNERS` — ensure it is present and the owner is real (NOT the
+   `@REPLACE-WITH-RELAY-OWNERS` placeholder). These lines are mandatory when the relay is
+   configured (`validate-structure.sh §8b` fails otherwise — a swapped identity public key is a
+   key-substitution attack):
+   ```
+   # Teammate Relay key-trust surface — changes here are security-critical.
+   **/teammate-relay/keys/             @OWNER
+   **/teammate-relay/relay-config.md   @OWNER
+   ```
 
 ### Step 3.9: CI validation workflow (opt-in — ASK, default no)
 

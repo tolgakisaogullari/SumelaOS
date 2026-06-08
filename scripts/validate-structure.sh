@@ -316,6 +316,34 @@ for plugin in qdrant-session-memory graphify-code-graph; do
 done
 
 # -----------------------------------------------------------------------------
+# 8b. Teammate relay (team-plugins) — validated ONLY when the relay is CONFIGURED.
+#     Predicate: relay-config.md present. Absent/declined => silent no-op, so teams
+#     without relay (and the framework SOURCE repo) are unaffected. When configured,
+#     the key-trust surface MUST be CODEOWNERS-gated (keys/** + relay-config.md) or an
+#     identity public key could be swapped in an unreviewed change (key-substitution).
+# -----------------------------------------------------------------------------
+RELAY_DIR=".sumela/team-plugins/teammate-relay"
+if [ -f "$RELAY_DIR/relay-config.md" ]; then
+  if [ -f "$RELAY_DIR/SKILL.md" ]; then
+    pass "Relay configured: SKILL.md present"
+  else
+    fail "Relay configured but $RELAY_DIR/SKILL.md missing"
+  fi
+  # Check the file GitHub actually enforces FIRST (.github/ takes precedence over root).
+  RELAY_CO=""
+  for c in .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS; do
+    [ -f "$c" ] && RELAY_CO="$c" && break
+  done
+  if [ -z "$RELAY_CO" ] || ! grep -q "teammate-relay/keys" "$RELAY_CO" || ! grep -q "teammate-relay/relay-config.md" "$RELAY_CO" || ! grep -q "teammate-relay/roles.json" "$RELAY_CO"; then
+    fail "Relay configured but CODEOWNERS does not gate teammate-relay/keys/** + relay-config.md + roles.json (key-substitution / routing-redirect risk)"
+  elif grep -q "@REPLACE-WITH-RELAY-OWNERS" "$RELAY_CO"; then
+    fail "Relay CODEOWNERS still has the @REPLACE-WITH-RELAY-OWNERS placeholder — set real owners (the gate is unenforced until you do)"
+  else
+    pass "Relay key-trust surface CODEOWNERS-gated ($RELAY_CO)"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # 9. Doc skill-count drift guard (framework repo only — README isn't copied into
 #    user projects, so this is a silent no-op there). The README carries a marker:
 #      <!-- sumela:skill-count workflows=22 loadable=27 ... -->

@@ -40,6 +40,9 @@ Run a quick health read; if the clone is already onboarded, say so and STOP (ide
   ☐ If the project registers memory plugins (grep `SKILL_REGISTRY.md` for
     `qdrant-session-memory` / `graphify-code-graph`), note whether their runtime is up
     (status.sh reports Qdrant reachability; absence just means "offer to set up").
+  ☐ If the teammate relay is configured (`.sumela/team-plugins/teammate-relay/relay-config.md`
+    exists), note whether this developer is already a relay client (a committed
+    `keys/<dev-id>.pub` + a running daemon per `status.sh`); if not, STEP 5.5 will set it up.
 
 If hooks are wired to THIS install AND `.sumela/local.md` exists → report
 "Already onboarded — nothing to do" and STOP. Otherwise continue with only the missing
@@ -94,6 +97,32 @@ Only if the project registers memory plugins and the developer wants them: run
 graphify) — relay its summary verbatim; never paraphrase its one-time commands. If declined,
 skip — the agent still degrades gracefully (markdown / grep fallback). This step never
 edits tracked files.
+
+## STEP 5.5 — Teammate relay client (ONLY if the relay is configured)
+Trigger: `.sumela/team-plugins/teammate-relay/relay-config.md` exists (the team enabled it via
+`/initSumela`). If absent, skip silently. If present, set this developer up as a relay client —
+near-zero manual work, one paste:
+  ☐ **Identity key:** `python .sumela/team-plugins/teammate-relay/client/relay_ctl.py keygen <dev-id>`
+    — generates the Ed25519 keypair, stores the PRIVATE key in the OS keychain (`0600` fallback
+    under the gitignored `.sumela/.relay/`), and writes the PUBLIC key to
+    `.sumela/team-plugins/teammate-relay/keys/<dev-id>.pub`. **Commit that `.pub`** (public keys
+    are tracked + CODEOWNERS-gated; the reviewed commit/PR is what admits the dev). `<dev-id>` =
+    the developer's relay id (ask, or derive from git user). (Keystore lib: `relay_common/keystore.py`.)
+  ☐ **Enrollment token (paste once):** ask the developer for the one per-member enrollment token
+    the relay operator minted for them (shared out-of-band — Slack/password manager; NEVER
+    committed). Pass it to `up` (below); it's exchanged for a cached session token on first connect.
+  ☐ **Role for routing:** their `domains:` (STEP 3) drive `--domain` routing only via the
+    COMMITTED `roles.json` (scaffolded by `setup-relay`) — confirm the operator listed them there
+    (self-declared local domains are NOT authoritative).
+  ☐ **Start the daemon (explicit command — no silent homework):**
+    `python .sumela/team-plugins/teammate-relay/client/relay_ctl.py up --id <dev-id> --enroll-token <token>`
+    starts the always-on client daemon under a single-instance lock (server URL read from the
+    committed `relay-config.md`). Verify: `relay_ctl.py status` (exits non-zero if stopped).
+  ☐ **Optional autostart (one confirm — the minimize-manual path):** OFFER to register OS-level
+    autostart (launchd / systemd-user / Task Scheduler) so it starts on login with zero per-session
+    action — recipes in `server/DEPLOY.md`. Confirm once; never force.
+  ☐ Tell the developer: the agent will route questions when it hits a teammate-owned ambiguity
+    (see the `teammate-relay` skill); relayed content is always UNTRUSTED data behind a human gate.
 
 ## STEP 6 — New-domain edge case
 If the developer named a domain that is NOT in the taxonomy (`<domain_scopes>`):

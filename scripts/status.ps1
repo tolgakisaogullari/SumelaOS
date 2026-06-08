@@ -168,6 +168,21 @@ if (Test-Path $plugDir) {
     Info "no memory-plugins directory (optional)"
 }
 
+# --- 8b. Teammate relay (team plugin) ---------------------------------------
+Section "Teammate relay"
+$relayCfg = Join-Path $root ".sumela/team-plugins/teammate-relay/relay-config.md"
+if (Test-Path $relayCfg) {
+    $ctl = Join-Path $root ".sumela/team-plugins/teammate-relay/client/relay_ctl.py"
+    if ((Test-Path (Join-Path $root ".sumela/.relay")) -and (Get-Command python3 -ErrorAction SilentlyContinue)) {
+        try { (python3 $ctl status 2>$null) | ForEach-Object { Info $_ } }
+        catch { Info "relay configured (run relay_ctl.py status for detail)" }
+    } else {
+        Info "relay configured; client not onboarded yet — run /onboardSumela"
+    }
+} else {
+    Info "no relay configured (optional)"
+}
+
 # --- Summary ----------------------------------------------------------------
 Write-Host ""
 if ($script:attention -eq 0) {

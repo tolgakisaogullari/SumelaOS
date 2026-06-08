@@ -1,0 +1,36 @@
+# Teammate Relay server — hardened deployment.
+# `docker compose up -d` then see DEPLOY.md for TLS + enrollment bootstrap.
+services:
+  relay:
+    build: .
+    image: sumela-teammate-relay:latest
+    restart: unless-stopped
+    # Only the WSS port is published. Terminate TLS here or behind a reverse proxy
+    # (DEPLOY.md covers Let's Encrypt + the ACME exception to outbound-deny).
+    ports:
+      - "8765:8765"
+    environment:
+      RELAY_PORT: "8765"
+      RELAY_TLS_CERT: /tls/fullchain.pem
+      RELAY_TLS_KEY: /tls/privkey.pem
+      RELAY_SERVER_KEY: /data/server-key.pem
+    volumes:
+      # Persisted: the server signing key (sessions survive restarts).
+      - relay-data:/data
+      # TLS material, read-only.
+      - ./tls:/tls:ro
+    # ---- hardening ----
+    read_only: true                 # root FS is read-only
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL                         # no Linux capabilities
+    security_opt:
+      - no-new-privileges:true      # cannot gain privileges via setuid
+    # NOTE on network egress: this service needs NO outbound access to the operator's
+    # internal network (no pivot). If TLS is terminated here via ACME/Let's Encrypt, allow
+    # ONLY the ACME endpoints (see DEPLOY.md); otherwise terminate TLS at a reverse proxy
+    # and keep this service egress-denied.
+
+volumes:
+  relay-data:

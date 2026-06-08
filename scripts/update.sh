@@ -108,6 +108,7 @@ CORE_DIRS=(
   ".sumela/skills"
   ".sumela/git-hooks"
   ".sumela/memory-plugins"
+  ".sumela/team-plugins"
   ".sumela/rules/templates"
   "docs/second-brain/template"
   "scripts"
@@ -132,13 +133,18 @@ SELF_DEFER="scripts/update.sh scripts/update.ps1"
 new_list=(); changed_list=(); deferred_list=()
 is_self() { case " $SELF_DEFER " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 plugin_absent() {
-  # For a file UNDER a plugin dir (.sumela/memory-plugins/<plugin>/...): skip if that
-  # plugin isn't installed locally. Top-level files (e.g. memory-plugins/README.md)
-  # are NOT plugin-gated — the `*/*` pattern requires at least one nested segment.
+  # For a file UNDER a plugin dir (memory-plugins/<p>/... or team-plugins/<p>/...): skip if
+  # that plugin isn't installed locally — so a team that DECLINED the relay never has its
+  # server/client code pushed onto them on update, while teams that enabled it DO get patches
+  # (critical: a security server must be updatable). Top-level files (e.g. */README.md) are
+  # NOT plugin-gated — the `*/*` pattern requires at least one nested segment.
   case "$1" in
     .sumela/memory-plugins/*/*)
       local rest="${1#.sumela/memory-plugins/}"; local plugin="${rest%%/*}"
       [ -d "$ROOT/.sumela/memory-plugins/$plugin" ] || return 0 ;;
+    .sumela/team-plugins/*/*)
+      local rest="${1#.sumela/team-plugins/}"; local plugin="${rest%%/*}"
+      [ -d "$ROOT/.sumela/team-plugins/$plugin" ] || return 0 ;;
   esac
   return 1
 }

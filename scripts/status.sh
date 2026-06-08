@@ -181,6 +181,23 @@ else
   info "no memory-plugins directory (optional)"
 fi
 
+# --- 8b. Teammate relay (team plugin) ---------------------------------------
+section "Teammate relay"
+RELAY_CFG="$ROOT/.sumela/team-plugins/teammate-relay/relay-config.md"
+if [ -f "$RELAY_CFG" ]; then
+  RUNTIME="$ROOT/.sumela/.relay"
+  # daemon liveness via the single-instance lock (held => running). Best-effort.
+  if [ -d "$RUNTIME" ] && command -v python3 >/dev/null 2>&1 \
+     && python3 "$ROOT/.sumela/team-plugins/teammate-relay/client/relay_ctl.py" status >/dev/null 2>&1; then
+    python3 "$ROOT/.sumela/team-plugins/teammate-relay/client/relay_ctl.py" status 2>/dev/null \
+      | sed 's/^/  info  /' || info "relay configured (run relay_ctl.py status for detail)"
+  else
+    info "relay configured; client not onboarded yet — run /onboardSumela"
+  fi
+else
+  info "no relay configured (optional)"
+fi
+
 # --- Summary ----------------------------------------------------------------
 echo ""
 if [ "$ATTENTION" -eq 0 ]; then

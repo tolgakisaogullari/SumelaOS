@@ -1,0 +1,9 @@
+# Build / test artifacts — never committed.
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Per-developer runtime (also covered by the root .gitignore patterns set up at install).
+.relay/
+session-token
+*.identity.key

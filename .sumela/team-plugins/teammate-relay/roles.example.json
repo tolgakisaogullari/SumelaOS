@@ -1,0 +1,6 @@
+{
+  "_comment": "Copy to roles.json. COMMITTED + CODEOWNERS-gated team role map: domain -> owners. Authoritative for `ask.py --domain <d>` routing (never self-declared local domains).",
+  "payments": ["onur"],
+  "ordering": ["onur", "dana"],
+  "infra": ["dana"]
+}
