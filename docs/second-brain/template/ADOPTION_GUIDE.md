@@ -497,6 +497,33 @@ The `setup.sh` / `setup.ps1` script automates steps 1-2 for all selected plugins
 
 If either command fails with a connection error, check that the external service (Qdrant on `localhost:6333`, graphify CLI on PATH) is running.
 
+### Indexing extra doc dirs (beyond the wiki)
+
+By default the Qdrant `wiki_pages` Tier-1 index covers only `docs/second-brain/wiki/`. If your project keeps authoritative reference docs elsewhere in the repo (architecture docs, ADRs, API references), list those directories so their `.md` files are ingested into the **same** index — on the same pull-time/background terms as the wiki, without copying them into the wiki (which would drift).
+
+This is a **mechanism with an empty default**: SumelaOS ships no paths; you supply your own, project-owned, in either place (env wins when set non-empty):
+
+1. **`.sumela/ingest.conf`** (tracked, shared with your team) — one repo-relative dir per line; `#` comments and blank lines ignored. Copy the shipped `.sumela/ingest.conf.example` to get started:
+
+   ```bash
+   cp .sumela/ingest.conf.example .sumela/ingest.conf
+   # then edit, e.g.:
+   #   docs/architecture
+   #   docs/adr
+   ```
+
+2. **`EXTRA_INGEST_DIRS`** env var (comma- or colon-separated) — for a shell/CI override; takes precedence over the file when set non-empty.
+
+Rules (enforced; invalid entries are skipped with a warning, never fail a pull):
+
+- **Repo-relative only** — no absolute paths, `~`, `..`, globs, or drive letters; anything that escapes the repo root (symlink targets included) is rejected.
+- **Docs only** — only `.md` files are ingested; the code corpus (`code_chunks`) is untouched.
+- **Trust note** — `.sumela/ingest.conf` is tracked, so a path you add will be background-ingested on every teammate's pull. Treat adding a path like adding a git hook; in **team mode**, protect the file via `CODEOWNERS`.
+
+`scripts/status.sh` (and `status.ps1`) list the resolved extra dirs under **Memory plugins**, so you can confirm what is configured. `update.sh` never overwrites `.sumela/ingest.conf` — it is project overlay, not framework core.
+
+> **Survival across updates:** `scripts/update.sh` ships `.sumela/ingest.conf.example` and the resolver, but never touches your `.sumela/ingest.conf` (it is not in the core manifest). If you adopted SumelaOS before this feature, just create `.sumela/ingest.conf` by hand using the format above.
+
 ---
 
 ## 12. Troubleshooting

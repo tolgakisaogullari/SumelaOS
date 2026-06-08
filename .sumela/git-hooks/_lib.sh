@@ -268,12 +268,26 @@ _sumela_delete_orphans() {
   done
 }
 
+# Echo the project-configured EXTRA ingest dirs (repo-relative, one per line; empty
+# if none). Single source of truth: the Python resolver does ALL config resolution
+# and path validation, so the hook/setup/status never re-implement it (and so the
+# three callers can never drift from each other). Best-effort: silent + empty if the
+# resolver or python3 is absent.
+_sumela_extra_ingest_dirs() {  # $1 = install root
+  local install="$1"
+  local resolver="$install/.sumela/memory-plugins/qdrant-session-memory/scripts/resolve-ingest-dirs.py"
+  [ -f "$resolver" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  ( cd "$install" && python3 "$resolver" 2>/dev/null )
+}
+
 # Refresh the Qdrant `wiki_pages` collection after a pull, so semantic search over
-# curated wiki pages reflects teammates' just-pulled updates. The tracked markdown
-# is already current (git), but its LOCAL embedding is not — this re-ingests it.
-# Same contract: incremental (only when a curated page changed — session-summaries
-# and the underscore-special/derived files are excluded), non-blocking, best-effort,
-# and it writes ONLY to Qdrant (a local cache), never the tracked tree.
+# curated wiki pages (and any project-configured extra doc dirs) reflects teammates'
+# just-pulled updates. The tracked markdown is already current (git), but its LOCAL
+# embedding is not — this re-ingests it. Same contract: incremental (only when a
+# tracked doc changed — wiki session-summaries and underscore-special/derived files
+# are excluded), non-blocking, best-effort, and it writes ONLY to Qdrant (a local
+# cache), never the tracked tree.
 sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   local from="$1" to="$2"
   [ -n "${SUMELA_DISABLE_WIKI_SYNC:-}" ] && return 0
@@ -293,11 +307,30 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   # (-> chat_history, handled by memory-sync) and the underscore-special/derived
   # files (_LOG/_INDEX/_SEARCH_INDEX/_SCHEMA) the ingest script itself excludes —
   # so e.g. a union-merged _LOG.md alone never triggers a pointless re-ingest.
+  local wiki_chg wiki_del
+  wiki_chg="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
+    | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
+  wiki_del="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
+    | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
+
+  # Project-configured EXTRA doc dirs (default none). These are NOT wiki, so the
+  # wiki-special filters above do NOT apply — every .md counts. Pathspecs go AFTER
+  # the `--`, so a dir name can never be read as a git option.
+  local extra_chg="" extra_del=""
+  local extra_dirs; extra_dirs="$(_sumela_extra_ingest_dirs "$install")"
+  if [ -n "$extra_dirs" ]; then
+    local -a eps=()
+    while IFS= read -r d; do [ -n "$d" ] && eps+=( "${scope}${d}" ); done <<< "$extra_dirs"
+    if [ "${#eps[@]}" -gt 0 ]; then
+      extra_chg="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "${eps[@]}" 2>/dev/null | grep -E '\.md$')"
+      extra_del="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- "${eps[@]}" 2>/dev/null | grep -E '\.md$')"
+    fi
+  fi
+
+  # Union (sort -u also dedupes a file reachable from both wiki and an extra dir).
   local changed deleted
-  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
-    | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
-  deleted="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
-    | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
+  changed="$(printf '%s\n%s\n' "$wiki_chg" "$extra_chg" | grep -E '\.md$' | sort -u)"
+  deleted="$(printf '%s\n%s\n' "$wiki_del" "$extra_del" | grep -E '\.md$' | sort -u)"
   [ -n "$changed$deleted" ] || return 0
 
   _sumela_qdrant_up || { echo "sumela: wiki_pages sync skipped (Qdrant not reachable)"; return 0; }

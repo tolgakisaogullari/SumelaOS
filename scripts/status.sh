@@ -181,6 +181,22 @@ else
   info "no memory-plugins directory (optional)"
 fi
 
+# Extra documentation ingest dirs (project-configured via EXTRA_INGEST_DIRS /
+# .sumela/ingest.conf; default none). The resolver returns only validated, existing,
+# repo-contained dirs; rejected/missing entries surface on its stderr.
+_resolver="$ROOT/.sumela/memory-plugins/qdrant-session-memory/scripts/resolve-ingest-dirs.py"
+if [ -f "$_resolver" ] && command -v python3 >/dev/null 2>&1; then
+  _extra_err="$(mktemp)"
+  _extra="$( cd "$ROOT" && python3 "$_resolver" 2>"$_extra_err" )"
+  if [ -n "$_extra" ]; then
+    while IFS= read -r d; do [ -n "$d" ] && ok "extra ingest dir: $d"; done <<< "$_extra"
+  else
+    info "no extra ingest dirs configured (.sumela/ingest.conf — optional)"
+  fi
+  while IFS= read -r line; do [ -n "$line" ] && info "${line#\[warn\] }"; done < "$_extra_err"
+  rm -f "$_extra_err"
+fi
+
 # --- Summary ----------------------------------------------------------------
 echo ""
 if [ "$ATTENTION" -eq 0 ]; then

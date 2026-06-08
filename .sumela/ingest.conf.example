@@ -1,0 +1,25 @@
+# SumelaOS — EXTRA documentation ingest dirs (PROJECT-OWNED, optional).
+#
+# Copy this file to `.sumela/ingest.conf` (same dir, drop the `.example`) and list
+# directories whose Markdown docs you want included in the Qdrant `wiki_pages`
+# Tier-1 semantic index — IN ADDITION to docs/second-brain/wiki/. Useful for
+# authoritative reference docs that live elsewhere in the repo (architecture docs,
+# ADRs, API references) without copying them into the wiki (which would drift).
+#
+# Rules:
+#   * One repo-relative directory per line. `#` comments and blank lines are ignored.
+#   * Repo-relative ONLY — no absolute paths, `~`, `..`, globs, or drive letters.
+#     Anything that escapes the repo root is rejected (symlink targets included).
+#   * Docs only: only `.md` files are ingested. The code corpus is NOT affected.
+#   * Default is EMPTY — with no `.sumela/ingest.conf` (and no EXTRA_INGEST_DIRS
+#     env var), only the wiki is ingested.
+#   * `.sumela/ingest.conf` is TRACKED and shared with your team. Adding a path is a
+#     trust decision (a teammate's pull will background-ingest it) — in team mode,
+#     protect this file via CODEOWNERS, the same as a git hook.
+#   * Override per-shell/CI with the env var EXTRA_INGEST_DIRS (comma- or
+#     colon-separated); when set non-empty it takes precedence over this file.
+#
+# Examples (uncomment / edit):
+# docs/architecture
+# docs/adr
+# api/reference

@@ -9,6 +9,26 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ### Added
 
+- **Extra documentation ingest paths** — adopting projects can index authoritative docs that
+  live OUTSIDE `docs/second-brain/wiki/` (architecture docs, ADR dirs, API references) into the
+  same Qdrant `wiki_pages` Tier-1 index, on the same pull-time/background/gated terms as the
+  wiki — without copying them into the wiki (no drift). Mechanism in the framework, policy in
+  the consumer: the framework ships an EMPTY default and NO project-specific paths. Configure
+  per project via `.sumela/ingest.conf` (tracked, one repo-relative dir per line; copy the
+  shipped `.sumela/ingest.conf.example`) or the `EXTRA_INGEST_DIRS` env var (comma/colon-
+  separated; wins when set). A single resolver (`lib/memory_ingest.get_extra_ingest_dirs`,
+  exposed to bash/PowerShell via `resolve-ingest-dirs.py`) does all resolution + validation so
+  the three callers never drift: paths must be repo-relative and resolve to a real dir strictly
+  inside the repo (absolute / `~` / `..` / globs / drive-letters / leading-dash / symlink-escape
+  all rejected; missing skipped with a warning, never fails a pull). Docs only — `.md` files,
+  symlink-safe walk (no following dir symlinks; per-file repo-containment re-check), deduped by
+  resolved path; the code corpus is untouched. A per-run file cap (`EXTRA_INGEST_MAX_FILES`,
+  default 5000) plus `.git`/`node_modules`/`vendor` skips bound the background re-embed.
+  `sumela_wiki_sync` expands its change scope + orphan-prune to the extra dirs; `setup-memory`
+  seeds them on first bring-up; `status.{sh,ps1}` report them. Documented in `ADOPTION_GUIDE.md`
+  (incl. the trust note: a tracked path is a team-wide decision — CODEOWNERS-protect in team
+  mode). Covered by `tests/test_extra_ingest_dirs.py`.
+
 - **Rich, queryable session memory** — session summaries now carry structured metadata so
   memory answers "which developer did what, in which domain, when". A canonical
   `session-summary` page type + template lands in `_SCHEMA.md` (frontmatter: `developer`,

@@ -140,7 +140,10 @@ if ((Want "qdrant-session-memory") -and (Test-Path (Join-Path $plugDir "qdrant-s
             & $py (Join-Path $s "setup-qdrant.py") *> $null
             if ($LASTEXITCODE -eq 0) { Ok "Qdrant collections ready" } else { Todo "setup-qdrant.py failed — run: $py $s/setup-qdrant.py" }
         }
-        if ((Test-Path (Join-Path $s "ingest-wiki-to-qdrant.py")) -and (Test-Path "docs/second-brain/wiki")) {
+        # Seed if the wiki dir exists OR the project configured extra ingest dirs.
+        $extraDirs = ""
+        if (Test-Path (Join-Path $s "resolve-ingest-dirs.py")) { $extraDirs = (& $py (Join-Path $s "resolve-ingest-dirs.py") 2>$null | Out-String).Trim() }
+        if ((Test-Path (Join-Path $s "ingest-wiki-to-qdrant.py")) -and ((Test-Path "docs/second-brain/wiki") -or $extraDirs)) {
             & $py (Join-Path $s "ingest-wiki-to-qdrant.py") *> $null
             if ($LASTEXITCODE -eq 0) { Ok "Seeded wiki_pages" } else { Info "wiki_pages seeding skipped (will sync on pull)" }
         }

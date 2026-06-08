@@ -6,7 +6,9 @@ Usage:
     python .sumela/memory-plugins/qdrant-session-memory/scripts/ingest-wiki-to-qdrant.py
 
 What it does:
-    1. Walks docs/second-brain/wiki/ for all .md files (excluding special files).
+    1. Walks docs/second-brain/wiki/ — plus any project-configured EXTRA doc dirs
+       (EXTRA_INGEST_DIRS env / .sumela/ingest.conf, default none) — for .md files
+       (excluding special files), symlink-safe and deduped by resolved path.
     2. Parses YAML frontmatter (type, tags, date_updated).
     3. Chunks body via naive word-level split (512 tokens, 50 overlap).
     4. Generates embeddings via Ollama (qwen3-embedding:0.6b) in parallel.
@@ -38,7 +40,10 @@ from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.memory_ingest import get_repo_root, chunk_text, get_embedding, deterministic_id, print_report
+from lib.memory_ingest import (
+    get_repo_root, get_extra_ingest_dirs, chunk_text, get_embedding,
+    deterministic_id, print_report,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -84,6 +89,16 @@ MAX_WORKERS = 4
 
 REPO_ROOT = get_repo_root()
 WIKI_DIR = REPO_ROOT / os.getenv("WIKI_DIR", "docs/second-brain/wiki")
+# Project-owned EXTRA documentation dirs (default: none). Validated repo-relative
+# dirs inside the repo; their .md docs land in the SAME wiki_pages collection,
+# keyed by repo-relative page_path so they never collide with wiki pages.
+EXTRA_DIRS = get_extra_ingest_dirs(REPO_ROOT)
+# Defence-in-depth: cap total docs per run so a misconfigured / hostile extra dir
+# (e.g. a huge tree) can't pin the machine re-embedding through Ollama in the
+# background. Override with EXTRA_INGEST_MAX_FILES.
+MAX_DOC_FILES = int(os.getenv("EXTRA_INGEST_MAX_FILES", "5000"))
+# Dirs never descended into during ANY doc walk (huge / non-doc trees).
+ALWAYS_SKIP_DIRS = {".git", "node_modules", "vendor", ".venv", "__pycache__"}
 EXCLUDED_FILES = {
     "_INDEX.md",
     "_SEARCH_INDEX.md",
@@ -92,10 +107,66 @@ EXCLUDED_FILES = {
 }
 # Whole subdirectories to skip during wiki ingestion. The improvement queue is
 # agent self-learning (one IMP-*.md per signal), not project knowledge — do not
-# ingest it into the wiki_pages collection.
+# ingest it into the wiki_pages collection. (Wiki-specific: NOT applied to extra
+# dirs, which are walked with only the universal ALWAYS_SKIP_DIRS guard.)
 EXCLUDED_DIRS = {
     "_improvement-queue",
 }
+
+
+def _walk_md(root: Path, excluded_files: set, excluded_dirs: set):
+    """Yield .md Paths under root WITHOUT following directory symlinks and skipping
+    any file whose real path escapes REPO_ROOT. This is the security backstop for
+    extra dirs: even if `root` itself validated clean, a symlink committed INSIDE it
+    must not let the walk read files outside the repo."""
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        # Prune excluded + symlinked subdirs in place (os.walk respects this).
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in excluded_dirs and d not in ALWAYS_SKIP_DIRS
+            and not os.path.islink(os.path.join(dirpath, d))
+        ]
+        for fn in filenames:
+            if not fn.endswith(".md") or fn in excluded_files:
+                continue
+            fp = Path(dirpath) / fn
+            if fp.is_symlink():
+                continue
+            rp = fp.resolve()
+            if rp != REPO_ROOT and REPO_ROOT not in rp.parents:
+                continue
+            yield fp
+
+
+def collect_doc_files():
+    """Build an ordered, de-duplicated list of (md_path, page_path) across the wiki
+    dir and every configured extra dir. Dedupe is by RESOLVED absolute path so a file
+    reachable from two roots (e.g. an extra dir nesting the wiki) is ingested once."""
+    sources = []
+    if WIKI_DIR.exists():
+        sources.append((WIKI_DIR, EXCLUDED_FILES, EXCLUDED_DIRS))
+    for d in EXTRA_DIRS:
+        # An extra dir that equals or contains the wiki is almost always a misconfig;
+        # dedupe handles correctness, but warn so the operator notices.
+        if d == WIKI_DIR or d in WIKI_DIR.parents:
+            print(f"[warn] extra ingest dir {d} overlaps the wiki dir — pages deduped, "
+                  f"but consider narrowing the config", file=sys.stderr)
+        sources.append((d, set(), set()))  # extra dirs: no wiki-specific excludes
+    jobs = []
+    seen = set()
+    for root, ef, ed in sources:
+        for fp in sorted(_walk_md(root, ef, ed)):
+            rp = fp.resolve()
+            if rp in seen:
+                continue
+            seen.add(rp)
+            jobs.append((fp, fp.relative_to(REPO_ROOT).as_posix()))
+            if len(jobs) >= MAX_DOC_FILES:
+                print(f"[warn] doc-file cap reached ({MAX_DOC_FILES}); remaining files "
+                      f"skipped. Narrow EXTRA_INGEST_DIRS or raise EXTRA_INGEST_MAX_FILES.",
+                      file=sys.stderr)
+                return jobs
+    return jobs
 
 
 def extract_frontmatter(content: str) -> tuple[dict, str]:
@@ -114,25 +185,20 @@ def extract_frontmatter(content: str) -> tuple[dict, str]:
 
 
 def main():
-    if not WIKI_DIR.exists():
-        report_failure("Input", f"Wiki directory not found: {WIKI_DIR}")
+    if not WIKI_DIR.exists() and not EXTRA_DIRS:
+        report_failure("Input", f"No docs to ingest: wiki dir not found ({WIKI_DIR}) "
+                                f"and no extra ingest dirs configured")
         sys.exit(1)
 
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, check_compatibility=False)
 
-    md_files = sorted(WIKI_DIR.rglob("*.md"))
+    doc_files = collect_doc_files()  # ordered, deduped (md_path, page_path) across wiki + extra dirs
     total_chunks = 0
     pages_ingested = 0
 
     # Collect all chunks first for parallel embedding
     all_jobs = []  # (page_path, page_title, fm, chunk_index, chunk_text, total_chunks)
-    for md_path in md_files:
-        if md_path.name in EXCLUDED_FILES:
-            continue
-        if EXCLUDED_DIRS.intersection(md_path.parts):
-            continue
-
-        page_path = md_path.relative_to(REPO_ROOT).as_posix()
+    for md_path, page_path in doc_files:
         page_title = md_path.stem
 
         with open(md_path, "r", encoding="utf-8") as f:

@@ -158,7 +158,11 @@ if want qdrant-session-memory && [ -d "$PLUGDIR/qdrant-session-memory" ]; then
     s="$PLUGDIR/qdrant-session-memory/scripts"
     [ -f "$s/setup-qdrant.py" ] && { python3 "$s/setup-qdrant.py" >/dev/null 2>&1 && ok "Qdrant collections ready" || todo "setup-qdrant.py failed — run: python3 $s/setup-qdrant.py"; }
     # Seed wiki_pages (cheap). code_chunks is heavy -> left to the pull-time staleness prompt.
-    if [ -f "$s/ingest-wiki-to-qdrant.py" ] && [ -d "docs/second-brain/wiki" ]; then
+    # Seed if the wiki dir exists OR the project configured extra ingest dirs (the
+    # ingest script self-discovers both via the same resolver).
+    extra_dirs=""
+    [ -f "$s/resolve-ingest-dirs.py" ] && extra_dirs="$(python3 "$s/resolve-ingest-dirs.py" 2>/dev/null)"
+    if [ -f "$s/ingest-wiki-to-qdrant.py" ] && { [ -d "docs/second-brain/wiki" ] || [ -n "$extra_dirs" ]; }; then
       python3 "$s/ingest-wiki-to-qdrant.py" >/dev/null 2>&1 && ok "Seeded wiki_pages" || info "wiki_pages seeding skipped (will sync on pull)"
     fi
     info "code_chunks left empty — first build via: python3 $s/ingest-code-to-qdrant.py (or the pull-time prompt)"

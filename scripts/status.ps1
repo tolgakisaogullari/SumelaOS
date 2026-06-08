@@ -168,6 +168,17 @@ if (Test-Path $plugDir) {
     Info "no memory-plugins directory (optional)"
 }
 
+# Extra documentation ingest dirs (project-configured; default none).
+$resolver = Join-Path $plugDir "qdrant-session-memory/scripts/resolve-ingest-dirs.py"
+$py = Get-Command python3 -ErrorAction SilentlyContinue
+if ((Test-Path $resolver) -and $py) {
+    Push-Location $root
+    $extra = @(& $py.Source $resolver 2>$null | Where-Object { $_ -ne "" })
+    Pop-Location
+    if ($extra.Count -gt 0) { $extra | ForEach-Object { Ok "extra ingest dir: $_" } }
+    else { Info "no extra ingest dirs configured (.sumela/ingest.conf — optional)" }
+}
+
 # --- Summary ----------------------------------------------------------------
 Write-Host ""
 if ($script:attention -eq 0) {

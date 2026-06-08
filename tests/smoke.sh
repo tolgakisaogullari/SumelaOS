@@ -118,8 +118,15 @@ if command -v python3 >/dev/null 2>&1; then
   else
     bad "get_repo_root unit test failed"; sed 's/^/    /' "$WORK/get_repo_root.log" | tail -15
   fi
+  # Extra-ingest-dirs config resolution + path validation (env/conf precedence,
+  # reject absolute/escape/glob/symlink, skip-missing, dedupe).
+  if python3 "$REPO_ROOT/tests/test_extra_ingest_dirs.py" >"$WORK/extra_ingest.log" 2>&1; then
+    ok "extra ingest dirs: config resolution + path validation"
+  else
+    bad "extra ingest dirs unit test failed"; sed 's/^/    /' "$WORK/extra_ingest.log" | tail -20
+  fi
 else
-  echo "  SKIP  get_repo_root unit test (python3 unavailable)"
+  echo "  SKIP  get_repo_root + extra-ingest unit tests (python3 unavailable)"
 fi
 
 echo ""
