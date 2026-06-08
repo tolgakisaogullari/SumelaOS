@@ -12,11 +12,30 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def get_repo_root() -> Path:
-    """Return the repository root by walking up from this file.
+    """Return the repository root.
 
-    This module lives at scripts/lib/memory_ingest.py, so we go up three levels.
+    Robust across layouts:
+      * this framework repo (plugin sits under .sumela/memory-plugins/), and
+      * an adopted project where the plugin is vendored under
+        .sumela/memory-plugins/<plugin>/scripts/lib/.
+    Resolution order: SUMELA_REPO_ROOT env → first ancestor containing .git or a
+    top-level .sumela dir → legacy three-levels-up fallback.
+
+    The legacy "three levels up" returned the PLUGIN dir, not the repo root, in
+    every layout — silently breaking wiki/code ingestion in adopted projects.
     """
-    return Path(__file__).resolve().parent.parent.parent
+    env = os.getenv("SUMELA_REPO_ROOT")
+    if env:
+        return Path(env).resolve()
+    p = Path(__file__).resolve()
+    for parent in p.parents:
+        # Walking up from .sumela/memory-plugins/<plugin>/scripts/lib/, no
+        # intermediate dir has a .sumela child, so the first match is the real
+        # repo root (which contains <repo>/.sumela). .git covers repos that do
+        # not keep .sumela at the top level. Never matches the plugin dir.
+        if (parent / ".git").exists() or (parent / ".sumela").is_dir():
+            return parent
+    return p.parent.parent.parent
 
 
 def chunk_text(text: str, size: int = 512, overlap: int = 50) -> List[str]:

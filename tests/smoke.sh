@@ -110,6 +110,18 @@ else
   echo "  SKIP  reconcile-registry (python3 unavailable)"
 fi
 
+# Regression guard: get_repo_root() must resolve the repo root (not the plugin
+# dir) in a vendored adoption layout, else Qdrant ingestion silently no-ops.
+if command -v python3 >/dev/null 2>&1; then
+  if python3 "$REPO_ROOT/tests/test_get_repo_root.py" >"$WORK/get_repo_root.log" 2>&1; then
+    ok "get_repo_root resolves repo root across layouts"
+  else
+    bad "get_repo_root unit test failed"; sed 's/^/    /' "$WORK/get_repo_root.log" | tail -15
+  fi
+else
+  echo "  SKIP  get_repo_root unit test (python3 unavailable)"
+fi
+
 echo ""
 echo "Run 2 — idempotency (re-run must not duplicate)"
 if run_setup; then ok "second setup.sh run exited 0"; else bad "second setup.sh run exited non-zero"; sed 's/^/    /' "$WORK/setup.log" | tail -25; fi

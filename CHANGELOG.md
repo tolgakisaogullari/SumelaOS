@@ -81,6 +81,20 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ### Fixed
 
+- **Qdrant ingestion no longer silently no-ops in adopted projects.** The Qdrant plugin's
+  `get_repo_root()` (`memory-plugins/qdrant-session-memory/scripts/lib/memory_ingest.py`)
+  hard-coded "three levels up" from the module, which resolved to the *plugin* directory
+  (`.sumela/memory-plugins/qdrant-session-memory`) rather than the repository root. In every
+  project that vendored SumelaOS, `WIKI_DIR`/`SRC_DIR` then pointed under the plugin dir
+  (so wiki/code ingest found nothing) and `relative_to(REPO_ROOT)` raised on real doc paths —
+  the `wiki_pages`/`code_chunks` collections stayed permanently empty while `setup-memory`
+  still reported them "ready" and `query-qdrant` returned 0 results forever, so Tier-1
+  semantic memory was non-functional with no error on the happy path. `get_repo_root()` now
+  walks up to the first ancestor containing `.git` or a top-level `.sumela/` (matching what
+  the PowerShell scripts already do), honors a `SUMELA_REPO_ROOT` override, and keeps the old
+  three-levels-up only as a last-resort fallback — correct in both the framework's own repo
+  and vendored adoptions. Covered by `tests/test_get_repo_root.py` (run in `tests/smoke.sh`).
+
 - **Graphify build no longer reports false success or silently skips `graph.html`.**
   `setup-memory.{sh,ps1}`, `auto-update-memory.py`, and a downstream sync error message used
   `graphify update .` — the incremental path — for the initial build, and the setup scripts
