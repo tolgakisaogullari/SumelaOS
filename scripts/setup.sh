@@ -857,7 +857,7 @@ else
     echo ".sumela/local.md"          # per-developer interaction-language override
     echo ".sumela/.memory-sync.log"  # memory-sync hook log
     echo ".sumela/.graph-sync.log"   # graph-sync hook log
-    echo ".sumela/.code-chunks-synced"  # code_chunks last-ingest timestamp (informational)
+    echo ".sumela/.code-chunks-synced"  # legacy code_chunks marker (no longer written; ignored so older-install leftovers never get committed)
     echo ".superpowers/"             # brainstorming skill runtime state
     echo "**/scripts/.superpowers/"
     echo "graphify-out/"             # Graphify plugin output

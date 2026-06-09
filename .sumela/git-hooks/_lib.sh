@@ -385,7 +385,6 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
   _sumela_qdrant_up || { echo "sumela: code_chunks sync skipped (Qdrant not reachable)"; return 0; }
 
   local log="$install/.sumela/.memory-sync.log"
-  local marker="$install/.sumela/.code-chunks-synced"
 
   # PRUNE removed code files (cheap) — always, in the background.
   if [ -n "$deleted" ]; then
@@ -427,7 +426,7 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
     else
       python3 "$ingest" --changed-file "$changed_list" || ok=1
     fi
-    if [ "$ok" -eq 0 ]; then date +%s >"$marker" 2>/dev/null; else echo "WARN: code ingest failed"; fi
+    [ "$ok" -ne 0 ] && echo "WARN: code ingest failed"
     [ -n "$changed_list" ] && rm -f "$changed_list"
     echo "===== code-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &

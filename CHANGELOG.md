@@ -110,9 +110,17 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   to a FULL walk when the collection is empty, so the first pull after setup builds the
   whole corpus (and `setup-memory` no longer leaves it for a manual/prompted build).
   `SUMELA_PULL_CODE_REINGEST=1` is repurposed to force a full tree re-embed on a pull;
-  `SUMELA_DISABLE_CODE_SYNC=1` still turns the whole thing off; the `.code-chunks-synced`
-  marker is now an informational last-ingest timestamp, not a staleness gate. Docstring,
-  `qdrant-session-memory/SKILL.md`, and `setup-memory.{sh,ps1}` updated to match.
+  `SUMELA_DISABLE_CODE_SYNC=1` still turns the whole thing off. The freshness decision
+  is now ground-truth (the script checks the collection's real `points_count`) rather
+  than the `.code-chunks-synced` marker — which fixes a false-negative where an index
+  built outside the hook (manual run / first setup) left the marker unwritten, so the
+  hook claimed code_chunks "has never been built" on every pull even with a full
+  collection (and the command it suggested, the standalone ingest, never wrote the
+  marker, so the warning was unsilenceable). The marker is retired: nothing reads or
+  writes it now (per-ingest timestamps live in `.sumela/.memory-sync.log`); its
+  `.gitignore` entry is kept only so leftover files from older installs aren't
+  committed. Docstring, `qdrant-session-memory/SKILL.md`, and `setup-memory.{sh,ps1}`
+  updated to match.
 
 ### Removed
 
