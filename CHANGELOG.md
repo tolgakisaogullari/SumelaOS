@@ -9,6 +9,26 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ## [Unreleased]
 
+### Added
+
+- **Information-gap routing FAMILY C — project-reference / how-to questions (v0.8.0).** The
+  eager `<information_gap_routing>` block (loaded every session) only had FAMILY A
+  (past-decision / "why" → Qdrant `chat_history`) and FAMILY B (call-graph / impact →
+  Graphify); a present-tense PROJECT-REFERENCE / how-to question ("how do we scaffold a
+  service here", "which port does X use", "is there a runbook for Y") matched neither, so
+  no tier fired before the skill loaded — the agent risked answering from training or a
+  blind grep instead of the project's curated docs. New FAMILY C routes these to Tier-3
+  (`_SEARCH_INDEX.md` keyword, mandatory) escalating to Tier-1b (Qdrant `wiki_pages`
+  semantic), with the Self-Check now auditing it too. Criteria are tight to avoid
+  false positives (fires ONLY for project-specific reference/how-to; excludes general
+  programming questions, in-progress edits, plain conversation, and anything already in
+  A/B). Also closes two adjacent gaps: Tier-1c (`code_chunks` semantic) is now an eager
+  escalation under FAMILY B when the graph is too narrow; and cold-start guards skip an
+  empty/unreachable `chat_history` (FAMILY A) or unindexed docs (FAMILY C) with a one-line
+  note instead of running empty queries. Trigger definitions stay canonical in the eager
+  layer; `using-second-brain`'s decision tree is updated as operational detail only (no
+  drift). Eager-layer growth: 18 lines added / 7 replaced (net +11).
+
 ### Security
 
 - **Hardened the pull-time update check (v0.7.1).** Post-review fixes to the v0.7.0

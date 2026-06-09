@@ -82,10 +82,20 @@ FAMILY B — Tier-2 (Graphify code graph at `graphify-out/graph.json`) — for s
 - "if I change X what breaks" — impact analysis.
 - "who depends on X" / "what references X".
 - References a function, class, method, file path, or entity by name + asks about its callers, callees, dependencies, or impact.
+- ESCALATION (Tier-1c): if the call-graph lookup is too narrow — the symbol isn't in the graph, or you need behavior/semantics rather than edges — run semantic code search: `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --collection code_chunks`.
 
-HARD RULE — for any FAMILY A match: Tier-1 query is MANDATORY before any `Read`, `git log`, or `grep`. For any FAMILY B match: Tier-2 query is MANDATORY before any `Read` or `grep`. For HYBRID questions matching both families (e.g., "why did we choose Adjacency List in Sprint 15, and which services does the Comment entity affect"): run BOTH Tier-1 AND Tier-2 in parallel, then synthesize. Skipping a matching tier and going straight to file/history reads is a workflow violation.
+FAMILY C — Tier-3 (`_SEARCH_INDEX.md` keyword) → Tier-1b (Qdrant `wiki_pages` semantic) — for PRESENT / forward-looking PROJECT-REFERENCE & how-to questions (distinct from A's "why / past" and B's "call-graph"):
+- "How do I / how do we …  IN THIS PROJECT" — add / wire / scaffold / configure / deploy a project-specific thing (e.g., "how to add a Kafka producer here", "how do we scaffold a new service").
+- "Where is X documented" / "what's our convention or pattern for Y" / "is there a checklist or runbook for Z".
+- "Which project-specific tool / port / route / pipeline / setting applies" — project facts that live in curated docs (tooling list, port map, ADRs, entity defs), NOT in the call graph.
+- FIRES ONLY when the answer should come from THIS PROJECT's curated docs. Does NOT fire for: general programming / language / library questions answerable without project context; a coding or edit task already in progress (query only when you actually lack a project convention you don't have); plain conversation, greetings, acknowledgements, or trivial clarifications; or anything already matched by Family A or B (route it there).
 
-CONCRETE PROTOCOL (run in order, stop as soon as you have a complete answer):
+HARD RULE — for any FAMILY A match: Tier-1 query is MANDATORY before any `Read`, `git log`, or `grep`. For any FAMILY B match: Tier-2 query is MANDATORY before any `Read` or `grep`. For any FAMILY C match: Tier-3 (`_SEARCH_INDEX.md`) is MANDATORY before answering from training knowledge or a blind `grep`/`Read`, escalating to Tier-1b (`wiki_pages`) when Tier-3 misses or the question is conceptual. For HYBRID questions matching more than one family (e.g., "why did we choose Adjacency List in Sprint 15, and which services does the Comment entity affect"): run the matching tiers (in parallel where independent), then synthesize. PRECEDENCE when a question could match more than one: a code SYMBOL's structure/behavior ("what does ServiceX do") is FAMILY B (run Tier-2 first; escalate to C's Tier-1b only if the graph doesn't answer); reserve FAMILY C for project facts/conventions/how-to that aren't a named symbol. Skipping a matching tier and going straight to file/history reads is a workflow violation.
+
+CONCRETE PROTOCOL — first DISPATCH on the matching family, then run that route (stop as soon as the answer is complete):
+  - FAMILY C only (project how-to/reference, no A/B match) → skip straight to STEP 3 (do NOT run the Tier-1/Tier-2 queries — they'd be empty).
+  - FAMILY A and/or B → run STEP 1A / STEP 1B (both, in parallel, if both match), then STEP 2.
+  - STEP 3 and STEP 4 are the fallback routes for A/B and the primary route for C.
 
 STEP 1A — Tier-1 query (Qdrant `chat_history`, MANDATORY for FAMILY A):
   Bash:        `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<verbatim user query>" --limit 3`
@@ -119,19 +129,20 @@ STEP 2 — Evaluate result(s):
   - Tier-1 hit (top score ≥ 0.5): read the matching `wiki/session-summaries/<file>.md` referenced by `session_id`. Cite explicitly (in the interaction language): *"Source: session 2026-XX-XX (Qdrant score 0.XX)"*.
   - Tier-2 hit (subgraph returned with relevant nodes): cite file/line refs from the subgraph (e.g., *"Graphify graph: <source_file>:L<line>"*). Read the cited file ONLY if the graph alone does not answer.
   - Hybrid hit (both tiers returned useful content): synthesize the answer using both, citing each tier separately.
+  - COLD-START (FAMILY A): if Tier-1 is empty or unreachable — no `chat_history` yet (a fresh adoption: summaries are ingested at handoff / branch-finish), or Qdrant down — note it ONCE ("no session history yet") and continue; do NOT re-run the empty query.
   - All tiers low / empty: continue to STEP 3.
 
-STEP 3 — Tier-3 (curated index, FALLBACK):
-  - Read `docs/second-brain/wiki/_SEARCH_INDEX.md`.
-  - Match query terms against the `Tags` and `Key Terms` columns.
-  - Read each matched wiki page; cite the page name in your answer.
+STEP 3 — Tier-3 (curated index `_SEARCH_INDEX.md`) — PRIMARY for FAMILY C, FALLBACK for A/B:
+  - Read `docs/second-brain/wiki/_SEARCH_INDEX.md`; match query terms against the `Tags` and `Key Terms` columns; read each matched wiki page and cite it.
+  - FAMILY C escalation (Tier-1b) — when the index misses or the question is conceptual/semantic: `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<query>" --collection wiki_pages`. Cite the page (`page_path`, score).
+  - COLD-START (FAMILY C): if `_SEARCH_INDEX.md` is absent/empty AND `wiki_pages` returns nothing (a fresh adoption with no curated docs indexed yet), note it ONCE ("no curated project docs indexed yet") and fall through to STEP 4 — do not loop.
 
 STEP 4 — Tier-4 (exact fallback, ONLY if Tiers 1-3 yielded nothing):
   - `grep` / `Select-String` / `git log` / direct `Read` on a known path.
   - Cite the exact line or commit you synthesized from.
 
 SELF-CHECK BEFORE READ — before issuing ANY `Read`, `grep`, or `git log` tool call, silently confirm:
-  *"Did I run Tier-1 (Qdrant via `query-qdrant.py`) for past-decision questions? Did I run Tier-2 (`query-graph.py` primary; `graphify` CLI secondary) for structural/call-graph questions? For hybrid, did I run both?"*
+  *"Did I run Tier-1 (Qdrant via `query-qdrant.py`) for past-decision questions (FAMILY A)? Did I run Tier-2 (`query-graph.py` primary; `graphify` CLI secondary) for structural/call-graph questions (FAMILY B)? Did I run Tier-3 (`_SEARCH_INDEX.md`, escalating to `wiki_pages`) for project-reference / how-to questions (FAMILY C)? For hybrid, did I run each matching tier?"*
   If the answer is no for any applicable family, run the missing tier immediately. Do not rationalize ("grep will be faster", "the file is small", "I remember this", "the script might not exist") — `bash` is allowed in this agent's frontmatter, and the memory scripts ARE present and active (the code graph is rebuilt via `scripts/auto-update-memory.py`, and session summaries are ingested via `session-ingest.py`).
 
 WHY THIS MATTERS: when the memory plugins are active, this project (a) ingests every session summary into Qdrant via `session-ingest.py`, and (b) maintains a fresh code graph (nodes + edges, including a large set of `calls` edges) via `auto-update-memory.py`. Tier-1 answers "why we did X" instantly with citation, where `git log` would take a multi-step search. Tier-2 answers "who calls X" with full callers + callees + transitive impact closure — `grep` cannot provide this because it only matches the literal token, not the call relationship. `query-graph.py` reads the graph directly because the upstream `graphify` CLI hides call edges in BFS/explain modes; the script is a thin, fast view onto edges that already exist on disk. The agent that bypasses these tiers re-derives knowledge slowly and incompletely from less reliable sources.

@@ -197,24 +197,28 @@ There is NO separate "user query" vs "agent reasoning" branch. Same tiers, same 
 | 3 | Obsidian `_SEARCH_INDEX.md` | Match keyword against Tags + Key Terms columns, then read matched pages | ADRs, sprint plans, entity definitions, documented patterns |
 | 4 | Grep / Read fallback | `grep` / `Select-String` / `Read` on known path | Exact string match when Tiers 1–3 return nothing |
 
-### Hard Rule — Historical / Decision Questions
+### Hard Rule — route by family before any direct `Read`
 
-Any question referencing past sessions, sprint choices, architecture rationale, or documented decisions is AUTOMATICALLY a Tier-1 + Tier-3 candidate. NEVER skip these tiers by going directly to a known file path. Direct `Read` on a known path for a "why" or "what did we decide" question is a workflow violation.
+Family definitions are canonical in the eager `<information_gap_routing>` block; this is operational detail only. Match the question to a family and run its tier(s) BEFORE going to a known file path:
+- FAMILY A (past sessions, sprint choices, architecture rationale, documented decisions) → Tier-1 (`chat_history`), then Tier-3 if more context is needed.
+- FAMILY B (call-graph / callers / impact on a named symbol) → Tier-2 (Graphify); escalate to Tier-1c (`code_chunks`) if the graph is too narrow.
+- FAMILY C (project reference / how-to / convention / "where is it documented") → Tier-3 (`_SEARCH_INDEX.md`), escalate to Tier-1b (`wiki_pages`).
+Direct `Read`/`grep` on a known path for a question that matches any family — bypassing its tier — is a workflow violation.
 
 ### Self-Check Before Any `Read`
 
-Before issuing a `Read` tool call to answer a historical/decision/structural question, silently confirm: *"Did I check Tier 1 (Qdrant) and Tier 3 (`_SEARCH_INDEX.md`) first?"* If not, run them before the `Read`.
+Before issuing a `Read` tool call, silently confirm: *"Which family is this (A/B/C, or none)? Did I run that family's tier(s) — Tier-1 / Tier-2(+1c) / Tier-3(+1b) — first?"* If a matching tier hasn't run, run it before the `Read`. (A pure-conversation or in-progress-edit turn matches no family — no tier required.)
 
 ### Decision tree (auto-apply, no user input needed)
 
 ```
 Information gap detected.
-├── Past session / prior decision / "why" question?
-│   └── YES → Tier 1 (Qdrant). Then Tier 3 if more context needed.
-├── Code structure / call graph / impact analysis?
-│   └── YES → Tier 2 (Graphify).
-├── ADR / sprint plan / entity definition?
-│   └── YES → Tier 3 (`_SEARCH_INDEX.md` keyword match → read matched pages).
+├── Past session / prior decision / "why" question? (FAMILY A)
+│   └── YES → Tier 1 (Qdrant `chat_history`). Then Tier 3 if more context needed.
+├── Code structure / call graph / impact analysis? (FAMILY B)
+│   └── YES → Tier 2 (Graphify). Escalate to Tier 1c (`code_chunks` semantic) if the graph is too narrow.
+├── Project reference / how-to / convention / "where is it documented" / ADR / sprint plan / entity definition? (FAMILY C)
+│   └── YES → Tier 3 (`_SEARCH_INDEX.md` keyword match → read matched pages) → escalate to Tier 1b (`wiki_pages` semantic) if the index misses.
 └── Else → Tier 4 (grep / Read on known path).
 ```
 
