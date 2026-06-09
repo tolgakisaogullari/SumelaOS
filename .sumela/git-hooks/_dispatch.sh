@@ -10,7 +10,7 @@
 # args. For pre-commit it fails if ANY install's hook fails (so no install's checks
 # can be silently skipped); the memory hooks are best-effort and already self-gate.
 #
-# This script keys off its own basename, so the three copies share one body.
+# This script keys off its own basename, so the four copies share one body.
 set -uo pipefail
 
 hook="$(basename "$0")"

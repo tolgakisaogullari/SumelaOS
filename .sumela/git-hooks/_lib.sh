@@ -418,7 +418,8 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
     echo "sumela: re-embedding $(printf '%s\n' "$changed" | grep -c .) changed code file(s) into Qdrant code_chunks in background (incremental; log: .sumela/.memory-sync.log)"
   fi
 
-  ( cd "$install" || exit 0
+  ( trap '[ -n "$changed_list" ] && rm -f "$changed_list"' EXIT   # clean up even if cd below fails
+    cd "$install" || exit 0
     echo "===== code-sync(ingest) @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="
     local ok=0
     if [ -n "$full" ]; then
@@ -427,7 +428,6 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
       python3 "$ingest" --changed-file "$changed_list" || ok=1
     fi
     [ "$ok" -ne 0 ] && echo "WARN: code ingest failed"
-    [ -n "$changed_list" ] && rm -f "$changed_list"
     echo "===== code-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &
   return 0
