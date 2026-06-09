@@ -176,6 +176,22 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Fixed
 
+- **`.gitignore` runtime-artifact entries now reach UPGRADED installs, not just fresh ones
+  (v0.7.2).** `.gitignore` is OVERLAY (the updater never overwrites it), so a managed
+  pattern that a release added to setup's seed block — e.g. `.sumela/.update-check` in
+  0.7.1 — landed only on fresh installs; projects upgrading via `update.{sh,ps1}` never
+  got it, leaving the hook's cache file UNTRACKED (status noise / accidental-commit risk).
+  Root cause was structural: the managed list lived only inside `setup.{sh,ps1}`, and even
+  setup's own "backfill newer entries" guard was a hand-maintained subset that had drifted
+  (it listed `.sumela/_migration/` + `AGENTS.md.bak*` but not the newer cache files). Fix:
+  the managed patterns now live in ONE language-agnostic source,
+  `scripts/lib/sumela-gitignore.list`, read by `setup.sh`/`setup.ps1` (seed + full backfill)
+  AND by a new idempotent reconcile step in `update.sh`/`update.ps1` (adds only patterns
+  absent anywhere in `.gitignore`, never duplicates an existing entry, never touches the
+  user's own lines; diff + consent, auto on `--yes`, shown-only on `--dry-run`; creates
+  `.gitignore` if absent; monorepo-subdir aware). Adding a future runtime-artifact pattern
+  is now a one-line edit to the shared list that reaches fresh and upgraded installs alike.
+
 - **Qdrant ingestion no longer silently no-ops in adopted projects.** The Qdrant plugin's
   `get_repo_root()` (`memory-plugins/qdrant-session-memory/scripts/lib/memory_ingest.py`)
   hard-coded "three levels up" from the module, which resolved to the *plugin* directory

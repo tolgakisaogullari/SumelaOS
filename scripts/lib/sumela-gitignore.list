@@ -1,0 +1,16 @@
+# SumelaOS-managed .gitignore patterns — SINGLE SOURCE for setup + update, both shells.
+# One gitignore pattern per line; '#' comments and blank lines are ignored.
+# Add a new per-developer / runtime-artifact pattern HERE only: setup.sh (seed),
+# update.sh (reconcile on upgrade), and the PowerShell equivalents all read this file,
+# so a new entry reaches fresh AND upgraded installs without drift.
+.sumela/local.md
+.sumela/.memory-sync.log
+.sumela/.graph-sync.log
+.sumela/.code-chunks-synced
+.sumela/.update-check
+.superpowers/
+**/scripts/.superpowers/
+graphify-out/
+qdrant-storage/
+.sumela/_migration/
+AGENTS.md.bak*

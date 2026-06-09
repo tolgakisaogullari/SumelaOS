@@ -82,6 +82,43 @@ try {
     $srcVer = Read-Ver $src
     $localVer = Read-Ver $root
     Write-Info "Local core version: $localVer    Upstream: $srcVer"
+
+    # --- Reconcile the SumelaOS-managed .gitignore patterns ------------------
+    # Runs BEFORE the version gate, so even an already-current install backfills any
+    # newly-shipped managed pattern. .gitignore is OVERLAY (never overwritten), so new
+    # managed runtime-artifact patterns would otherwise reach only fresh installs, not
+    # upgrades. Backfill any missing pattern from the single source
+    # (scripts/lib/sumela-gitignore.list in the new $src). Idempotent; only ADDS absent
+    # patterns; never touches the user's lines.
+    $giListFile = Join-Path $src "scripts/lib/sumela-gitignore.list"
+    if (Test-Path $giListFile) {
+        $giPatterns = Get-Content $giListFile | Where-Object { $_ -notmatch '^\s*(#|$)' } | ForEach-Object { $_.Trim() }
+        $giFile = Join-Path $root ".gitignore"
+        $giExisting = if (Test-Path $giFile) { Get-Content $giFile } else { @() }
+        $giMissing = @($giPatterns | Where-Object { $giExisting -cnotcontains $_ })
+        if ($giMissing.Count -gt 0) {
+            Write-Host ""
+            Write-Info ".gitignore is missing $($giMissing.Count) SumelaOS runtime-artifact pattern(s):"
+            foreach ($ln in $giMissing) { Write-Host "  + $ln" }
+            if ($DryRun) {
+                Write-Warn "--DryRun: would add the above to $giFile (nothing written)"
+            }
+            else {
+                $doGi = $true
+                if (-not $Yes) {
+                    $ans = Read-Host "Add these to .gitignore? [Y/n]"
+                    if ($ans -match '^(n|N)') { $doGi = $false; Write-Info "skipped .gitignore reconcile" }
+                }
+                if ($doGi) {
+                    if ((Test-Path $giFile) -and ((Get-Item $giFile).Length -gt 0)) { Add-Content $giFile "" }
+                    Add-Content $giFile "# SumelaOS — runtime artifacts (reconciled by update.ps1)"
+                    foreach ($ln in $giMissing) { Add-Content $giFile $ln }
+                    Write-Ok ".gitignore reconciled (+$($giMissing.Count))"
+                }
+            }
+        }
+    }
+
     if (($srcVer -eq $localVer) -and (-not $Force)) {
         Write-Ok "Already on core version $localVer. (Use -Force to re-check files anyway.)"
         exit 0

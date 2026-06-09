@@ -99,6 +99,53 @@ read_ver() { [ -f "$1/.sumela/VERSION" ] && tr -d '[:space:]' < "$1/.sumela/VERS
 SRC_VER="$(read_ver "$SRC")"
 LOCAL_VER="$(read_ver "$ROOT")"
 info "Local core version: ${LOCAL_VER}    Upstream: ${SRC_VER}"
+# --- Reconcile the SumelaOS-managed .gitignore patterns ----------------------
+# Runs BEFORE the version gate, so even an already-current install backfills any
+# newly-shipped managed pattern. .gitignore is OVERLAY (never overwritten), so new
+# managed runtime-artifact patterns would otherwise reach only FRESH installs, not
+# projects that upgrade via this script (the gap that left .sumela/.update-check
+# untracked on upgrade from <0.7.1). Backfill from the SINGLE SOURCE that setup.sh
+# also uses (scripts/lib/sumela-gitignore.sh, taken from the new $SRC). Idempotent:
+# only ADDS patterns absent anywhere in .gitignore; never duplicates an existing
+# entry and never touches the user's own lines.
+reconcile_gitignore() {
+  local lib="$SRC/scripts/lib/sumela-gitignore.sh"
+  [ -f "$lib" ] || return 0
+  # shellcheck disable=SC1090
+  . "$lib"
+  command -v sumela_gitignore_lines >/dev/null 2>&1 || return 0
+
+  local gi="$ROOT/.gitignore" ln yn=""
+  local -a missing=()
+  while IFS= read -r ln; do
+    [ -n "$ln" ] || continue
+    if [ -f "$gi" ] && grep -qxF "$ln" "$gi" 2>/dev/null; then continue; fi
+    missing+=( "$ln" )
+  done <<EOF
+$(sumela_gitignore_lines)
+EOF
+
+  [ "${#missing[@]}" -gt 0 ] || return 0
+
+  echo ""
+  info ".gitignore is missing ${#missing[@]} SumelaOS runtime-artifact pattern(s):"
+  for ln in ${missing[@]+"${missing[@]}"}; do echo "  + $ln"; done
+
+  if [ "$DRY_RUN" = true ]; then warn "--dry-run: would add the above to $gi (nothing written)"; return 0; fi
+  if [ "$ASSUME_YES" != true ]; then
+    printf "Add these to .gitignore? [Y/n]: "
+    read -r yn || yn=""; case "$yn" in n|N) info "skipped .gitignore reconcile"; return 0 ;; esac
+  fi
+
+  {
+    [ -s "$gi" ] && echo ""
+    echo "# SumelaOS — runtime artifacts (reconciled by update.sh)"
+    for ln in ${missing[@]+"${missing[@]}"}; do echo "$ln"; done
+  } >> "$gi"
+  ok ".gitignore reconciled (+${#missing[@]} entr$([ "${#missing[@]}" -eq 1 ] && echo y || echo ies))"
+}
+reconcile_gitignore
+
 if [ "$SRC_VER" = "$LOCAL_VER" ] && [ "$FORCE" != true ]; then
   ok "Already on core version ${LOCAL_VER}. (Use --force to re-check files anyway.)"
   exit 0

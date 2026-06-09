@@ -770,37 +770,32 @@ else {
 # =============================================================================
 Write-Info "Ensuring .gitignore covers per-developer / runtime artifacts..."
 $gitignoreMarker = "# SumelaOS — per-developer / runtime artifacts"
-# Guard on the stable entry line (not the comment) so re-runs and the framework
-# repo's own .gitignore are both detected and not duplicated.
-if ((Test-Path .gitignore) -and (Select-String -Path .gitignore -Pattern '^\.sumela/local\.md$' -Quiet)) {
-    Write-Ok ".gitignore already ignores per-developer artifacts"
+# The managed pattern list is the SINGLE SOURCE shared with update.ps1's reconcile
+# (scripts/lib/sumela-gitignore.list), so new entries can't reach fresh installs while
+# silently missing on the upgrade path.
+$giListFile = Join-Path $PSScriptRoot "lib/sumela-gitignore.list"
+if (-not (Test-Path $giListFile)) {
+    Write-Warn "scripts/lib/sumela-gitignore.list missing — skipping .gitignore artifact seeding"
 }
 else {
-    if ((Test-Path .gitignore) -and ((Get-Item .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
-    Add-Content .gitignore "$gitignoreMarker (never commit)"
-    Add-Content .gitignore ".sumela/local.md"
-    Add-Content .gitignore ".sumela/.memory-sync.log"
-    Add-Content .gitignore ".sumela/.graph-sync.log"
-    Add-Content .gitignore ".sumela/.code-chunks-synced"
-    Add-Content .gitignore ".sumela/.update-check"
-    Add-Content .gitignore ".superpowers/"
-    Add-Content .gitignore "**/scripts/.superpowers/"
-    Add-Content .gitignore "graphify-out/"
-    Add-Content .gitignore "qdrant-storage/"
-    Add-Content .gitignore ".sumela/_migration/"
-    Add-Content .gitignore "AGENTS.md.bak*"
-    Write-Ok ".gitignore SumelaOS block added"
-}
-
-# Independent line-guards for entries added AFTER the block first shipped: the block
-# above is skipped wholesale when `.sumela/local.md` is already present (an upgraded
-# project), so newer lines would never land. Append each individually if missing.
-foreach ($ln in @(".sumela/_migration/", "AGENTS.md.bak*")) {
-    # -SimpleMatch searches the pattern LITERALLY, so pass the raw line (NOT
-    # [regex]::Escape, which would inject backslashes and never match → duplicate
-    # appends every run). Matches the idiom used by the §6c / secret-baseline guards.
-    $present = (Test-Path .gitignore) -and (Select-String -Path .gitignore -Pattern $ln -SimpleMatch -Quiet)
-    if (-not $present) { Add-Content .gitignore $ln }
+    $giPatterns = Get-Content $giListFile | Where-Object { $_ -notmatch '^\s*(#|$)' } | ForEach-Object { $_.Trim() }
+    # First-time: grouped, marked block. Guard on the stable marker so re-runs and the
+    # framework repo's own .gitignore don't duplicate it.
+    if (-not ((Test-Path .gitignore) -and (Select-String -Path .gitignore -SimpleMatch -Pattern $gitignoreMarker -Quiet))) {
+        if ((Test-Path .gitignore) -and ((Get-Item .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
+        Add-Content .gitignore "$gitignoreMarker (never commit)"
+        foreach ($ln in $giPatterns) { Add-Content .gitignore $ln }
+        Write-Ok ".gitignore SumelaOS block added"
+    }
+    # Backfill any managed pattern missing — covers upgraded projects whose block
+    # predates newer entries. Whole-line, case-sensitive match (-ccontains) so it is
+    # idempotent and never duplicates; never touches the user's own lines.
+    $added = 0
+    foreach ($ln in $giPatterns) {
+        $giNow = if (Test-Path .gitignore) { Get-Content .gitignore } else { @() }
+        if ($giNow -cnotcontains $ln) { Add-Content .gitignore $ln; $added++ }
+    }
+    if ($added -gt 0) { Write-Ok ".gitignore backfilled (+$added managed entries)" } else { Write-Ok ".gitignore already covers per-developer artifacts" }
 }
 
 # Secret-file baseline — never commit credentials. Idempotent via its own marker

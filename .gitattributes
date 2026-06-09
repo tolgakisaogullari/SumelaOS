@@ -18,3 +18,7 @@
 #  - This rule is hardcoded to the default wiki path. If you relocate the wiki
 #    (custom WIKI_PATH), update this path or union protection silently won't apply.
 docs/second-brain/wiki/_LOG.md merge=union
+
+# The managed-.gitignore single source is matched line-for-line by setup/update on
+# both shells — pin it to LF so a Windows checkout can't introduce CRLF mismatches.
+scripts/lib/sumela-gitignore.list text eol=lf

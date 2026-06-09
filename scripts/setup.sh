@@ -845,37 +845,36 @@ fi
 # =============================================================================
 info "Ensuring .gitignore covers per-developer / runtime artifacts..."
 GITIGNORE_MARKER="# SumelaOS — per-developer / runtime artifacts"
-# Guard on the stable entry line (not the comment) so re-runs AND the framework
-# repo's own .gitignore — which already lists these under different headers — are
-# both detected and not duplicated.
-if [ -f .gitignore ] && grep -qxF ".sumela/local.md" .gitignore; then
-  ok ".gitignore already ignores per-developer artifacts"
+# The managed pattern list is the SINGLE SOURCE shared with update.sh's reconcile
+# (scripts/lib/sumela-gitignore.sh), so new entries can't reach fresh installs while
+# silently missing on the upgrade path.
+_gi_lib="$(dirname "$0")/lib/sumela-gitignore.sh"
+[ -f "$_gi_lib" ] && . "$_gi_lib"
+if ! command -v sumela_gitignore_lines >/dev/null 2>&1; then
+  warn "scripts/lib/sumela-gitignore.sh missing — skipping .gitignore artifact seeding"
 else
-  {
-    [ -s .gitignore ] && echo ""
-    echo "$GITIGNORE_MARKER (never commit)"
-    echo ".sumela/local.md"          # per-developer interaction-language override
-    echo ".sumela/.memory-sync.log"  # memory-sync hook log
-    echo ".sumela/.graph-sync.log"   # graph-sync hook log
-    echo ".sumela/.code-chunks-synced"  # legacy code_chunks marker (no longer written; ignored so older-install leftovers never get committed)
-    echo ".sumela/.update-check"     # upstream version-check cache (rate-limit)
-    echo ".superpowers/"             # brainstorming skill runtime state
-    echo "**/scripts/.superpowers/"
-    echo "graphify-out/"             # Graphify plugin output
-    echo "qdrant-storage/"           # Qdrant plugin storage
-    echo ".sumela/_migration/"       # brownfield migration quarantine (may hold legacy secrets — never commit)
-    echo "AGENTS.md.bak*"            # setup backup(s) of a pre-existing AGENTS.md (may hold legacy secrets)
-  } >> .gitignore
-  ok ".gitignore SumelaOS block added"
+  # First-time: write the grouped, marked block. Guard on the stable marker so re-runs
+  # and the framework repo's own .gitignore don't duplicate it.
+  if [ ! -f .gitignore ] || ! grep -qF "$GITIGNORE_MARKER" .gitignore; then
+    {
+      [ -s .gitignore ] && echo ""
+      echo "$GITIGNORE_MARKER (never commit)"
+      sumela_gitignore_lines
+    } >> .gitignore
+    ok ".gitignore SumelaOS block added"
+  fi
+  # Backfill any managed pattern missing — covers upgraded projects whose block
+  # predates newer entries. Idempotent (grep -qxF) and order-preserving; never
+  # touches the user's own lines. Same list update.sh reconciles against.
+  _added=0
+  while IFS= read -r _ln; do
+    [ -n "$_ln" ] || continue
+    grep -qxF "$_ln" .gitignore 2>/dev/null || { printf '%s\n' "$_ln" >> .gitignore; _added=$((_added+1)); }
+  done <<EOF
+$(sumela_gitignore_lines)
+EOF
+  [ "$_added" -gt 0 ] && ok ".gitignore backfilled (+$_added managed entr$([ "$_added" -eq 1 ] && echo y || echo ies))" || ok ".gitignore already covers per-developer artifacts"
 fi
-
-# Independent line-guards for entries added AFTER the block first shipped: the block
-# above is skipped wholesale when `.sumela/local.md` is already present (an upgraded
-# project), so newer lines would never land. Append each individually if missing —
-# this keeps the secret-bearing quarantine + AGENTS backup ignored on the upgrade path.
-for _ln in ".sumela/_migration/" "AGENTS.md.bak*"; do
-  grep -qxF "$_ln" .gitignore 2>/dev/null || printf '%s\n' "$_ln" >> .gitignore
-done
 
 # Secret-file baseline — never commit credentials. Idempotent via its own marker
 # (not a single content line) so all patterns land even when the project already
