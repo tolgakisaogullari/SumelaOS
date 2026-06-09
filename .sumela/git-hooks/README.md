@@ -95,12 +95,23 @@ On `git pull` / branch checkout, `post-merge`/`post-checkout` also run
 suggesting `bash scripts/update.sh`. The probe runs at most once per
 `SUMELA_UPDATE_CHECK_INTERVAL` (default 24h), cached in the gitignored
 `.sumela/.update-check`; the notice keeps showing every pull (from cache) until you
-update. It is **best-effort**: offline / no git / no upstream tags → silent, never
-blocks a git op. The upstream URL is read from `.sumela/upstream.conf` (the same
-single source `scripts/update.sh` uses; fork-overridable). Privacy: this is an
-anonymous tag listing of a public repo — it discloses only your IP to the host (as
-any git operation does) and sends no project data. Opt out with
-`export SUMELA_DISABLE_UPDATE_CHECK=1`.
+update. It is **best-effort**: offline / no git / no upstream tags → silent.
+
+**Never blocks the pull:** the network probe runs in a *detached background* process
+(macOS has no portable `timeout`), and the notice is printed synchronously from the
+cache — so a freshly-published release shows on the *next* pull, and a slow/unreachable
+upstream can't stall git.
+
+**Security:** the upstream URL is read from `.sumela/upstream.conf` (the same single
+source `scripts/update.sh` uses; fork-overridable). Because that file is **tracked**, a
+malicious branch could repoint it — so the probe (and the updater's clone) run with
+`GIT_ALLOW_PROTOCOL=https:ssh:git` to refuse git's `ext::`/`file::` transports (which
+can execute commands) and with `GIT_TERMINAL_PROMPT=0` + ssh `BatchMode` so it never
+prompts. Still, treat `.sumela/upstream.conf` as security-sensitive like
+`.sumela/git-hooks/**` — a `CODEOWNERS` rule (`/.sumela/upstream.conf @your-security-owners`)
+is recommended. Privacy: the probe is an anonymous tag listing of a public repo — it
+discloses only your IP to the host (as any git operation does) and sends no project
+data. Opt out entirely with `export SUMELA_DISABLE_UPDATE_CHECK=1`.
 
 ## Known limitations
 

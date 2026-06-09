@@ -49,6 +49,8 @@ Set-Location $root
 
 # Single source for the upstream URL (fork-overridable, shared with the pull-time
 # update check): honor .sumela/upstream.conf unless -SourceDir/-RepoUrl was given.
+# NOTE: upstream.conf is NOT a CORE file, so once a fork sets it, updates never
+# overwrite it — to re-sync to the original upstream, edit/delete it manually.
 if ((-not $SourceDir) -and ($RepoUrl -eq "https://github.com/tolgakisaogullari/SumelaOS.git") -and (Test-Path (Join-Path $root ".sumela/upstream.conf"))) {
     $cfgUrl = (Get-Content (Join-Path $root ".sumela/upstream.conf") | Where-Object { $_ -notmatch '^\s*(#|$)' } | Select-Object -First 1)
     if ($cfgUrl) { $RepoUrl = $cfgUrl.Trim() }
@@ -64,7 +66,11 @@ try {
     else {
         $cloneTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("sumela-" + [System.Guid]::NewGuid().ToString())
         Write-Info "Cloning $RepoUrl ..."
+        # Restrict transports so a poisoned .sumela/upstream.conf can't run code via
+        # git's ext::/file:: transport (framework is only fetched over https/ssh/git).
+        $env:GIT_ALLOW_PROTOCOL = "https:ssh:git"
         & git clone --depth 1 $RepoUrl $cloneTmp 2>$null | Out-Null
+        $env:GIT_ALLOW_PROTOCOL = $null
         if ($LASTEXITCODE -ne 0) { Write-Err "clone failed"; exit 1 }
         $src = $cloneTmp
     }

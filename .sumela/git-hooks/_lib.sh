@@ -446,11 +446,13 @@ _sumela_upstream_repo() {  # $1 = install root
 }
 
 # Best-effort "a newer SumelaOS is available" notice. Piggybacks on the pull/checkout
-# hooks: probes the upstream's release tags at most once per interval (default 24h)
-# via a gitignored cache, then prints a non-blocking one-liner until you update.
-# Uses `git ls-remote --tags` (the caller's git auth — works for public AND private
-# upstreams, no clone). Silent on any failure (offline, no git, no tags yet) and
-# never blocks or fails a git operation. Opt out: SUMELA_DISABLE_UPDATE_CHECK=1.
+# hooks. Refreshes the upstream's latest release tag at most once per interval
+# (default 24h) in a DETACHED background probe (`git ls-remote --tags` — the caller's
+# git auth, works for public AND private upstreams, no clone), cached in a gitignored
+# file; the non-blocking one-liner is printed SYNCHRONOUSLY from that cache, so a
+# newly-tagged release shows on the next pull. Silent on any failure (offline, no git,
+# no tags yet); the probe is backgrounded + protocol-restricted so it can never block,
+# prompt, or be hijacked. Opt out: SUMELA_DISABLE_UPDATE_CHECK=1.
 sumela_update_check() {
   [ -n "${SUMELA_DISABLE_UPDATE_CHECK:-}" ] && return 0
   command -v git >/dev/null 2>&1 || return 0
@@ -468,25 +470,35 @@ sumela_update_check() {
   local now last=0 remote=""
   now="$(date +%s 2>/dev/null || echo 0)"
   if [ -f "$cache" ]; then
-    last="$(awk 'NR==1{print $1}' "$cache" 2>/dev/null)"; [ -n "$last" ] || last=0
+    last="$(awk 'NR==1{print $1}' "$cache" 2>/dev/null)"
+    case "$last" in ""|*[!0-9]*) last=0 ;; esac          # tolerate a corrupt/garbled cache
     remote="$(awk 'NR==1{print $2}' "$cache" 2>/dev/null)"
+    case "$remote" in *[!0-9.]*) remote="" ;; esac       # only a dotted-numeric version is usable
   fi
 
-  # Probe upstream at most once per interval; otherwise reuse the cached version so
-  # the notice keeps showing every pull without re-hitting the network.
-  if [ "$((now - last))" -ge "$interval" ] || [ -z "$remote" ]; then
-    local url to="" fresh
-    url="$(_sumela_upstream_repo "$install")"
-    command -v timeout >/dev/null 2>&1 && to="timeout 5"
-    fresh="$($to git ls-remote --tags --refs "$url" 2>/dev/null \
-      | sed -n 's#.*refs/tags/v\([0-9][0-9.]*\)$#\1#p' | sort -V | tail -1)"
-    [ -n "$fresh" ] && remote="$fresh"
-    # Stamp the attempt (even on failure) so we don't re-probe every pull; keep any
-    # previously cached remote for the notice below.
+  # Refresh at most once per interval, in a DETACHED background probe so a slow or
+  # unreachable upstream can NEVER block the pull (there is no portable `timeout` —
+  # macOS ships neither timeout nor gtimeout). The notice below is printed
+  # synchronously from whatever the cache already holds, so a freshly-published
+  # release surfaces on the NEXT pull. The probe is hardened:
+  #   * GIT_ALLOW_PROTOCOL — refuse ext::/file:: etc. so a poisoned upstream.conf
+  #     (a tracked file, pullable from an untrusted branch) can't turn this auto-run
+  #     probe into code execution via git's ext:: transport.
+  #   * GIT_TERMINAL_PROMPT=0 + ssh BatchMode — never prompt for credentials.
+  if [ "$((now - last))" -ge "$interval" ]; then
+    local url; url="$(_sumela_upstream_repo "$install")"
+    # Claim the interval slot now (sync) so concurrent/next pulls don't re-spawn.
     printf '%s\t%s\n' "$now" "$remote" > "$cache" 2>/dev/null
+    ( fresh="$(env GIT_TERMINAL_PROMPT=0 GIT_ALLOW_PROTOCOL=https:ssh:git \
+          GIT_SSH_COMMAND='ssh -oBatchMode=yes -oConnectTimeout=5' \
+          GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=5 \
+          git ls-remote --tags --refs "$url" 2>/dev/null \
+        | sed -n 's#.*refs/tags/v\([0-9][0-9.]*\)$#\1#p' | sort -V | tail -1)"
+      [ -n "$fresh" ] && printf '%s\t%s\n' "$now" "$fresh" > "$cache" 2>/dev/null
+    ) >/dev/null 2>&1 </dev/null &
   fi
 
-  # Notice only if the upstream version is STRICTLY newer than local.
+  # Notice (from cache) only if the upstream version is STRICTLY newer than local.
   [ -n "$remote" ] || return 0
   [ "$remote" = "$local_ver" ] && return 0
   [ "$(printf '%s\n%s\n' "$local_ver" "$remote" | sort -V | tail -1)" = "$remote" ] || return 0

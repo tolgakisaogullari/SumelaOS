@@ -69,6 +69,8 @@ cd "$ROOT" || { err "Cannot cd to project root"; exit 1; }
 
 # Single source for the upstream URL (fork-overridable, shared with the pull-time
 # update check): honor .sumela/upstream.conf unless --repo/--source was given.
+# NOTE: upstream.conf is NOT a CORE file, so once a fork sets it, updates never
+# overwrite it — to re-sync to the original upstream, edit/delete it manually.
 if [ -z "$SOURCE_DIR" ] && [ "$REPO_URL" = "$REPO_URL_DEFAULT" ] && [ -f "$ROOT/.sumela/upstream.conf" ]; then
   _cfg_url="$(grep -vE '^[[:space:]]*(#|$)' "$ROOT/.sumela/upstream.conf" 2>/dev/null | head -1 | tr -d '[:space:]')"
   [ -n "$_cfg_url" ] && REPO_URL="$_cfg_url"
@@ -86,7 +88,9 @@ else
   command -v git >/dev/null 2>&1 || { err "git not found and no --source given"; exit 1; }
   CLONE_TMP="$(mktemp -d)"
   info "Cloning $REPO_URL ..."
-  git clone --depth 1 "$REPO_URL" "$CLONE_TMP" >/dev/null 2>&1 || { err "clone failed"; exit 1; }
+  # Restrict transports so a poisoned .sumela/upstream.conf can't run code via git's
+  # ext::/file:: transport (the framework is only ever fetched over https/ssh/git).
+  GIT_ALLOW_PROTOCOL=https:ssh:git git clone --depth 1 "$REPO_URL" "$CLONE_TMP" >/dev/null 2>&1 || { err "clone failed"; exit 1; }
   SRC="$CLONE_TMP"
 fi
 

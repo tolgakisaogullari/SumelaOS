@@ -9,6 +9,19 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ## [Unreleased]
 
+### Security
+
+- **Hardened the pull-time update check (v0.7.1).** Post-review fixes to the v0.7.0
+  `sumela_update_check`: (1) the upstream tag probe now runs in a **detached background**
+  process and prints the notice synchronously from cache — macOS ships no `timeout`, and
+  the previous inline `git ls-remote` could stall a `git pull` on an unreachable/slow
+  upstream (a fresh release now surfaces on the *next* pull instead); (2) the probe (and
+  the updater's clone) run with `GIT_ALLOW_PROTOCOL=https:ssh:git` so a poisoned (tracked)
+  `.sumela/upstream.conf` can't execute code via git's `ext::`/`file::` transport, plus
+  `GIT_TERMINAL_PROMPT=0` + ssh `BatchMode` so it never prompts for credentials;
+  (3) a corrupt/garbled cache version field is ignored instead of surfacing in the notice.
+  README documents the trust boundary (CODEOWNERS-protect `.sumela/upstream.conf`).
+
 ### Added
 
 - **Pull-time "newer SumelaOS available" notice.** Adopters now find out automatically
