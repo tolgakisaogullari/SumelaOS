@@ -16,4 +16,5 @@ sumela_memory_sync "$from" "HEAD"   # Qdrant chat_history (session summaries)
 sumela_wiki_sync   "$from" "HEAD"   # Qdrant wiki_pages   (curated wiki)
 sumela_code_sync   "$from" "HEAD"   # Qdrant code_chunks  (opt-in)
 sumela_graph_sync  "$from" "HEAD"   # graphify code graph
+sumela_update_check                 # notice if a newer SumelaOS is available (rate-limited)
 exit 0

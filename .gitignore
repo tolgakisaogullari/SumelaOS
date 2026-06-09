@@ -37,6 +37,7 @@ docs/second-brain/wiki/
 .sumela/.memory-sync.log
 .sumela/.graph-sync.log
 .sumela/.code-chunks-synced
+.sumela/.update-check
 
 # Per-developer overrides (personal; .example stays tracked)
 .sumela/local.md

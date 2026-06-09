@@ -67,6 +67,13 @@ if [ ! -d "$ROOT/.sumela" ]; then
 fi
 cd "$ROOT" || { err "Cannot cd to project root"; exit 1; }
 
+# Single source for the upstream URL (fork-overridable, shared with the pull-time
+# update check): honor .sumela/upstream.conf unless --repo/--source was given.
+if [ -z "$SOURCE_DIR" ] && [ "$REPO_URL" = "$REPO_URL_DEFAULT" ] && [ -f "$ROOT/.sumela/upstream.conf" ]; then
+  _cfg_url="$(grep -vE '^[[:space:]]*(#|$)' "$ROOT/.sumela/upstream.conf" 2>/dev/null | head -1 | tr -d '[:space:]')"
+  [ -n "$_cfg_url" ] && REPO_URL="$_cfg_url"
+fi
+
 # --- Acquire the framework source -------------------------------------------
 CLONE_TMP=""
 cleanup() { [ -n "$CLONE_TMP" ] && rm -rf "$CLONE_TMP"; }

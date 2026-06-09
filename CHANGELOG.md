@@ -4,10 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/update.sh`).
+Releases are also tagged `vX.Y.Z` (matching `.sumela/VERSION`) so the pull-time update
+check can detect a newer upstream via `git ls-remote --tags`.
 
 ## [Unreleased]
 
 ### Added
+
+- **Pull-time "newer SumelaOS available" notice.** Adopters now find out automatically
+  when the framework has a newer release instead of having to remember to run the
+  updater. `post-merge`/`post-checkout` run a new best-effort `sumela_update_check`
+  (`.sumela/git-hooks/_lib.sh`): it lists the upstream's release tags via
+  `git ls-remote --tags` (the developer's own git auth — works for public AND private
+  upstreams, no clone) and, if a newer `vX.Y.Z` than `.sumela/VERSION` exists, prints a
+  one-line non-blocking notice pointing at `bash scripts/update.sh`. The probe is
+  rate-limited to once per `SUMELA_UPDATE_CHECK_INTERVAL` (default 24h) via the
+  gitignored `.sumela/.update-check` cache; the notice keeps showing every pull (from
+  cache) until you update. Best-effort: offline / no git / no upstream tags → silent,
+  never blocks a git op. Opt out with `SUMELA_DISABLE_UPDATE_CHECK=1`. The upstream URL
+  lives in a new tracked `.sumela/upstream.conf` (single source, fork-overridable) that
+  `scripts/update.{sh,ps1}` now also read. Releases are tagged `vX.Y.Z` from now on so
+  the check has something to compare against.
 
 - **`post-commit` hook — memory sync survives conflicted merges.** A conflicted
   `git merge`/`git pull` does NOT run `post-merge` (git stops at the conflict and runs

@@ -31,6 +31,7 @@
 #   export SUMELA_DISABLE_WIKI_SYNC=1     # Qdrant wiki_pages                (default on)
 #   export SUMELA_DISABLE_CODE_SYNC=1     # Qdrant code_chunks: off entirely (no prune/embed)
 #   export SUMELA_PULL_CODE_REINGEST=1    # Qdrant code_chunks: force a FULL tree re-embed
+#   export SUMELA_DISABLE_UPDATE_CHECK=1  # don't probe upstream for a newer SumelaOS release
 # Override paths/endpoints: SUMELA_SUMMARIES_DIR, WIKI_PATH, QDRANT_HOST, QDRANT_PORT
 
 # Git's well-known empty-tree object (lets us diff a fresh clone's HEAD against
@@ -430,5 +431,65 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
     [ "$ok" -ne 0 ] && echo "WARN: code ingest failed"
     echo "===== code-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &
+  return 0
+}
+
+# Resolve the canonical SumelaOS upstream repo URL. Single source shared with the
+# updater: a tracked `.sumela/upstream.conf` (first non-comment line) lets a fork
+# point elsewhere; otherwise the shipped default. Keep this default in sync with
+# scripts/update.sh REPO_URL_DEFAULT.
+_sumela_upstream_repo() {  # $1 = install root
+  local conf="$1/.sumela/upstream.conf" url=""
+  [ -f "$conf" ] && url="$(grep -vE '^[[:space:]]*(#|$)' "$conf" 2>/dev/null | head -1 | tr -d '[:space:]')"
+  [ -n "$url" ] || url="https://github.com/tolgakisaogullari/SumelaOS.git"
+  printf '%s' "$url"
+}
+
+# Best-effort "a newer SumelaOS is available" notice. Piggybacks on the pull/checkout
+# hooks: probes the upstream's release tags at most once per interval (default 24h)
+# via a gitignored cache, then prints a non-blocking one-liner until you update.
+# Uses `git ls-remote --tags` (the caller's git auth — works for public AND private
+# upstreams, no clone). Silent on any failure (offline, no git, no tags yet) and
+# never blocks or fails a git operation. Opt out: SUMELA_DISABLE_UPDATE_CHECK=1.
+sumela_update_check() {
+  [ -n "${SUMELA_DISABLE_UPDATE_CHECK:-}" ] && return 0
+  command -v git >/dev/null 2>&1 || return 0
+
+  local repo install
+  repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  install="${SUMELA_INSTALL_ROOT:-$repo}"
+  local verfile="$install/.sumela/VERSION"
+  [ -f "$verfile" ] || return 0
+  local local_ver; local_ver="$(tr -d '[:space:]' < "$verfile" 2>/dev/null)"
+  [ -n "$local_ver" ] || return 0
+
+  local cache="$install/.sumela/.update-check"      # gitignored: "<epoch>\t<remote_ver>"
+  local interval="${SUMELA_UPDATE_CHECK_INTERVAL:-86400}"
+  local now last=0 remote=""
+  now="$(date +%s 2>/dev/null || echo 0)"
+  if [ -f "$cache" ]; then
+    last="$(awk 'NR==1{print $1}' "$cache" 2>/dev/null)"; [ -n "$last" ] || last=0
+    remote="$(awk 'NR==1{print $2}' "$cache" 2>/dev/null)"
+  fi
+
+  # Probe upstream at most once per interval; otherwise reuse the cached version so
+  # the notice keeps showing every pull without re-hitting the network.
+  if [ "$((now - last))" -ge "$interval" ] || [ -z "$remote" ]; then
+    local url to="" fresh
+    url="$(_sumela_upstream_repo "$install")"
+    command -v timeout >/dev/null 2>&1 && to="timeout 5"
+    fresh="$($to git ls-remote --tags --refs "$url" 2>/dev/null \
+      | sed -n 's#.*refs/tags/v\([0-9][0-9.]*\)$#\1#p' | sort -V | tail -1)"
+    [ -n "$fresh" ] && remote="$fresh"
+    # Stamp the attempt (even on failure) so we don't re-probe every pull; keep any
+    # previously cached remote for the notice below.
+    printf '%s\t%s\n' "$now" "$remote" > "$cache" 2>/dev/null
+  fi
+
+  # Notice only if the upstream version is STRICTLY newer than local.
+  [ -n "$remote" ] || return 0
+  [ "$remote" = "$local_ver" ] && return 0
+  [ "$(printf '%s\n%s\n' "$local_ver" "$remote" | sort -V | tail -1)" = "$remote" ] || return 0
+  printf 'sumela: ⬆ SumelaOS %s is available (you are on %s). Update: bash scripts/update.sh  (silence: export SUMELA_DISABLE_UPDATE_CHECK=1)\n' "$remote" "$local_ver"
   return 0
 }

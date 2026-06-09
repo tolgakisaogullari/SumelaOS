@@ -858,6 +858,7 @@ else
     echo ".sumela/.memory-sync.log"  # memory-sync hook log
     echo ".sumela/.graph-sync.log"   # graph-sync hook log
     echo ".sumela/.code-chunks-synced"  # legacy code_chunks marker (no longer written; ignored so older-install leftovers never get committed)
+    echo ".sumela/.update-check"     # upstream version-check cache (rate-limit)
     echo ".superpowers/"             # brainstorming skill runtime state
     echo "**/scripts/.superpowers/"
     echo "graphify-out/"             # Graphify plugin output

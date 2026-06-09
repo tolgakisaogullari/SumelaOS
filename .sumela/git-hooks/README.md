@@ -77,12 +77,30 @@ developer runs it once per clone.
 |---|---|---|
 | `SUMELA_DISABLE_PRECOMMIT` | (unset) | Set to `1` to disable the pre-commit validation hook for your clone |
 | `SUMELA_DISABLE_MEMORY_SYNC` | (unset) | Set to `1` to disable the memory-sync hooks for your clone |
+| `SUMELA_DISABLE_UPDATE_CHECK` | (unset) | Set to `1` to stop the pull-time "newer SumelaOS available" check (see below) |
+| `SUMELA_UPDATE_CHECK_INTERVAL` | `86400` | Seconds between upstream version probes (default once/day) |
 | `SUMELA_SUMMARIES_DIR` | `$WIKI_PATH/session-summaries` | Where session summaries live |
 | `WIKI_PATH` | `docs/second-brain/wiki` | Wiki root |
 | `QDRANT_HOST` / `QDRANT_PORT` | `localhost` / `6333` | Qdrant endpoint |
 
 Background ingestion logs to `.sumela/.memory-sync.log` (gitignored, per-developer;
 auto-truncated past ~512 KB).
+
+## Upstream update check
+
+On `git pull` / branch checkout, `post-merge`/`post-checkout` also run
+`sumela_update_check`: it probes the SumelaOS upstream's release tags
+(`git ls-remote --tags`, using your existing git auth — no clone) and, if a newer
+`vX.Y.Z` exists than your `.sumela/VERSION`, prints a one-line, non-blocking notice
+suggesting `bash scripts/update.sh`. The probe runs at most once per
+`SUMELA_UPDATE_CHECK_INTERVAL` (default 24h), cached in the gitignored
+`.sumela/.update-check`; the notice keeps showing every pull (from cache) until you
+update. It is **best-effort**: offline / no git / no upstream tags → silent, never
+blocks a git op. The upstream URL is read from `.sumela/upstream.conf` (the same
+single source `scripts/update.sh` uses; fork-overridable). Privacy: this is an
+anonymous tag listing of a public repo — it discloses only your IP to the host (as
+any git operation does) and sends no project data. Opt out with
+`export SUMELA_DISABLE_UPDATE_CHECK=1`.
 
 ## Known limitations
 

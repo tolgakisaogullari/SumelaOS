@@ -782,6 +782,7 @@ else {
     Add-Content .gitignore ".sumela/.memory-sync.log"
     Add-Content .gitignore ".sumela/.graph-sync.log"
     Add-Content .gitignore ".sumela/.code-chunks-synced"
+    Add-Content .gitignore ".sumela/.update-check"
     Add-Content .gitignore ".superpowers/"
     Add-Content .gitignore "**/scripts/.superpowers/"
     Add-Content .gitignore "graphify-out/"

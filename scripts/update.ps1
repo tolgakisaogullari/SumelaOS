@@ -47,6 +47,13 @@ if (-not (Test-Path (Join-Path $root ".sumela"))) {
 }
 Set-Location $root
 
+# Single source for the upstream URL (fork-overridable, shared with the pull-time
+# update check): honor .sumela/upstream.conf unless -SourceDir/-RepoUrl was given.
+if ((-not $SourceDir) -and ($RepoUrl -eq "https://github.com/tolgakisaogullari/SumelaOS.git") -and (Test-Path (Join-Path $root ".sumela/upstream.conf"))) {
+    $cfgUrl = (Get-Content (Join-Path $root ".sumela/upstream.conf") | Where-Object { $_ -notmatch '^\s*(#|$)' } | Select-Object -First 1)
+    if ($cfgUrl) { $RepoUrl = $cfgUrl.Trim() }
+}
+
 # --- Acquire the framework source ---
 $cloneTmp = ""
 try {
