@@ -101,10 +101,10 @@ function Register-SumelaInstall($gitRoot, $installRel) {   # $installRel "" => r
     # skip "packages/app" when "packages/app-extra" is already listed.
     if (-not (@(Get-Content $reg) -contains $entry)) { Add-Content $reg $entry }
 }
-function Setup-SumelaDispatch($gitRoot, $installAbs) {     # copy _dispatch.sh as the 3 hooks
+function Setup-SumelaDispatch($gitRoot, $installAbs) {     # copy _dispatch.sh as the 4 hooks
     $dh = Join-Path $gitRoot ".sumela-hooks"
     New-Item -ItemType Directory -Path $dh -Force | Out-Null
-    foreach ($hk in @("pre-commit", "post-merge", "post-checkout")) {
+    foreach ($hk in @("pre-commit", "post-merge", "post-checkout", "post-commit")) {
         Copy-Item (Join-Path $installAbs ".sumela/git-hooks/_dispatch.sh") (Join-Path $dh $hk) -Force
     }
 }
@@ -149,7 +149,7 @@ function Wire-GitHooks {
             }
             else {
                 Write-Warn "core.hooksPath already set to '$existingHooksPath' (non-SumelaOS) — not overriding."
-                Write-Warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$existingHooksPath', or unset it and re-run setup."
+                Write-Warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout,post-commit} into '$existingHooksPath', or unset it and re-run setup."
             }
         }
         else {
@@ -955,7 +955,8 @@ jobs:
           set -e
           for f in scripts/*.sh; do [ -f "$f" ] && bash -n "$f"; done
           for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
-                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
+                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout \
+                   .sumela/git-hooks/post-commit; do
             [ -f "$h" ] && bash -n "$h"
           done
       - name: PowerShell script parse check

@@ -9,6 +9,22 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
 
 ### Added
 
+- **`post-commit` hook — memory sync survives conflicted merges.** A conflicted
+  `git merge`/`git pull` does NOT run `post-merge` (git stops at the conflict and runs
+  the COMMIT hooks on the manual resolution commit instead), so until now a conflicted
+  pull never refreshed the local Qdrant `code_chunks`/`chat_history`/`wiki_pages` or the
+  code graph — a teammate's conflicting changes silently never reached your semantic
+  index. The new `post-commit` closes that gap: it runs the same four sync functions as
+  `post-merge` (for `HEAD^1..HEAD`) but ONLY when HEAD is a merge commit (≥2 parents),
+  and is an immediate `exit 0` no-op on every ordinary commit. No double-firing — a clean
+  merge creates its commit without running commit hooks (only `post-merge` fires); a
+  conflicted merge skips `post-merge` and only `post-commit` fires — verified empirically
+  on git 2.x. Known gaps documented (not conflated): `git merge --squash` (single-parent,
+  not detectable by parent count) and `git pull --rebase` (not a merge) remain covered by
+  the next clean merge/checkout + session bootstrap; `git commit --amend` on a merge commit
+  harmlessly re-runs the idempotent sync. Wired through `setup.{sh,ps1}` (direct + monorepo
+  dispatcher), `update.sh`, the CI shell-lint loop, and `.sumela/git-hooks/README.md`.
+
 - **Extra documentation ingest paths** — adopting projects can index authoritative docs that
   live OUTSIDE `docs/second-brain/wiki/` (architecture docs, ADR dirs, API references) into the
   same Qdrant `wiki_pages` Tier-1 index, on the same pull-time/background/gated terms as the

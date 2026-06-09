@@ -180,7 +180,7 @@ sumela_register_install() {        # $1 = git_root, $2 = install_rel ("" => repo
 sumela_setup_dispatch() {          # $1 = git_root, $2 = install_abs (source of _dispatch.sh)
   local dh="$1/.sumela-hooks" hk
   mkdir -p "$dh"
-  for hk in pre-commit post-merge post-checkout; do
+  for hk in pre-commit post-merge post-checkout post-commit; do
     cp "$2/.sumela/git-hooks/_dispatch.sh" "$dh/$hk"
     chmod +x "$dh/$hk" 2>/dev/null || true
   done
@@ -200,7 +200,7 @@ wire_git_hooks() {
       INSTALL_REL="$(git rev-parse --show-prefix 2>/dev/null)"
       INSTALL_REL="${INSTALL_REL%/}"                          # strip trailing slash; "" at repo root
       HOOKS_REL="${INSTALL_REL:+$INSTALL_REL/}.sumela/git-hooks"
-      chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout 2>/dev/null || true
+      chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout .sumela/git-hooks/post-commit 2>/dev/null || true
       EXISTING_HOOKS_PATH="$(git config --local --get core.hooksPath 2>/dev/null || true)"
       if [ -z "$EXISTING_HOOKS_PATH" ] || [ "$EXISTING_HOOKS_PATH" = "$HOOKS_REL" ]; then
         # Unset, or already pointing at THIS install → wire directly (idempotent).
@@ -229,7 +229,7 @@ wire_git_hooks() {
             info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)." ;;
           *)
             warn "core.hooksPath already set to '$EXISTING_HOOKS_PATH' (non-SumelaOS) — not overriding."
-            warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout} into '$EXISTING_HOOKS_PATH', or unset it and re-run setup." ;;
+            warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout,post-commit} into '$EXISTING_HOOKS_PATH', or unset it and re-run setup." ;;
         esac
       fi
     else
@@ -1043,7 +1043,8 @@ jobs:
           set -e
           for f in scripts/*.sh; do [ -f "$f" ] && bash -n "$f"; done
           for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
-                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
+                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout \
+                   .sumela/git-hooks/post-commit; do
             [ -f "$h" ] && bash -n "$h"
           done
       - name: PowerShell script parse check

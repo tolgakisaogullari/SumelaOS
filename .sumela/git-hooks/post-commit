@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# post-commit — memory-sync safety net for CONFLICTED merges.
+#
+# A conflicted `git merge` / `git pull` does NOT run post-merge: git stops at the
+# conflict, and the manual `git commit` that resolves it runs the COMMIT hooks
+# instead. Without this hook, a conflicted pull would never refresh the local
+# Qdrant/graph caches — a teammate's conflicting changes would silently never reach
+# your semantic index. This hook closes that gap by running the SAME sync functions
+# as post-merge, but only when HEAD is a merge commit.
+#
+# No double-firing with post-merge: a CLEAN merge creates its merge commit via git's
+# merge machinery, which does NOT run commit hooks (only post-merge fires); a
+# CONFLICTED merge skips post-merge and only this hook fires on the resolution
+# commit. The two are mutually exclusive (verified on git 2.x).
+#
+# Cheap on every ordinary commit: the merge-commit guard runs BEFORE sourcing
+# _lib.sh and exits immediately for non-merge commits.
+
+# A merge commit has >=2 parents: `rev-list --parents` prints "<commit> <p1> <p2>…",
+# so a merge is >=3 fields. Ordinary commit = 2 fields, root commit = 1 -> no-op.
+# (Known gap: `git merge --squash` produces a single-parent commit and is NOT
+# detected here — see .sumela/git-hooks/README.md "Known limitations".)
+parents="$(git rev-list --parents -n 1 HEAD 2>/dev/null)"
+# shellcheck disable=SC2086  # intentional word-split on whitespace-separated SHAs
+set -- $parents
+[ "$#" -ge 3 ] || exit 0
+
+. "$(dirname "$0")/_lib.sh"
+
+# Range = first-parent..HEAD: what this merge brought in over the branch we were on.
+# HEAD^1 is robust — unlike ORIG_HEAD it is not clobbered by later git operations.
+from="$(git rev-parse --verify --quiet 'HEAD^1' 2>/dev/null)"
+[ -n "$from" ] || exit 0
+
+sumela_memory_sync "$from" "HEAD"   # Qdrant chat_history (session summaries)
+sumela_wiki_sync   "$from" "HEAD"   # Qdrant wiki_pages   (curated wiki)
+sumela_code_sync   "$from" "HEAD"   # Qdrant code_chunks
+sumela_graph_sync  "$from" "HEAD"   # graphify code graph
+exit 0

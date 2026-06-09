@@ -40,7 +40,8 @@ jobs:
           done
           # Git hooks have no .sh extension; lint them explicitly if present.
           for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
-                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout; do
+                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout \
+                   .sumela/git-hooks/post-commit; do
             [ -f "$h" ] && bash -n "$h"
           done
 

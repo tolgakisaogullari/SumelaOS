@@ -465,7 +465,7 @@ Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
 
 `core.hooksPath = .sumela/git-hooks` enables two things: the `pre-commit`
 validation hook (runs `validate-structure.sh` before a commit touches the
-agent-control surface — useful for everyone) and the `post-merge`/`post-checkout`
+agent-control surface — useful for everyone) and the `post-merge`/`post-checkout`/`post-commit`
 memory-sync hooks (which self-gate: inert unless the Qdrant plugin + session
 summaries + a reachable Qdrant all exist). Wire it regardless of plugin choice:
 
@@ -474,7 +474,7 @@ summaries + a reachable Qdrant all exist). Wire it regardless of plugin choice:
    - If it is set to something OTHER than `.sumela/git-hooks`, do NOT override —
      warn the user that hook installation must be merged manually.
    - Otherwise run: `git config core.hooksPath .sumela/git-hooks`
-3. Ensure the hooks are executable: `chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout`
+3. Ensure the hooks are executable: `chmod +x .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout .sumela/git-hooks/post-commit`
 4. Tell the user each teammate who later pulls the repo should run **`/onboardSumela`**
    once per clone — it wires this hook for them and sets their per-developer language +
    domains (hooks are not shared by git automatically). The by-hand equivalent is the

@@ -3,7 +3,7 @@
 #
 # `core.hooksPath` can hold only ONE path, so when more than one SumelaOS install
 # shares a single git repo, setup copies THIS file to
-#     <git-root>/.sumela-hooks/{pre-commit,post-merge,post-checkout}
+#     <git-root>/.sumela-hooks/{pre-commit,post-merge,post-checkout,post-commit}
 # and points core.hooksPath at .sumela-hooks. On each git event the dispatcher runs
 # the same-named hook in every install listed in .sumela-hooks/installs (one
 # repo-relative path per line; "." = an install at the repo root), forwarding all

@@ -267,7 +267,7 @@ fi
 
 # --- Finalize ----------------------------------------------------------------
 printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
-chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" 2>/dev/null || true
+chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" "$ROOT/.sumela/git-hooks/post-commit" 2>/dev/null || true
 
 echo ""
 if [ -f "$ROOT/scripts/validate-structure.sh" ]; then
