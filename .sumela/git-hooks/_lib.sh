@@ -19,8 +19,8 @@
 # on your machine) — none of which touch the tracked tree:
 #   * sumela_graph_sync — graphify code graph (gitignored graph dir)
 #   * sumela_wiki_sync  — Qdrant `wiki_pages` (re-ingest changed pages; prune removed)
-#   * sumela_code_sync  — Qdrant `code_chunks` (prune removed always; heavy whole-tree
-#                         re-embed only when stale -> approval prompt / notice)
+#   * sumela_code_sync  — Qdrant `code_chunks` (prune removed always; re-embed the
+#                         CHANGED files incrementally every pull; first build is full)
 # All four prune orphans for files deleted upstream EXCEPT chat_history, where a
 # removed summary is intentionally retained (deleting a file does not retract a
 # past decision from memory).
@@ -29,9 +29,8 @@
 #   export SUMELA_DISABLE_MEMORY_SYNC=1   # session summaries -> chat_history (default on)
 #   export SUMELA_DISABLE_GRAPH_SYNC=1    # graphify code graph              (default on)
 #   export SUMELA_DISABLE_WIKI_SYNC=1     # Qdrant wiki_pages                (default on)
-#   export SUMELA_DISABLE_CODE_SYNC=1     # Qdrant code_chunks: off entirely (no prune/prompt)
-#   export SUMELA_PULL_CODE_REINGEST=1    # Qdrant code_chunks: always re-embed on code change
-#   export SUMELA_CODE_REINGEST_DAYS=N    # code_chunks staleness threshold for the prompt (default 14)
+#   export SUMELA_DISABLE_CODE_SYNC=1     # Qdrant code_chunks: off entirely (no prune/embed)
+#   export SUMELA_PULL_CODE_REINGEST=1    # Qdrant code_chunks: force a FULL tree re-embed
 # Override paths/endpoints: SUMELA_SUMMARIES_DIR, WIKI_PATH, QDRANT_HOST, QDRANT_PORT
 
 # Git's well-known empty-tree object (lets us diff a fresh clone's HEAD against
@@ -351,17 +350,16 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   return 0
 }
 
-# Maintain the Qdrant `code_chunks` collection after a pull. Two parts with very
-# different costs, so they're gated differently:
-#   * PRUNE (cheap) — drop orphaned points for code files removed in this pull;
-#     runs whenever code was deleted and Qdrant is up.
-#   * RE-EMBED (heavy) — re-ingest the WHOLE source tree via Ollama. NOT run on
-#     every pull (graph-sync already refreshes the structural code view). Instead:
-#       - SUMELA_PULL_CODE_REINGEST=1 -> always re-embed on a code change (power user)
-#       - else, only when code_chunks is STALE (no refresh for > SUMELA_CODE_REINGEST_DAYS,
-#         default 14): PROMPT for approval on an interactive pull (default No, 30s
-#         timeout), or print a non-blocking notice on a non-interactive pull.
-#   Disable everything (no prune, no prompt, no re-embed): SUMELA_DISABLE_CODE_SYNC=1
+# Maintain the Qdrant `code_chunks` collection after a pull, so semantic code
+# search reflects teammates' just-pulled changes. Two parts, both cheap and both in
+# the background — same contract as the wiki sync (non-blocking, best-effort, writes
+# ONLY to the local Qdrant cache, never the tracked tree):
+#   * PRUNE   — drop orphaned points for code files removed in this pull.
+#   * RE-EMBED — re-embed just the CHANGED files (added/modified) every pull. The
+#     ingest script self-creates the collection and, on a first-ever/empty index,
+#     promotes the run to a FULL tree build so the whole corpus gets indexed once.
+#   SUMELA_PULL_CODE_REINGEST=1 forces a FULL tree re-embed instead of incremental.
+#   Disable everything (no prune, no embed): SUMELA_DISABLE_CODE_SYNC=1
 sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
   local from="$1" to="$2"
   [ -n "${SUMELA_DISABLE_CODE_SYNC:-}" ] && return 0
@@ -378,9 +376,9 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
 
   # Code added/modified vs removed in this range (exclude docs/ + .sumela/).
   local changed deleted
-  changed="$(git -C "$repo" diff --name-only --diff-filter=AM "$from" "$to" -- \
+  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- \
       "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null)"
-  deleted="$(git -C "$repo" diff --name-only --diff-filter=D "$from" "$to" -- \
+  deleted="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- \
       "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null)"
   [ -n "$changed$deleted" ] || return 0
 
@@ -398,43 +396,39 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
     ) >>"$log" 2>&1 </dev/null &
   fi
 
-  # RE-EMBED (heavy) — only when code was added/modified.
+  # RE-EMBED — only when code was added/modified.
   [ -n "$changed" ] || return 0
-  local do_ingest=false
-  if [ -n "${SUMELA_PULL_CODE_REINGEST:-}" ]; then
-    do_ingest=true                                          # power user: always
-  else
-    local threshold="${SUMELA_CODE_REINGEST_DAYS:-14}" now last days
-    now="$(date +%s 2>/dev/null || echo 0)"
-    if [ -f "$marker" ]; then
-      last="$(tr -dc '0-9' <"$marker" 2>/dev/null)"; [ -n "$last" ] || last=0
-      days=$(( (now - last) / 86400 ))
-    else
-      days=-1                                               # never ingested
-    fi
-    if [ "$days" -lt 0 ] || [ "$days" -ge "$threshold" ]; then
-      local since; [ "$days" -lt 0 ] && since="has never been built" || since="hasn't refreshed in ${days}d"
-      if [ -t 1 ] && [ -r /dev/tty ]; then
-        # Interactive pull -> ASK (default No, 30s timeout). Briefly pauses the pull.
-        printf 'sumela: Qdrant code_chunks (semantic code search) %s and code changed in this pull.\n        Re-embed the whole source tree now? It can be slow. [y/N] ' "$since" >/dev/tty
-        local ans=""; read -t 30 -r ans </dev/tty 2>/dev/null || ans=""
-        case "$ans" in
-          y|Y|yes|YES) do_ingest=true ;;
-          *) echo "sumela: code_chunks refresh skipped — run later: python3 .sumela/memory-plugins/qdrant-session-memory/scripts/ingest-code-to-qdrant.py (or export SUMELA_PULL_CODE_REINGEST=1)" >/dev/tty ;;
-        esac
-      else
-        # Non-interactive (CI / scripted / IDE) -> notice only; never block or prompt.
-        echo "sumela: Qdrant code_chunks ${since}; refresh with 'python3 .sumela/memory-plugins/qdrant-session-memory/scripts/ingest-code-to-qdrant.py' or set SUMELA_PULL_CODE_REINGEST=1."
-      fi
-    fi
-    # under threshold -> stay silent
-  fi
-  [ "$do_ingest" = true ] || return 0
 
-  echo "sumela: re-embedding code into Qdrant code_chunks in background (log: .sumela/.memory-sync.log)"
+  # SUMELA_PULL_CODE_REINGEST=1 -> full tree re-embed; otherwise incremental on just
+  # the changed files. The changed list is handed to the ingest script via a temp
+  # file (robust for any number of paths and detached background stdin).
+  local full="${SUMELA_PULL_CODE_REINGEST:-}"
+  local changed_list=""
+  if [ -z "$full" ]; then
+    changed_list="$(mktemp 2>/dev/null)" || changed_list=""
+    if [ -n "$changed_list" ]; then
+      printf '%s\n' "$changed" >"$changed_list"
+    else
+      full=1   # no temp file available -> fall back to a full re-embed
+    fi
+  fi
+
+  if [ -n "$full" ]; then
+    echo "sumela: re-embedding the full source tree into Qdrant code_chunks in background (log: .sumela/.memory-sync.log)"
+  else
+    echo "sumela: re-embedding $(printf '%s\n' "$changed" | grep -c .) changed code file(s) into Qdrant code_chunks in background (incremental; log: .sumela/.memory-sync.log)"
+  fi
+
   ( cd "$install" || exit 0
     echo "===== code-sync(ingest) @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="
-    if python3 "$ingest"; then date +%s >"$marker" 2>/dev/null; else echo "WARN: code ingest failed"; fi
+    local ok=0
+    if [ -n "$full" ]; then
+      python3 "$ingest" || ok=1
+    else
+      python3 "$ingest" --changed-file "$changed_list" || ok=1
+    fi
+    if [ "$ok" -eq 0 ]; then date +%s >"$marker" 2>/dev/null; else echo "WARN: code ingest failed"; fi
+    [ -n "$changed_list" ] && rm -f "$changed_list"
     echo "===== code-sync: done ====="
   ) >>"$log" 2>&1 </dev/null &
   return 0

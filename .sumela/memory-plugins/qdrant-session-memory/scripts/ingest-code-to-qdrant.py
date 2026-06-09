@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """
-ingest-code-to-qdrant.py — Source Code Ingestion Pipeline (v1.1)
+ingest-code-to-qdrant.py — Source Code Ingestion Pipeline (v1.2)
 
 Usage:
+    # FULL ingest — walk the whole source tree (first build / manual refresh):
     python .sumela/memory-plugins/qdrant-session-memory/scripts/ingest-code-to-qdrant.py
 
+    # INCREMENTAL ingest — re-embed only the files listed in FILE (one repo-relative
+    # path per line). Used by the pull-time hook so code search stays fresh cheaply:
+    python ...ingest-code-to-qdrant.py --changed-file /tmp/changed.txt
+
 What it does:
-    1. Walks src/ for code files (.cs, .ts, .tsx, .py, .go, .rs, .java, .js, .jsx).
+    1. Selects code files (.cs, .ts, .tsx, .py, .go, .rs, .java, .js, .jsx):
+         * FULL        — walks src/ recursively.
+         * INCREMENTAL — takes only the paths in --changed-file that are under src/,
+                         match the code patterns, pass the skip filters, and exist.
     2. Excludes build artifacts, dependencies, generated files, and secrets.
-    3. Reads file contents and chunks if > 512 tokens.
-    4. Generates embeddings via Ollama (qwen3-embedding:0.6b) in parallel.
-    5. Deletes existing points for the file (idempotency) and upserts new chunks
+    3. Ensures the 'code_chunks' collection exists (creates it if missing). On an
+       EMPTY/just-created collection an incremental run is promoted to a FULL walk,
+       so the first pull after setup builds the whole corpus.
+    4. Reads file contents and chunks if > 512 tokens.
+    5. Generates embeddings via Ollama (qwen3-embedding:0.6b) in parallel.
+    6. Deletes existing points for the file (idempotency) and upserts new chunks
        into Qdrant 'code_chunks' collection with structured payload.
-    6. Prints a structured status report for the agent to relay to the user.
+    7. Prints a structured status report for the agent to relay to the user.
 
 Payload schema per point:
     text          : str    (the chunk body)
@@ -29,7 +40,7 @@ Environment:
     SRC_DIR defaults to src (relative to repo root)
     CODE_PATTERNS defaults to *.cs,*.ts,*.tsx,*.py,*.go,*.rs,*.java,*.js,*.jsx
 """
-import sys, os, fnmatch
+import sys, os, fnmatch, argparse
 from pathlib import Path
 from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,9 +52,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-def report_success(files_ingested: int, chunk_count: int, qdrant_ok: bool):
+def report_success(files_ingested: int, chunk_count: int, qdrant_ok: bool, mode: str):
     print_report("CODE INGEST REPORT", [
         f"Status: {'SUCCESS' if qdrant_ok else 'PARTIAL'}",
+        f"Mode: {mode}",
         f"Files ingested: {files_ingested}",
         f"Total chunks: {chunk_count}",
         f"Qdrant upsert: {'OK' if qdrant_ok else 'FAILED'}",
@@ -66,7 +78,9 @@ except ImportError:
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
+    from qdrant_client.models import (
+        PointStruct, Filter, FieldCondition, MatchValue, Distance, VectorParams,
+    )
 except ImportError:
     report_failure("Dependency", "qdrant-client not installed. Run: pip install qdrant-client")
     sys.exit(1)
@@ -78,6 +92,11 @@ COLLECTION_NAME = os.getenv("CODE_CHUNKS_COLLECTION", "code_chunks")
 CHUNK_SIZE = 512
 OVERLAP = 50
 MAX_WORKERS = 4
+
+# MUST stay in sync with setup-qdrant.py (same collection, same vector geometry) —
+# a mismatch makes upserts fail with a dimension error.
+EMBED_DIM = 1024              # Qwen3-Embedding-0.6B
+DISTANCE = Distance.COSINE
 
 REPO_ROOT = get_repo_root()
 SRC_DIR = REPO_ROOT / os.getenv("SRC_DIR", "src")
@@ -143,17 +162,105 @@ def should_skip_file(file_path: Path) -> bool:
     return False
 
 
-def main():
-    if not SRC_DIR.exists():
-        report_failure("Input", f"Source directory not found: {SRC_DIR}")
+def _matches_code_pattern(name: str) -> bool:
+    return any(fnmatch.fnmatch(name, pat) for pat in CODE_PATTERNS)
+
+
+def ensure_collection(client: QdrantClient) -> bool:
+    """Ensure the code_chunks collection exists; create it (matching setup-qdrant.py)
+    if missing. Returns True when a FULL ingest is warranted — i.e. the collection
+    was just created or is empty — so a first-ever or wiped index gets fully built
+    even when only a few files changed. Raises on a Qdrant communication failure
+    (the caller treats that as a clean skip)."""
+    if not client.collection_exists(COLLECTION_NAME):
+        client.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config=VectorParams(size=EMBED_DIM, distance=DISTANCE),
+        )
+        print(f"[info] created collection '{COLLECTION_NAME}' ({EMBED_DIM}-dim, {DISTANCE})")
+        return True
+    try:
+        return client.count(collection_name=COLLECTION_NAME, exact=False).count == 0
+    except Exception:
+        # Collection exists but count failed — don't guess a full re-embed; let the
+        # incremental list drive the work.
+        return False
+
+
+def full_walk() -> List[Path]:
+    code_files: List[Path] = []
+    for pattern in CODE_PATTERNS:
+        code_files.extend(SRC_DIR.rglob(pattern))
+    return sorted(set(code_files))
+
+
+def incremental_select(changed_file: Path) -> List[Path]:
+    """Resolve the --changed-file list down to ingestable code files: repo-relative,
+    under SRC_DIR, matching a code pattern, not skipped, and present on disk."""
+    src_resolved = SRC_DIR.resolve()
+    out = set()
+    try:
+        lines = changed_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as e:
+        report_failure("Input", f"could not read --changed-file {changed_file}: {e}")
         sys.exit(1)
+    for raw in lines:
+        rel = raw.strip()
+        if not rel:
+            continue
+        # Paths come from `git diff --name-only` (repo-relative). Reject anything
+        # that isn't a plain repo-relative path.
+        if rel.startswith("/") or rel.startswith("..") or "/../" in rel:
+            print(f"[warn] ignoring non-repo-relative path: {rel}")
+            continue
+        if not _matches_code_pattern(Path(rel).name):
+            continue
+        p = (REPO_ROOT / rel).resolve()
+        if src_resolved != p and src_resolved not in p.parents:
+            continue  # not under src/
+        if should_skip_file(p):
+            continue
+        if not p.is_file():
+            continue  # deleted/renamed away — orphan prune handles removals
+        out.add(p)
+    return sorted(out)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Ingest source code into Qdrant code_chunks.")
+    parser.add_argument(
+        "--changed-file",
+        default=None,
+        help="Path to a file of newline-separated repo-relative paths to ingest "
+             "incrementally. Omit for a full src/ walk.",
+    )
+    args = parser.parse_args()
 
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, check_compatibility=False)
 
-    code_files = []
-    for pattern in CODE_PATTERNS:
-        code_files.extend(SRC_DIR.rglob(pattern))
-    code_files = sorted(set(code_files))
+    # Ensure the target collection exists before we touch it. On a fresh/empty
+    # collection, promote an incremental request to a full build.
+    try:
+        empty = ensure_collection(client)
+    except Exception as e:
+        report_failure("Collection", f"Qdrant unavailable: {e}")
+        sys.exit(1)
+
+    incremental = args.changed_file is not None
+    if incremental and empty:
+        print(f"[info] '{COLLECTION_NAME}' is empty — promoting incremental run to a full build")
+        incremental = False
+
+    mode = "incremental" if incremental else "full"
+
+    if incremental:
+        code_files = incremental_select(Path(args.changed_file))
+    else:
+        if not SRC_DIR.exists():
+            # Nothing to ingest (no source tree) — not an error.
+            report_success(0, 0, True, mode)
+            sys.exit(0)
+        code_files = full_walk()
 
     # Collect all chunks first for parallel embedding
     all_jobs = []  # (rel_path, file_type, chunk_index, chunk_text, total_chunks)
@@ -164,8 +271,12 @@ def main():
         rel_path = code_path.relative_to(REPO_ROOT).as_posix()
         file_type = code_path.suffix.lstrip(".")
 
-        with open(code_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        try:
+            with open(code_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except OSError as e:
+            print(f"[warn] could not read {rel_path}: {e}")
+            continue
 
         if not content.strip():
             continue
@@ -178,11 +289,11 @@ def main():
             all_jobs.append((rel_path, file_type, i, chunk, len(chunks)))
 
     if not all_jobs:
-        report_success(0, 0, True)
+        report_success(0, 0, True, mode)
         sys.exit(0)
 
     # Parallel embedding generation
-    print(f"[info] Embedding {len(all_jobs)} chunks via Ollama (workers={MAX_WORKERS})...")
+    print(f"[info] Embedding {len(all_jobs)} chunks ({mode}) via Ollama (workers={MAX_WORKERS})...")
     embedding_map = {}
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         future_to_key = {}
@@ -218,7 +329,9 @@ def main():
     files_ingested = 0
 
     for rel_path, chunks_data in files.items():
-        # Delete existing points for this file
+        # Delete ALL existing points for this file (by file_path) BEFORE upserting —
+        # this also evicts stale higher-index chunks if the file shrank or some
+        # chunks failed to embed, keeping the index a faithful mirror of the file.
         try:
             client.delete(
                 collection_name=COLLECTION_NAME,
@@ -255,7 +368,7 @@ def main():
             print(f"[warn] upsert failed for {rel_path}: {e}")
 
     qdrant_ok = total_chunks > 0
-    report_success(files_ingested, total_chunks, qdrant_ok)
+    report_success(files_ingested, total_chunks, qdrant_ok, mode)
     sys.exit(0 if qdrant_ok else 1)
 
 

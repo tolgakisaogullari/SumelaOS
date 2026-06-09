@@ -99,6 +99,27 @@ Core framework version is tracked in `.sumela/VERSION` (consumed by `scripts/upd
   `sumela-prompt.md`. Dependent references (using-superpowers, RULE_REGISTRY
   template, AGENTS.md template, init-sumela, README) updated to match.
 
+- **Qdrant `code_chunks` now refreshes incrementally on every pull, automatically.**
+  `sumela_code_sync` previously gated the heavy whole-tree re-embed behind a 14-day
+  staleness check that PROMPTED `[y/N]` on an interactive pull (default No) or printed
+  a notice on a non-interactive one — so semantic code search routinely drifted up to
+  two weeks stale on an active repo. It now re-embeds just the files that changed in the
+  pull (`ingest-code-to-qdrant.py --changed-file <list>`), in the background, with no
+  prompt — the same cheap/non-blocking terms as `sumela_wiki_sync`. The ingest script
+  self-creates the `code_chunks` collection if missing and promotes an incremental run
+  to a FULL walk when the collection is empty, so the first pull after setup builds the
+  whole corpus (and `setup-memory` no longer leaves it for a manual/prompted build).
+  `SUMELA_PULL_CODE_REINGEST=1` is repurposed to force a full tree re-embed on a pull;
+  `SUMELA_DISABLE_CODE_SYNC=1` still turns the whole thing off; the `.code-chunks-synced`
+  marker is now an informational last-ingest timestamp, not a staleness gate. Docstring,
+  `qdrant-session-memory/SKILL.md`, and `setup-memory.{sh,ps1}` updated to match.
+
+### Removed
+
+- **`SUMELA_CODE_REINGEST_DAYS`** — the code_chunks staleness threshold is gone now that
+  re-embedding is incremental-on-every-pull. Anyone who set it can drop it (it is silently
+  ignored); use `SUMELA_PULL_CODE_REINGEST=1` to force a full re-embed instead.
+
 ### Fixed
 
 - **Qdrant ingestion no longer silently no-ops in adopted projects.** The Qdrant plugin's

@@ -147,7 +147,7 @@ if ((Want "qdrant-session-memory") -and (Test-Path (Join-Path $plugDir "qdrant-s
             & $py (Join-Path $s "ingest-wiki-to-qdrant.py") *> $null
             if ($LASTEXITCODE -eq 0) { Ok "Seeded wiki_pages" } else { Info "wiki_pages seeding skipped (will sync on pull)" }
         }
-        Info "code_chunks left empty — first build via: $py $plugDir/qdrant-session-memory/scripts/ingest-code-to-qdrant.py (or the pull-time prompt)"
+        Info "code_chunks left empty — built automatically on the next pull that touches code (or run now: $py $plugDir/qdrant-session-memory/scripts/ingest-code-to-qdrant.py)"
     }
 }
 

@@ -157,7 +157,9 @@ if want qdrant-session-memory && [ -d "$PLUGDIR/qdrant-session-memory" ]; then
   if qdrant_up; then
     s="$PLUGDIR/qdrant-session-memory/scripts"
     [ -f "$s/setup-qdrant.py" ] && { python3 "$s/setup-qdrant.py" >/dev/null 2>&1 && ok "Qdrant collections ready" || todo "setup-qdrant.py failed — run: python3 $s/setup-qdrant.py"; }
-    # Seed wiki_pages (cheap). code_chunks is heavy -> left to the pull-time staleness prompt.
+    # Seed wiki_pages (cheap). code_chunks is left empty here; the first pull that
+    # touches code builds it automatically (empty collection -> full walk), then
+    # every later pull re-embeds just the changed files incrementally.
     # Seed if the wiki dir exists OR the project configured extra ingest dirs (the
     # ingest script self-discovers both via the same resolver).
     extra_dirs=""
@@ -165,7 +167,7 @@ if want qdrant-session-memory && [ -d "$PLUGDIR/qdrant-session-memory" ]; then
     if [ -f "$s/ingest-wiki-to-qdrant.py" ] && { [ -d "docs/second-brain/wiki" ] || [ -n "$extra_dirs" ]; }; then
       python3 "$s/ingest-wiki-to-qdrant.py" >/dev/null 2>&1 && ok "Seeded wiki_pages" || info "wiki_pages seeding skipped (will sync on pull)"
     fi
-    info "code_chunks left empty — first build via: python3 $s/ingest-code-to-qdrant.py (or the pull-time prompt)"
+    info "code_chunks left empty — built automatically on the next pull that touches code (or run now: python3 $s/ingest-code-to-qdrant.py)"
   fi
 fi
 
