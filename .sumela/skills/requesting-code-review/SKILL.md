@@ -80,7 +80,7 @@ This skill dispatches a **parallel review panel**: a small set of lane reviewers
    - **SCOPE:** this loop applies when the FULL panel was dispatched (SDD Step 5 final review / executing-plans checkpoints / ad-hoc). It does NOT govern SDD Step-4 option-(2), which runs its own template-based review-until-approved loop.
 
    **Workflow integration cadence** (when this skill is dispatched):
-   - `subagent-driven-development` -> invoke as the FINAL comprehensive review after all tasks (SDD STEP 5); SDD keeps its own per-task Stage-1/Stage-2 reviews. The Step 8 re-review loop runs BEFORE control returns to SDD's next-task gate.
+   - `subagent-driven-development` -> invoke as the FINAL comprehensive review after all tasks (SDD STEP 5); in Checkpoint mode SDD also keeps its own per-task Stage-1/Stage-2 reviews and the Step 8 re-review loop runs BEFORE control returns to SDD's next-task gate; in Flow mode this final review is the only full review pass and there is no next-task gate.
    - `executing-plans` -> invoke after each batch checkpoint.
    - Ad-hoc development -> invoke before merge to base, or when stuck on a difficult bug.
 </dispatch_workflow>

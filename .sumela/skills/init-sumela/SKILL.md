@@ -425,7 +425,7 @@ Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
    docs/second-brain/wiki/_LOG.md merge=union
    ```
 
-2. **`.gitignore` per-developer / runtime artifacts** — never commit a developer's local override or plugin runtime output. If `.sumela/local.md` is not already an ignored line, append (guard on the `.sumela/local.md` line, not the comment):
+2. **`.gitignore` managed patterns** — per-developer/runtime outputs (never commit) PLUS the re-include negations that keep `docs/second-brain/artifacts/` visible when a host pattern (e.g. the VisualStudio template's `artifacts/`) would swallow it. The pattern list's SINGLE SOURCE is `scripts/lib/sumela-gitignore.list` — READ that file (strip `#` comments and blank lines) and append, at the END of `.gitignore`, every pattern line not already present verbatim (exact-line match, one independent guard per line — NOT one guard for the whole block; that is how older installs missed newer entries). Precede the first appended line with the marker comment `# SumelaOS — per-developer / runtime artifacts (never commit)` if the marker is absent. If the `.list` file is missing on this install, fall back to this inline snapshot (may lag the single source):
 
    ```
    # SumelaOS — per-developer / runtime artifacts (never commit)
@@ -433,15 +433,18 @@ Copy `docs/second-brain/template/` structure to `docs/second-brain/`.
    .sumela/.memory-sync.log
    .sumela/.graph-sync.log
    .sumela/.code-chunks-synced
+   .sumela/.update-check
    .superpowers/
    **/scripts/.superpowers/
    graphify-out/
    qdrant-storage/
    .sumela/_migration/
    AGENTS.md.bak*
+   !docs/second-brain/artifacts/
+   !docs/second-brain/artifacts/**
    ```
 
-   UPGRADE NOTE: this whole block is guarded on the `.sumela/local.md` line, so a project that adopted SumelaOS earlier already has the block and will SKIP it — meaning newer entries (`.sumela/_migration/`, `AGENTS.md.bak*`) would never land. For those two secret-bearing entries, ALSO append each individually if the exact line is missing (independent of the block), so the upgrade path is covered. (This mirrors the independent guards in `setup.sh` / `setup.ps1` §6c.)
+   UPGRADE NOTE: per-line guards (not a single block guard) are what cover projects that adopted SumelaOS earlier — their existing block simply gains the missing lines. (This mirrors `setup.sh` / `setup.ps1` §6c and `update.sh`'s reconcile.)
 
 3. **`.gitignore` secret baseline** — never commit credentials. If the marker is absent, append:
 

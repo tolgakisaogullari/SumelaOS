@@ -22,16 +22,26 @@
     * **Architecture:** Domain-Driven Design (DDD) boundaries and strict Clean Architecture layer isolation.
     * **Security:** OWASP principles, JWT security protocols, and granular Rate Limiting strategies.
 * **Deep Reasoning:** Surface-level logic is strictly prohibited. Dig into the technical "why" until the proposed solution is irrefutable and production-hardened.  
-# Per-Task User Approval Gate (Subagent-Driven Execution)
+# Per-Task User Approval Gate (Plan Execution)
 
-**Scope:** Applies to orchestrator agents running `subagent-driven-development`.
+**Scope:** Applies to orchestrator agents running `subagent-driven-development` (and,
+for the stop-per-task part, `executing-plans`).
 
 ## Rule
 
-After EACH task in a plan completes (implementer + Stage-1 Spec Review + Stage-2
-Quality Review all passing), the orchestrator MUST STOP and ask the user for
-approval before dispatching the next task's implementer. Auto-advancing is
-forbidden, even when budget is plentiful.
+The gate is governed by the REVIEW MODE the user explicitly chose at execution start
+(the skill's Step 0 / Step 2 opt-in):
+
+- **Checkpoint mode (the DEFAULT — applies whenever no explicit choice was made):**
+  After EACH task in a plan completes (implementer + Stage-1 Spec Review + Stage-2
+  Quality Review all passing), the orchestrator MUST STOP and ask the user for
+  approval before dispatching the next task's implementer. Auto-advancing is
+  forbidden, even when budget is plentiful.
+- **Flow mode (ONLY via the user's explicit opt-in at execution start):** tasks
+  auto-advance with concise per-task progress notes; the comprehensive final
+  review (`requesting-code-review`) remains mandatory and is never skippable.
+  The agent NEVER self-selects Flow mode to save time, and still stops on
+  failures, ambiguity, or auth/security-boundary work.
 
 ## Why
 
@@ -40,7 +50,7 @@ disruptions. A per-task pause-gate gives the user continuous control over spend
 velocity and creates clean resume points if a session does exhaust. Without this
 gate, the user loses visibility into cost and cannot intervene before hitting limits.
 
-## How to apply
+## How to apply (Checkpoint mode)
 
 After Stage-2 Quality Review returns "Ready to commit":
 

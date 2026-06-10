@@ -57,3 +57,8 @@ AGENTS.md.bak*
 *.pfx
 *.secret
 secrets.json
+
+# Re-include Second-Brain artifacts (parity with scripts/lib/sumela-gitignore.list —
+# harmless no-ops here, but keeps a maintainer setup.sh run from dirtying the tree)
+!docs/second-brain/artifacts/
+!docs/second-brain/artifacts/**

@@ -37,7 +37,7 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="lazy">
 <name>brainstorming</name>
-<description>Use when starting a new feature, system, or architectural change that is already chosen and clear enough to design — to produce approved design options and a saved spec, before any code is written, implementation skills are invoked, or project scaffolding begins. If the idea is still open-ended or the user wants help deciding WHAT to build or what would add value, start with idea-explore first.</description>
+<description>Use when starting a new feature, system, or architectural change that is already chosen and clear enough to design — to produce approved design options and a saved spec, before any code is written, implementation skills are invoked, or project scaffolding begins. A highly detailed task description is INPUT to this skill (it speeds the design loop), never a reason to skip it. If the idea is still open-ended or the user wants help deciding WHAT to build or what would add value, start with idea-explore first.</description>
 <path>.sumela/skills/brainstorming/SKILL.md</path>
 </skill>
 
@@ -139,7 +139,7 @@ These files MUST NOT be selected directly from this registry. The parent skill's
 
 <skill activation="lazy">
 <name>secure-coding-standard</name>
-<description>Use whenever the task touches user input, forms, APIs, database queries, authentication, authorization, passwords, file uploads, permissions, secrets, CORS, rate limiting, or any external/untrusted data — load before planning or coding, not after.</description>
+<description>Use whenever the task involves planning, writing, or reviewing code — load at spec/plan time (brainstorming and writing-plans count), not first-code time — and unconditionally when it touches user input, forms, APIs, database queries, authentication, authorization, passwords, file uploads, permissions, secrets, CORS, rate limiting, or any external/untrusted data.</description>
 <path>.sumela/skills/secure-coding-standard/SKILL.md</path>
 </skill>
 

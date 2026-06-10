@@ -11,6 +11,33 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Added
 
+- **Checkpoint vs Flow review mode — per-task review is now the user's choice (v0.9.0).**
+  Field feedback from the first real project run: not every user wants a reviewer
+  dispatch + approval stop after EVERY task; some prefer one comprehensive review at the
+  end. `subagent-driven-development` (new Step 0) and `executing-plans` (Step 2) now ask
+  ONCE at execution start: **Checkpoint mode** (default/recommended — per-task Stage-1
+  spec + Stage-2 quality/security reviews and a per-task approval gate) or **Flow mode**
+  (tasks run back-to-back with one-line progress notes; ONE comprehensive
+  `requesting-code-review` covers everything at the end). Guardrails: Flow mode is valid
+  ONLY via explicit user opt-in (never self-selected; no answer = Checkpoint), the final
+  comprehensive review is mandatory in BOTH modes, plan `## Checkpoint:` blocks still run
+  their verifications, and Flow mode still stops on verification failures, ambiguity, or
+  auth/security-boundary tasks (those also get Stage-1/Stage-2 even in Flow mode). The
+  `identity_and_behavior` per-task-gate rule, `requesting-code-review` cadence notes, and
+  the `RULE_REGISTRY.md.template` rule description are updated to the same contract
+  (already-installed projects keep their generated RULE_REGISTRY.md — the registry
+  description drift there is cosmetic; the rule file itself is replaced by update.sh).
+
+- **Phase-transition rule sync — STEP 4 is no longer bootstrap-only (v0.9.0).** Field
+  feedback: rules loaded at session bootstrap (often `[Phase: <none-yet>]`) were never
+  re-evaluated when `writing-plans` or an execution skill activated a new phase, so
+  phase/stack/domain-conditional rules (e.g. `architecture_patterns` at planning) could
+  silently stay unloaded. The canonical contract now lives in `sumela-prompt.md` STEP 4
+  (re-run on EVERY phase/stack/domain change), `using-superpowers` STEP 4 enforces it on
+  every skill load, and the four core phase skills (`brainstorming`, `writing-plans`,
+  `executing-plans`, `subagent-driven-development`) carry their own PHASE RULE SYNC
+  backstop step referencing `.sumela/RULE_REGISTRY.md` explicitly.
+
 - **Information-gap routing FAMILY C — project-reference / how-to questions (v0.8.0).** The
   eager `<information_gap_routing>` block (loaded every session) only had FAMILY A
   (past-decision / "why" → Qdrant `chat_history`) and FAMILY B (call-graph / impact →
@@ -28,6 +55,50 @@ check can detect a newer upstream via `git ls-remote --tags`.
   note instead of running empty queries. Trigger definitions stay canonical in the eager
   layer; `using-second-brain`'s decision tree is updated as operational detail only (no
   drift). Eager-layer growth: 18 lines added / 7 replaced (net +11).
+
+### Fixed
+
+- **Agent could start coding without `brainstorming` — eager DEVELOPMENT GATE added (v0.9.0).**
+  Field feedback: given a detailed task description, the agent skipped `brainstorming` and
+  wrote code directly. Root cause: the no-code-before-approved-design HARD-GATE lived only
+  INSIDE the lazy `brainstorming` skill — if the dispatcher never matched/loaded it, no
+  eager HARD gate existed (`identity_and_behavior`'s "Plan-Driven Output" was only a soft
+  nudge); and a detailed request reads as "design already chosen → skip". Fix at three
+  layers: (1) `sumela-prompt.md` `<skill_resolution>` gains an eager DEVELOPMENT GATE —
+  implementation code requires an active implementation skill working from an approved plan,
+  `systematic-debugging` for bug fixes, or explicit user consent for a trivial direct edit;
+  anything else is a dispatch failure that re-runs `using-superpowers` STEP 4; (2)
+  `using-superpowers` intent anchors + forbidden rationalizations now state that a highly
+  detailed request is brainstorming INPUT (it speeds the loop), never an approved spec;
+  (3) the `brainstorming` routing `description` (frontmatter + SKILL_REGISTRY, in parity)
+  says the same, so the dispatcher match itself can no longer be rationalized away.
+
+- **`secure-coding-standard` was not loaded during planning (v0.9.0).** Field feedback:
+  a plan was written without the standard in context. `writing-plans` (new Step 0) and
+  `brainstorming` (new Step 0) now MANDATE reading
+  `.sumela/skills/secure-coding-standard/SKILL.md` before any spec/plan output — for
+  EVERY plan, not just "security-flavored" ones. The skill's routing `description`
+  (frontmatter + `SKILL_REGISTRY.md`, kept in parity) now advertises the plan-time
+  entry point, and `sumela-prompt.md` `<skill_resolution>` SECURITY MANDATE is aligned
+  (unconditional for code work; the sensitive-surface list no longer reads as the only
+  trigger). `executing-plans` Step 2 likewise loads it unconditionally.
+
+- **Specs/plans invisible in git and the IDE Changes view (v0.9.0).** Root cause found
+  in a real install: the standard VisualStudio/.NET `.gitignore` ships a generic
+  `artifacts/` build-output pattern that matches ANY directory named `artifacts` — so
+  `docs/second-brain/artifacts/{specs,plans}/` files never appeared in `git status` or
+  the Source Control Changes panel. Three-layer fix: (1)
+  `scripts/lib/sumela-gitignore.list` (single source for setup/update, both shells)
+  gains `!docs/second-brain/artifacts/` + `!docs/second-brain/artifacts/**` re-include
+  negations, appended at the end of `.gitignore` where they win; (2) `init-sumela`
+  Step 3.6b now reads that same `.list` (per-line guards) instead of its own drifted
+  inline copy — also picking up the previously missing `.sumela/.update-check`; (3)
+  `brainstorming`/`writing-plans` gain a mandatory post-save VISIBILITY CHECK: decide on
+  `git check-ignore -q` EXIT CODE only (exit 1 = visible = success; `-v` output alone is
+  misleading because it also prints the `!…` negation as a "match"), remediate by
+  re-appending the negations at the END of the install-root `.gitignore`, and STOP with
+  a warning if a parent dir (e.g. `docs/`) is itself ignored. Artifacts must also be
+  written with the IDE's file-write tool so the IDE change tracker registers them.
 
 ### Security
 

@@ -1,6 +1,6 @@
 ---
 name: secure-coding-standard
-description: "Use whenever the task touches user input, forms, APIs, database queries, authentication, authorization, passwords, file uploads, permissions, secrets, CORS, rate limiting, or any external/untrusted data — load before planning or coding, not after."
+description: "Use whenever the task involves planning, writing, or reviewing code — load at spec/plan time (brainstorming and writing-plans count), not first-code time — and unconditionally when it touches user input, forms, APIs, database queries, authentication, authorization, passwords, file uploads, permissions, secrets, CORS, rate limiting, or any external/untrusted data."
 ---
 
 <activation_rules>

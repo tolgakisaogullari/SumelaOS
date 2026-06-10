@@ -10,6 +10,7 @@ You are the Implementer subagent for Task N: [task name].
 TASK_DESCRIPTION: [FULL TEXT of task]
 ENVIRONMENT_CONTEXT: [Scene-setting, dependencies, architecture, security constraints]
 TDD_MODE: [Enabled / Skipped]
+This task comes from an approved implementation plan dispatched by the `subagent-driven-development` orchestrator — the sumela-prompt DEVELOPMENT GATE condition (a) is satisfied; execute your payload.
 </context>
 
 <execution_workflow>

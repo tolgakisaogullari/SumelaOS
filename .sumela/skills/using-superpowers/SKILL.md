@@ -71,9 +71,11 @@ Walk through the active task and load every skill whose `description` matches:
 
 INTENT ANCHORS — match these explicitly; they are easy to miss because they sound like casual conversation, but they ARE task entry points:
 - "What should I build?" / "suggest a feature or improvement" / "what would add value?" / "let's discuss an idea" — INCLUDING when the user has NO concrete idea yet and just wants options — load `idea-explore` (divergent ideation), which hands off to `brainstorming`. Do NOT answer a feature / idea / "what do you suggest" / "let's discuss" request conversationally without entering this loop — a discussion tone is not an exemption.
-- A concrete, already-chosen feature ("add feature X", "build a Y") → `brainstorming` directly (design → spec).
+- A concrete, already-chosen feature ("add feature X", "build a Y") → `brainstorming` directly (design → spec). This INCLUDES requests where the user describes the task in great detail (acceptance criteria, field lists, endpoints, even file names): detail makes the brainstorming loop FASTER (fewer clarifying questions, possibly a 3-sentence design), it does NOT make the skill skippable. The only inputs that bypass `brainstorming` are an already-approved spec (→ `writing-plans`) or an already-approved plan (→ execution skills).
 
-GLOBAL SECURITY MANDATE — If the task involves planning, writing, or reviewing code, load `secure-coding-standard` regardless of whether the user mentioned security.
+GLOBAL SECURITY MANDATE — If the task involves planning, writing, or reviewing code, load `secure-coding-standard` regardless of whether the user mentioned security. This fires at PLAN time, not first-code time: `brainstorming` and `writing-plans` count as "planning code".
+
+PHASE-RULE SYNC (MANDATORY, on every skill load) — When a skill you are loading activates a phase per `.sumela/RULE_REGISTRY.md` `<phase_definitions>` (e.g. `writing-plans` → `planning`, `executing-plans`/`subagent-driven-development` → `implementation`), re-run `sumela-prompt.md` STEP 4 for the NEW phase: consult `<phase_to_rule_matrix>` and READ every missing universal, phase-conditional, stack-conditional, and domain-conditional rule BEFORE executing the skill's workflow. Bootstrap-time rule loading does NOT cover phases entered later in the session.
 
 <EXTREMELY-IMPORTANT>If a skill might apply with even 1% probability, load it. Memory of a previously-read skill is NOT a substitute for re-reading the current file.</EXTREMELY-IMPORTANT>
 
@@ -93,6 +95,7 @@ Print the Context Manifest only when `.sumela/sumela-prompt.md` `<context_manife
 ## STEP 6 — Forbidden rationalizations
 
 - "This task is too simple to need a skill" — wrong, run the dispatch loop anyway.
+- "The user already described exactly what to build, so the design is done — I can start coding" — wrong, a detailed request is `brainstorming` INPUT, not an approved spec; the sumela-prompt DEVELOPMENT GATE forbids code without an active implementation skill working from an approved plan.
 - "Let me ask the user a clarifying question first" — wrong, skill check runs BEFORE clarifying questions.
 - "I'll explore the codebase / check git first, skills later" — wrong, skills tell you HOW to explore; files lack conversation context.
 - "I'll just do this one small thing first" — wrong, check BEFORE doing anything.

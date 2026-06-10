@@ -14,3 +14,13 @@ graphify-out/
 qdrant-storage/
 .sumela/_migration/
 AGENTS.md.bak*
+# Re-include Second-Brain artifacts (specs/plans MUST stay tracked): common host
+# .gitignores — e.g. the standard VisualStudio/.NET template's `artifacts/` build-output
+# pattern — match ANY directory named "artifacts", silently swallowing
+# docs/second-brain/artifacts/ so freshly written specs/plans never appear in
+# `git status` or the IDE's Changes view. These negations are appended AFTER the host
+# patterns (the SumelaOS block sits at the end of .gitignore), so they win.
+# NOTE: gitignore cannot re-include below an excluded PARENT — if the host project
+# ignores `docs/` itself, the skills' post-save `git check-ignore` guard surfaces it.
+!docs/second-brain/artifacts/
+!docs/second-brain/artifacts/**

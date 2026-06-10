@@ -1,6 +1,6 @@
 ---
 name: brainstorming
-description: "Use when starting a new feature, system, or architectural change that is already chosen and clear enough to design — to produce approved design options and a saved spec, before any code is written, implementation skills are invoked, or project scaffolding begins. If the idea is still open-ended or the user wants help deciding WHAT to build or what would add value, start with idea-explore first."
+description: "Use when starting a new feature, system, or architectural change that is already chosen and clear enough to design — to produce approved design options and a saved spec, before any code is written, implementation skills are invoked, or project scaffolding begins. A highly detailed task description is INPUT to this skill (it speeds the design loop), never a reason to skip it. If the idea is still open-ended or the user wants help deciding WHAT to build or what would add value, start with idea-explore first."
 ---
 
 <HARD-GATE>
@@ -8,11 +8,15 @@ DO NOT write code, invoke implementation skills, or scaffold projects until a de
 </HARD-GATE>
 
 <anti_pattern_too_simple>
-Every project — including "simple" utilities, todo lists, config changes — goes through this loop. The design can be 3 sentences for trivial tasks, but it MUST exist and be approved. Skipping this is where unexamined assumptions cause the most wasted work.
+Every project — including "simple" utilities, todo lists, config changes — goes through this loop. The design can be 3 sentences for trivial tasks, but it MUST exist and be approved. Skipping this is where unexamined assumptions cause the most wasted work. (Sole exemption: a user-requested trivial direct edit — typo/config one-liner — per the sumela-prompt DEVELOPMENT GATE condition (c).)
 </anti_pattern_too_simple>
 
 <workflow>
 Execute these steps in strict sequential order:
+
+0. PRE-FLIGHT CONTEXT (MANDATORY):
+   - **SECURITY STANDARD LOAD:** Read `.sumela/skills/secure-coding-standard/SKILL.md` if not already in context — Step 4's per-option **Security Impact** analysis and the spec's **Security Considerations** section must reference the actual standard, not memory.
+   - **PHASE RULE SYNC:** This skill activates the `specification` phase. Per `.sumela/RULE_REGISTRY.md` `<phase_to_rule_matrix>`, confirm every universal rule, every specification-phase rule, and every rule matching the active stack scope(s) and domain(s) is loaded — READ any missing rule file now. If the registry file is missing, tell the user to run setup — do not guess the matrix.
 
 1. EXPLORE CONTEXT: Read relevant files, docs, and recent commits to understand the current state. Avoid scoping too broadly; decompose large requests into sub-projects.
    - **DECOMPOSITION RULE:** If the request describes multiple independent subsystems (e.g., "platform with chat + billing + analytics"), flag this immediately and decompose. Each sub-project gets its OWN spec → plan → implementation cycle; do NOT try to fit them into one spec.
@@ -32,7 +36,7 @@ Execute these steps in strict sequential order:
    3. [e.g., PostgreSQL, based on existing ORM/migration config]
    → Correct me now or I'll proceed with these.
    ```
-   Then ask clarifying questions ONE AT A TIME. Prefer multiple-choice. Focus on purpose, constraints, and **security/data-privacy requirements** (referencing `secure-coding-standard` if loaded).
+   Then ask clarifying questions ONE AT A TIME. Prefer multiple-choice. Focus on purpose, constraints, and **security/data-privacy requirements** (referencing the `secure-coding-standard` loaded in Step 0).
    **Reframe vague requirements as measurable success criteria:**
    - "Make it faster" → "API p95 < 200ms, LCP < 2.5s — are these the right targets?"
    - "Improve security" → "Specific threat: IDOR on resource X — is that the concern?"
@@ -62,6 +66,14 @@ Execute these steps in strict sequential order:
      - *Never:* (e.g., commit secrets, bypass auth/permission decorators, remove failing tests without approval)
    - **Open Questions** — Anything unresolved requiring human input before planning
    CRITICAL: DO NOT use `git commit` here. The worktree and branch haven't been created yet.
+   - **WRITE-TOOL RULE:** Create the spec with the IDE's file-write tool (NOT shell redirection / heredoc), so the IDE's change tracker registers it.
+   - **VISIBILITY CHECK (MANDATORY, immediately after saving):** Run `git check-ignore -q docs/second-brain/artifacts/specs/<filename>.md`. Decide on the EXIT CODE only: exit 1 = file is visible → PASS (exit 1 here is success, NOT a command error); exit 0 = file is ignored → remediate below. Do NOT decide from `-v` output alone — `-v` also prints negation (`!…`) patterns, and a match whose pattern starts with `!` means the file IS visible.
+     REMEDIATION (only on exit 0): run `git check-ignore -v <path>` to name the culprit pattern (common cause: a generic `artifacts/` build-output pattern, e.g. the standard VisualStudio template), then append these two lines at the END of the `.gitignore` in the SumelaOS install root (the directory containing `docs/second-brain/` — not necessarily the git toplevel) and re-run the `-q` check:
+     ```
+     !docs/second-brain/artifacts/
+     !docs/second-brain/artifacts/**
+     ```
+     If the lines already exist but the path is still ignored (a later pattern outranks them), re-append them at the END anyway — duplicates are harmless; last match wins. Tell the user what was matched and what you fixed. If STILL ignored (e.g. a parent like `docs/` is itself ignored — negation cannot pierce an excluded parent), STOP and warn the user explicitly: the spec is invisible to `git status` and the IDE's Changes view, and will not be committed; ask how they want to resolve it.
 
 7. CRITICAL WIKI LINKING (MANDATORY): After generating and saving the spec file, you MUST immediately append a link to it in `docs/second-brain/wiki/_INDEX.md` (under "Artifacts") AND in `docs/second-brain/wiki/active-project-context.md`. Use **standard markdown link format** (NOT wikilinks) because artifacts live outside the wiki: `[YYYY-MM-DD-topic-design](../artifacts/specs/YYYY-MM-DD-topic-design.md)`. Do not proceed to review or handoff without creating these links.
 
@@ -70,6 +82,7 @@ Execute these steps in strict sequential order:
    - `_INDEX.md` and `active-project-context.md` contain the artifact link.
    - Mandatory sections exist: Objective, Success Criteria, Tech Stack, Commands, Architecture, Security Considerations, Boundaries, Open Questions.
    - No placeholder text remains (`TBD`, `TODO`, `fill later`, empty mandatory sections).
+   - `git check-ignore -q <spec-path>` exits 1 (file visible — Step 6 visibility check passed or was remediated).
    - This is NOT a quality review. Do not approve your own spec; the independent `spec-document-reviewer-prompt` subagent remains mandatory.
 
 9. SPEC REVIEW LOOP: Dispatch the `spec-document-reviewer-prompt`(./spec-document-reviewer-prompt.md) subagent. Fix issues and re-dispatch until approved (Max 3 iterations, then ask human).

@@ -6,6 +6,10 @@ description: "Use when starting implementation from an approved spec or design �
 <execution_workflow>
 Execute these steps strictly in order. DO NOT announce the skill unless specifically asked. Do not write implementation code in this phase; isolated worktree setup belongs to the execution phase.
 
+0. PRE-FLIGHT CONTEXT (MANDATORY — before any planning output):
+   - **SECURITY STANDARD LOAD:** Read `.sumela/skills/secure-coding-standard/SKILL.md` if not already in context. EVERY plan gets this — not just "security-flavored" ones — because the plan's **Security Constraints** header and each task's implementation steps must be authored against the actual standard, never from memory. Skipping this because "the feature has no auth surface" is a forbidden rationalization: input validation, error handling, and data exposure apply to all code.
+   - **PHASE RULE SYNC:** This skill activates the `planning` phase. Per `.sumela/RULE_REGISTRY.md` `<phase_to_rule_matrix>`, confirm every universal rule, every planning-phase rule, and every rule matching the active stack scope(s) and domain(s) is loaded — READ any missing rule file now, before drafting. If the registry file is missing, tell the user to run setup — do not guess the matrix.
+
 1. SCOPE & FILE MAPPING:
    - **SECOND BRAIN CHECK (MANDATORY):** Read `wiki/architecture-decisions.md` and `wiki/tech-debt-and-known-issues.md`. The plan MUST respect existing approved AD records and account for open TD items that overlap with the feature scope. Reference relevant AD-XX / TD-XX IDs in the plan header's Architecture section.
    - Analyze spec: If it covers multiple independent subsystems, STOP and suggest breaking it into separate plans (one per subsystem).
@@ -14,6 +18,8 @@ Execute these steps strictly in order. DO NOT announce the skill unless specific
 
 2. INITIALIZE PLAN DOCUMENT:
    - Save path: `docs/second-brain/artifacts/plans/YYYY-MM-DD-<feature-name>.md`
+   - **WRITE-TOOL RULE:** Create the plan with the IDE's file-write tool (NOT shell redirection / heredoc), so the IDE's change tracker registers it.
+   - **VISIBILITY CHECK (MANDATORY, immediately after saving):** Run `git check-ignore -q <save-path>` and decide on the EXIT CODE only: exit 1 = visible → PASS (exit 1 is success, NOT a command error); exit 0 = ignored → remediate. Do NOT decide from `-v` output alone — a `-v` match whose pattern starts with `!` means the file IS visible. On exit 0: run `-v` to name the culprit (common cause: a generic `artifacts/` build-output pattern), append `!docs/second-brain/artifacts/` and `!docs/second-brain/artifacts/**` at the END of the `.gitignore` in the SumelaOS install root (the directory containing `docs/second-brain/`), re-run the `-q` check, and tell the user what you fixed. If the lines already existed, re-append them at the END anyway (duplicates are harmless; last match wins). If STILL ignored (an excluded parent like `docs/` — negation cannot pierce it), STOP and warn the user: the plan is invisible to `git status` and the IDE's Changes view; ask how to resolve.
    - MUST include this exact header:
      ```markdown
      # [Feature Name] Implementation Plan
@@ -54,6 +60,7 @@ Execute these steps strictly in order. DO NOT announce the skill unless specific
 
    - **CHECKPOINTS:** After every 2-3 tasks, add an explicit checkpoint:
      `## Checkpoint: After Tasks N-M — All tests pass. Build is clean. Core flow works. Review before proceeding.`
+     (Execution skills pause here in Checkpoint mode; in Flow mode they run the checkpoint's verifications and continue unless one fails.)
    - Break work into 2-5 minute actionable steps.
    - For each Component/Task, clearly list exact file paths (Create, Modify, Test).
    - **IF TDD WAS ENABLED:** Enforce the 5-Step TDD Loop for every task:
@@ -96,6 +103,7 @@ Execute these steps strictly in order. DO NOT announce the skill unless specific
    - The final task invokes `requesting-code-review`.
    - No `git commit` command appears anywhere in task execution steps.
    - No placeholder text remains (`TBD`, `TODO`, `implement later`, `fill in details`, vague "handle edge cases", empty mandatory sections).
+   - `git check-ignore -q <plan-path>` exits 1 (file visible — Step 2 visibility check passed or was remediated).
    - This is NOT a quality review. Do not approve your own plan; the independent `plan-document-reviewer` subagent remains mandatory.
 
 6. PLAN REVIEW LOOP:
