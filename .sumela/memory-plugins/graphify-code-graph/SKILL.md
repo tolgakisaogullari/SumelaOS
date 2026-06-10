@@ -39,7 +39,7 @@ All query operations (`query-graph.py`, `graphify query`, `graphify path`, `grap
 - Python 3.10+
 - **uv** (recommended) or **pipx**: `uv tool install graphifyy`
 - `pip install -r .sumela/memory-plugins/graphify-code-graph/requirements.txt`
-- Run `/graphify .` in IDE or `graphify .` in terminal to seed `graphify-out/graph.json`
+- Run `/graphify .` in IDE or `graphify update .` in terminal (AST-only, no API key) to seed `graphify-out/graph.json`
 - Optional: `graphify hook install` for auto-rebuild on commit
 
 ## Community Plugin Notice

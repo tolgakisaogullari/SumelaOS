@@ -7,7 +7,7 @@ Usage:
     python auto-update-memory.py --project-root /path/to/repo --graph-dir graphify-out --wiki-path docs/second-brain/wiki
 
 What it does:
-    1. Rebuilds the code graph (`graphify .`, or `graphify . --update` incrementally).
+    1. Rebuilds the code graph (`graphify update .` — AST-only, no LLM key needed).
     2. Syncs Graphify insights to Obsidian wiki (with noise filter).
     3. Verifies Qdrant is reachable and appends a status line to _LOG.md.
     4. Prints a structured status report for the agent to relay to the user.
@@ -116,10 +116,16 @@ def run_graphify(project_root: Path, graph_dir: str = "graphify-out"):
     flagged to-do, not a failed build, and never as a silent success).
     """
     out_dir = project_root / graph_dir
-    have_graph = (out_dir / "graph.json").exists()
-    # First build is the canonical `graphify .`; later runs use the incremental
-    # `--update` FLAG (not the legacy `graphify update` subcommand form).
-    cmd = ["graphify", ".", "--update"] if have_graph else ["graphify", "."]
+    # AST-only rebuild: the `update <path>` SUBCOMMAND is graphify's no-LLM code-only
+    # path, and it works both incrementally AND as the very first build (verified on
+    # graphify 0.8.35 with no pre-existing graph.json). The bare `graphify .` and
+    # `graphify . --update` FLAG forms attempt SEMANTIC extraction of doc/paper/image
+    # files and hard-fail without an LLM API key — wrong for this hook, which must
+    # stay key-free (plugin README: AST-only by design). We do NOT hard-code --force:
+    # graphify's fewer-nodes guard protects against a broken parse wiping the graph;
+    # after a deleting refactor, set GRAPHIFY_FORCE=1 in the env (inherited by this
+    # subprocess) to override it.
+    cmd = ["graphify", "update", "."]
     print(f"[1/4] Running {' '.join(cmd)} ...")
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(project_root))
     if result.returncode != 0:
@@ -240,7 +246,7 @@ def main():
     parser.add_argument("--qdrant-port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")),
                         help="Qdrant port (default: 6333 or QDRANT_PORT env)")
     parser.add_argument("--graph-only", action="store_true",
-                        help="Only rebuild the code graph (graphify . --update). Skips the wiki sync "
+                        help="Only rebuild the code graph (graphify update . — AST-only). Skips the wiki sync "
                              "and the _LOG.md append, so it is safe to run from a git pull/checkout "
                              "hook: it writes ONLY to the gitignored graph dir, never the tracked "
                              "working tree.")

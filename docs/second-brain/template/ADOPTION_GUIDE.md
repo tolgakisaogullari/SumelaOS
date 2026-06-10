@@ -445,7 +445,7 @@ To activate Tier 1 (Qdrant semantic session memory):
 
 To activate Tier 2 (Graphify structural search):
 1. Install `graphify` CLI: `uv tool install graphifyy` (PyPI package `graphifyy` — see [graphify repo](https://github.com/safishamsi/graphify)).
-2. Run `/graphify .` in your IDE or `graphify .` in terminal to seed `graphify-out/graph.json`.
+2. Run `/graphify .` in your IDE or `graphify update .` in terminal (AST-only, no API key) to seed `graphify-out/graph.json`.
 3. Optional: `graphify hook install` for auto-rebuild on commit.
 4. After each commit, agent invokes `scripts/auto-update-memory.py` (auto via `finishing-a-development-branch`).
 

@@ -58,6 +58,29 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Fixed
 
+- **graphify plugin: rebuilds hard-failed without an LLM key on repos with docs (v0.9.1).**
+  Field report from a consuming repo (graphify CLI 0.8.35, 308 non-code doc/image files):
+  `auto-update-memory.py` invoked `graphify .` / `graphify . --update`, which in current
+  graphify attempts SEMANTIC extraction of doc/paper/image files and hard-fails without
+  an LLM API key — so the pull/checkout auto-rebuild silently died (`graphify=FAIL`),
+  contradicting the plugin's "AST-only by design, no API key" contract. Verified
+  empirically and switched every invocation to the no-LLM `update <path>` subcommand,
+  which also works as the FIRST build (confirmed with no pre-existing graph.json):
+  `auto-update-memory.py` (`run_graphify` + docstring + `--graph-only` help),
+  `setup-memory.sh` / `setup-memory.ps1` first-build blocks and fallback hints, the
+  plugin README/SKILL.md (incl. the prerequisites line), `ADOPTION_GUIDE.md`,
+  `sync-graphify-to-obsidian.py`'s error hint, and `context-handoff`. `--force` is
+  deliberately NOT hard-coded (graphify's fewer-nodes guard protects against a broken
+  parse wiping the graph); `GRAPHIFY_FORCE=1` in the env passes through to the
+  subprocess for deleting refactors. (Adversarial review also killed a hint suggesting
+  `update . --no-cluster` over an existing graph — verified destructive: it strips all
+  community assignments from graph.json.)
+
+- **graphify plugin: `query-graph.py` crashed on Python < 3.10 (v0.9.1).** The
+  `dict | None` / `str | None` annotations were evaluated at class-definition time
+  (`TypeError: unsupported operand type(s) for |`). Added
+  `from __future__ import annotations` (matching `auto-update-memory.py`).
+
 - **Agent could start coding without `brainstorming` — eager DEVELOPMENT GATE added (v0.9.0).**
   Field feedback: given a detailed task description, the agent skipped `brainstorming` and
   wrote code directly. Root cause: the no-code-before-approved-design HARD-GATE lived only

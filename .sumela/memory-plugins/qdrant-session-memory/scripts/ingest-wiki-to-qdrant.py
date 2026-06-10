@@ -33,6 +33,8 @@ Environment:
     WIKI_PAGES_COLLECTION defaults to wiki_pages
     WIKI_DIR defaults to docs/second-brain/wiki (relative to repo root)
 """
+from __future__ import annotations
+
 import sys, os
 from datetime import datetime
 from pathlib import Path

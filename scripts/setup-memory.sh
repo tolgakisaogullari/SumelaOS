@@ -190,14 +190,17 @@ if want graphify-code-graph && [ -d "$PLUGDIR/graphify-code-graph" ]; then
   fi
 
   if command -v graphify >/dev/null 2>&1; then
-    if confirm "Build the code graph now (graphify .)?"; then
-      # Canonical first build is `graphify .` — NOT `graphify update`, which is the
-      # incremental (--update) path and is the wrong command for an empty graph.
+    if confirm "Build the code graph now (graphify update . — AST-only, no API key)?"; then
+      # AST-only build: the `update <path>` subcommand is graphify's no-LLM code-only
+      # path and works as the FIRST build too (no pre-existing graph.json needed —
+      # verified on graphify 0.8.35). Bare `graphify .` attempts SEMANTIC extraction
+      # of doc/paper/image files and hard-fails without an LLM API key, which this
+      # plugin deliberately does not require (README: AST-only by design).
       # Output is intentionally NOT suppressed: graphify prints its own viz/limit
       # warnings (e.g. "graph has N nodes > 5000 limit — skipped graph.html") and we
       # must surface them. Success is gated on the artifact, not exit 0 — graphify can
       # exit 0 yet silently skip the interactive graph.html.
-      graphify .; build_rc=$?
+      graphify update .; build_rc=$?
       if [ -f graphify-out/graph.html ]; then
         ok "Code graph built (graphify-out/, incl. interactive graph.html)"
       elif [ "$build_rc" -eq 0 ] && [ -f graphify-out/graph.json ]; then
@@ -222,13 +225,13 @@ PY
         if [ -f graphify-out/graph.html ]; then
           ok "Code graph built (graphify-out/, interactive graph.html via raised viz limit=$limit)"
         else
-          manual "graph.html still missing — run: GRAPHIFY_VIZ_NODE_LIMIT=$limit graphify cluster-only .   (or accept JSON-only: graphify . --no-viz)"
+          manual "graph.html still missing — run: GRAPHIFY_VIZ_NODE_LIMIT=$limit graphify cluster-only .   (or accept JSON-only — graph.json is already built; Tier-2 queries work without graph.html)"
         fi
       else
-        manual "build failed — run: graphify ."
+        manual "build failed — run: graphify update ."
       fi
     else
-      manual "Build the code graph: graphify ."
+      manual "Build the code graph: graphify update ."
     fi
   fi
 fi

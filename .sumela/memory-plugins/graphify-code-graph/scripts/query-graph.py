@@ -38,6 +38,8 @@ Exit codes:
 Environment:
     GRAPHIFY_OUT_DIR — graph output directory (default: graphify-out)
 """
+from __future__ import annotations
+
 import argparse
 import json
 import os

@@ -170,12 +170,15 @@ if ((Want "graphify-code-graph") -and (Test-Path (Join-Path $plugDir "graphify-c
     }
 
     if (Get-Command graphify -ErrorAction SilentlyContinue) {
-        if (Confirm-Step "Build the code graph now (graphify .)?") {
-            # Canonical first build is `graphify .` — NOT `graphify update`, which is the
-            # incremental (--update) path. Output is intentionally NOT suppressed so
-            # graphify's own viz/limit warnings reach the user. Success is gated on the
-            # artifact, not exit 0 — graphify can exit 0 yet silently skip graph.html.
-            graphify .
+        if (Confirm-Step "Build the code graph now (graphify update . — AST-only, no API key)?") {
+            # AST-only build: the `update <path>` subcommand is graphify's no-LLM
+            # code-only path and works as the FIRST build too (verified on 0.8.35 with
+            # no pre-existing graph.json). Bare `graphify .` attempts SEMANTIC
+            # extraction of doc/paper/image files and hard-fails without an LLM API
+            # key, which this plugin deliberately does not require (AST-only by design).
+            # Output is intentionally NOT suppressed so graphify's own viz/limit
+            # warnings reach the user. Success is gated on the artifact, not exit 0.
+            graphify update .
             $built = $LASTEXITCODE
             if (Test-Path "graphify-out/graph.html") {
                 Ok "Code graph built (graphify-out/, incl. interactive graph.html)"
@@ -201,12 +204,12 @@ if ((Want "graphify-code-graph") -and (Test-Path (Join-Path $plugDir "graphify-c
                 if (Test-Path "graphify-out/graph.html") {
                     Ok "Code graph built (graphify-out/, interactive graph.html via raised viz limit=$limit)"
                 } else {
-                    Todo ('graph.html still missing — run: $env:GRAPHIFY_VIZ_NODE_LIMIT=' + $limit + '; graphify cluster-only .   (or accept JSON-only: graphify . --no-viz)')
+                    Todo ('graph.html still missing — run: $env:GRAPHIFY_VIZ_NODE_LIMIT=' + $limit + '; graphify cluster-only .   (or accept JSON-only — graph.json is already built; Tier-2 queries work without graph.html)')
                 }
             } else {
-                Todo "build failed — run: graphify ."
+                Todo "build failed — run: graphify update ."
             }
-        } else { Todo "Build the code graph: graphify ." }
+        } else { Todo "Build the code graph: graphify update ." }
     }
 }
 

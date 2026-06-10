@@ -22,6 +22,8 @@ Environment:
     QDRANT_PORT      — Qdrant port (default: 6333)
     QDRANT_COLLECTION — Default collection name (default: chat_history)
 """
+from __future__ import annotations
+
 import sys
 import os
 import json
