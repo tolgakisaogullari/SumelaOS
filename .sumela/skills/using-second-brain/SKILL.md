@@ -200,27 +200,32 @@ There is NO separate "user query" vs "agent reasoning" branch. Same tiers, same 
 ### Hard Rule — route by family before any direct `Read`
 
 Family definitions are canonical in the eager `<information_gap_routing>` block; this is operational detail only. Match the question to a family and run its tier(s) BEFORE going to a known file path:
-- FAMILY A (past sessions, sprint choices, architecture rationale, documented decisions) → Tier-1 (`chat_history`), then Tier-3 if more context is needed.
-- FAMILY B (call-graph / callers / impact on a named symbol) → Tier-2 (Graphify); escalate to Tier-1c (`code_chunks`) if the graph is too narrow.
+- FAMILY A (past sessions, sprint choices, architecture rationale, documented decisions) → Tier-1 (`chat_history`), then Tier-3 if more context is needed. **Best-effort:** query when `chat_history` has content; skip when it is known-empty and note that once per session. (FAMILY A is NOT mandatory — only B and C are.)
+- FAMILY B (call-graph / callers / impact on a named **symbol** — the symbol NAME is known) → Tier-2 (Graphify graph first); escalate to Tier-1c (`code_chunks`) if the graph is too narrow.
 - FAMILY C (project reference / how-to / convention / "where is it documented") → Tier-3 (`_SEARCH_INDEX.md`), escalate to Tier-1b (`wiki_pages`).
-Direct `Read`/`grep` on a known path for a question that matches any family — bypassing its tier — is a workflow violation.
+- GATE 3 (a workflow gate from `<workflow_retrieval_gates>`, NOT a question-family — find code by BEHAVIOR, no symbol name known) → Tier-1c (`code_chunks` semantic) FIRST, before any blind grep. Discriminator vs FAMILY B: symbol name known → FAMILY B (graph first); no name, want to find code by behavior → GATE 3 (`code_chunks` first). Exact-token grep stays first-class for a literal string you already know.
+Direct `Read`/`grep` on a known path for a question that matches FAMILY B or FAMILY C — bypassing its tier — is a workflow violation. FAMILY B and FAMILY C tiers are MANDATORY; FAMILY A is best-effort.
 
 ### Self-Check Before Any `Read`
 
-Before issuing a `Read` tool call, silently confirm: *"Which family is this (A/B/C, or none)? Did I run that family's tier(s) — Tier-1 / Tier-2(+1c) / Tier-3(+1b) — first?"* If a matching tier hasn't run, run it before the `Read`. (A pure-conversation or in-progress-edit turn matches no family — no tier required.)
+Before issuing a `Read` tool call, silently confirm: *"Which family is this (A/B/C, GATE 3, or none)? Did I run that family's tier(s) — Tier-1 / Tier-2(+1c) / Tier-3(+1b) — first?"* For FAMILY B and FAMILY C the tier is MANDATORY — run it before the `Read`. FAMILY A is best-effort (query `chat_history` only when it has content; skip when known-empty, note once per session). (A pure-conversation or in-progress-edit turn matches no family — no tier required.)
 
 ### Decision tree (auto-apply, no user input needed)
 
 ```
 Information gap detected.
-├── Past session / prior decision / "why" question? (FAMILY A)
-│   └── YES → Tier 1 (Qdrant `chat_history`). Then Tier 3 if more context needed.
-├── Code structure / call graph / impact analysis? (FAMILY B)
-│   └── YES → Tier 2 (Graphify). Escalate to Tier 1c (`code_chunks` semantic) if the graph is too narrow.
-├── Project reference / how-to / convention / "where is it documented" / ADR / sprint plan / entity definition? (FAMILY C)
+├── Past session / prior decision / "why" question? (FAMILY A — best-effort)
+│   └── YES → Tier 1 (Qdrant `chat_history`) WHEN it has content; skip when known-empty (note once per session). Then Tier 3 if more context needed.
+├── Code structure / call graph / impact on a NAMED symbol? (FAMILY B — mandatory)
+│   └── YES → Tier 2 (Graphify graph FIRST). Escalate to Tier 1c (`code_chunks` semantic) if the graph is too narrow.
+├── Want to FIND code by BEHAVIOR, no symbol name known? (GATE 3)
+│   └── YES → Tier 1c (`code_chunks` semantic) FIRST, before any blind grep. (Symbol name known → FAMILY B instead. Literal token known → exact-token grep, first-class.)
+├── Project reference / how-to / convention / "where is it documented" / ADR / sprint plan / entity definition? (FAMILY C — mandatory)
 │   └── YES → Tier 3 (`_SEARCH_INDEX.md` keyword match → read matched pages) → escalate to Tier 1b (`wiki_pages` semantic) if the index misses.
 └── Else → Tier 4 (grep / Read on known path).
 ```
+
+**Workflow retrieval gates (canonical in the eager block):** three SOFT/best-effort lifecycle gates live in `.sumela/sumela-prompt.md` `<workflow_retrieval_gates>` — GATE 1 task-intake (brainstorming entry → Tier-3 `_SEARCH_INDEX` + Tier-1b `wiki_pages`), GATE 2 impact-before-contract-change (`query-graph.py <symbol> --impact --depth 1 --limit 10`), GATE 3 find-code-by-behavior (`query-qdrant.py --collection code_chunks` before blind grep). They are best-effort, not mandatory. The eager block is canonical; this file is operational detail only — do not redefine trigger detection here.
 
 ### Citation rule
 

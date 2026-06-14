@@ -27,10 +27,92 @@ from __future__ import annotations
 import sys
 import os
 import json
+import time
 import argparse
+from datetime import datetime, timezone
+from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
+# --- Per-session retrieval dedup cache --------------------------------------
+# Repeated identical retrieval queries within a "session" (TTL-bounded) are
+# skipped so lifecycle gates don't re-query the same thing. State lives in a
+# gitignored runtime file under .sumela/ (the LLM keeps no ledger). stdlib-only;
+# never crashes on a missing/corrupt cache. Mirrors graphify-code-graph's helper
+# — duplicated minimally rather than shared, since the two plugin script dirs
+# have no common import path.
+CACHE_TTL_SECONDS = 6 * 3600  # 6h: a pragmatic "session" window.
+
+
+def _find_sumela_root() -> "Path | None":
+    """Walk up from this script to locate the `.sumela` directory.
+
+    Anchored on the script file (not cwd) so the cache is stable regardless of
+    invocation directory. Returns None if `.sumela` is not an ancestor.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if parent.name == ".sumela":
+            return parent
+    return None
+
+
+def _cache_path() -> "Path | None":
+    """Resolve `.sumela/.retrieval-cache.json`. Never write outside `.sumela/`."""
+    root = _find_sumela_root()
+    return (root / ".retrieval-cache.json") if root is not None else None
+
+
+def _cache_load(path):
+    """Read the cache file as {key: iso_timestamp}. Missing/corrupt → empty dict."""
+    if path is None or not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError, ValueError):
+        return {}
+
+
+def _entry_is_fresh(iso_ts, now: float) -> bool:
+    """True if an ISO timestamp entry is within the TTL window."""
+    if not isinstance(iso_ts, str):
+        return False
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+    except (ValueError, TypeError):
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (now - dt.timestamp()) < CACHE_TTL_SECONDS
+
+
+def cache_check_and_record(key: str) -> bool:
+    """Return True if `key` was queried within the TTL (a hit → caller skips).
+
+    On a miss, record `key`, prune expired entries, and persist. All file I/O is
+    best-effort: any failure degrades to "miss" rather than crashing the caller.
+    """
+    path = _cache_path()
+    now = time.time()
+    cache = _cache_load(path)
+
+    if _entry_is_fresh(cache.get(key), now):
+        return True
+
+    # Best-effort cache: last-writer-wins, no lock. A lost entry just means a re-query, never a wrong result.
+    cache = {k: v for k, v in cache.items() if _entry_is_fresh(v, now)}
+    cache[key] = datetime.now(timezone.utc).isoformat()
+    if path is not None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2)
+        except OSError:
+            pass  # cache is an optimization; never block the query on write failure
+    return False
 
 
 def print_report(summary_lines: list):
@@ -203,6 +285,8 @@ def main():
                         help="Qdrant port (default: 6333 or QDRANT_PORT env)")
     parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_URL", "http://localhost:11434"),
                         help="Ollama base URL (default: http://localhost:11434 or OLLAMA_URL env)")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Bypass the per-session retrieval dedup cache (always re-query).")
     args = parser.parse_args()
 
     query_filter = build_filter(args.developer, args.domain, args.since, args.until)
@@ -213,6 +297,26 @@ def main():
         report_failure("Input", "Provide a query, or a filter (--developer/--domain/--since/--until) "
                                 "for a filter-only listing.")
         sys.exit(1)
+
+    # Per-session dedup: short-circuit a repeat of the SAME retrieval within the
+    # TTL. Key = normalized query string + collection name (plus filter params so
+    # a filtered query isn't deduped against an unfiltered one on the same text).
+    if not args.no_cache:
+        norm_query = query_text.lower()
+        norm_coll = args.collection.strip().lower()
+        filt = "|".join([
+            f"dev={args.developer.strip().lower()}",
+            f"dom={args.domain.strip().lower()}",
+            f"since={args.since.strip()}",
+            f"until={args.until.strip()}",
+            f"limit={args.limit}",
+            f"threshold={args.threshold}",
+            f"json={int(args.json)}",
+        ])
+        cache_key = f"qdrant::{norm_coll}::{norm_query}::{filt}"
+        if cache_check_and_record(cache_key):
+            print("cached — skipped (already queried this session)")
+            sys.exit(0)
 
     embedding = None
     if not filter_only:

@@ -21,7 +21,7 @@ Before answering, ask: "Do I need context I don't already have?" Apply the canon
 
 For deep workflows (ingest, code-commit, lint) or when multi-collection Qdrant routing is needed (`wiki_pages`, `code_chunks`), load `using-second-brain` and follow its INFORMATION GAP RESOLUTION section.
 
-NEVER skip mandatory Tier-1/Tier-2 routing for matching historical, decision, call-graph, dependency, or impact questions.
+NEVER skip Tier-2 routing for matching call-graph/structural questions (FAMILY B); Tier-1 (FAMILY A session history) is best-effort — skip when `chat_history` is known-empty.
 
 ### STEP 3b — Proactive Impact Analysis (silent, before code changes)
 

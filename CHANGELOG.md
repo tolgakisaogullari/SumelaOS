@@ -11,6 +11,28 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Added
 
+- **Lifecycle-anchored memory retrieval — gates fire on workflow moments, not just
+  question-semantics (v0.10.0).** Until now retrieval was driven purely by the question-
+  semantic FAMILY A/B/C routing, so memory was consulted only when the agent recognized an
+  information gap in what it was *asked* — never anchored to where it *was* in the workflow.
+  A new `<workflow_retrieval_gates>` block in `sumela-prompt.md` adds three lifecycle anchors
+  (additive to FAMILY A/B/C; all SOFT / best-effort, no enforcement hook): GATE 1 task-intake
+  fires on `brainstorming` entry → consult Tier-3 `_SEARCH_INDEX` + Tier-1b `wiki_pages`
+  before raw recon; GATE 2 impact-before-contract-change runs `query-graph.py <symbol>
+  --impact` before changing a pre-existing symbol's signature (covers all six code-writing
+  skills via the eager block plus a mirrored trigger in
+  `subagent-driven-development/implementer-prompt.md`); GATE 3 find-code-by-behavior promotes
+  `code_chunks` semantic search to a first-class route, ahead of a blind grep, when the symbol
+  name is unknown. FAMILY A (`chat_history`) is demoted from MANDATORY to **best-effort**
+  (skip when known-empty, note once per session) — routing re-aimed at where the data actually
+  lives (`code_chunks`, `wiki_pages`); FAMILY B/C stay MANDATORY, with mirrors aligned in
+  `using-second-brain` and `using-superpowers`. A script-side per-session dedup cache is added
+  to `query-graph.py` and `query-qdrant.py` (gitignored `.sumela/.retrieval-cache.json`) so
+  repeated identical queries within a session are skipped. **Language-agnostic by design:** no
+  per-language parsing in core — contract-change judgment lives in the agent/graphify, and the
+  gates stay deliberately soft prose with no enforcement hook (documented follow-up if soft
+  prose underfires: a narrow git rename/delete-only mechanical leg).
+
 - **Checkpoint vs Flow review mode — per-task review is now the user's choice (v0.9.0).**
   Field feedback from the first real project run: not every user wants a reviewer
   dispatch + approval stop after EVERY task; some prefer one comprehensive review at the

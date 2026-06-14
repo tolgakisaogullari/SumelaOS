@@ -24,6 +24,10 @@ This task comes from an approved implementation plan dispatched by the `subagent
    - You have been reading file after file trying to understand the system without making progress.
    Describe what you are stuck on, what you tried, and what kind of help you need.
 2. IMPLEMENT (ADAPTIVE WORKFLOW & SECURITY FIRST): 
+   - **BEFORE EDITING — SOFT RETRIEVAL GATES (best-effort, no hard gate):** You run in a fresh context and do NOT inherit the orchestrator's eager `<workflow_retrieval_gates>` block, so honor these here:
+     - **Impact before contract change:** Before changing the signature/contract (params, return, visibility, deletion) of a PRE-EXISTING symbol you did not author in this task, first run `python .sumela/memory-plugins/graphify-code-graph/scripts/query-graph.py <symbol> --impact --depth 1 --limit 10` to see its direct callers (impact). Skip for body-internal edits, private symbols, new symbols you are authoring, and trivial edits. A graph miss = note once, continue.
+     - **Find code by behavior:** To FIND code by behavior/concept when you do NOT know the symbol name, run `python .sumela/memory-plugins/qdrant-session-memory/scripts/query-qdrant.py "<concept>" --collection code_chunks` BEFORE a blind grep. (If you already know the literal identifier, grep is fine.)
+     - Both are SOFT / best-effort — do not block on them; a miss is a one-line note, then continue.
    - Check the `TDD_MODE`. If Enabled, you MUST follow strict Red-Green-Refactor (write failing tests first). If Skipped, write implementation directly.
    - SECURITY TEST EXCEPTION: Even if `TDD_MODE` is Skipped, if your task involves AuthN, AuthZ, or modifying critical security boundaries, you MUST write automated tests to prove the boundary is secure.
    - You MUST strictly adhere to the project's `secure-coding-standard`. Do not trust user input.

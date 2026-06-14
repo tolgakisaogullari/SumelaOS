@@ -44,7 +44,9 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -52,6 +54,85 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 DEFAULT_GRAPH_DIR = os.getenv("GRAPHIFY_OUT_DIR", "graphify-out")
+
+# --- Per-session retrieval dedup cache --------------------------------------
+# Repeated identical retrieval queries within a "session" (defined pragmatically
+# via a TTL) are skipped so lifecycle gates don't re-query the same thing. The
+# LLM keeps no ledger — state lives here, in a gitignored runtime file under
+# .sumela/. stdlib-only; never crashes on a missing/corrupt cache.
+CACHE_TTL_SECONDS = 6 * 3600  # 6h: a pragmatic "session" window.
+
+
+def _find_sumela_root() -> Path | None:
+    """Walk up from this script to locate the `.sumela` directory.
+
+    Anchoring on the script file (not cwd) keeps the cache stable regardless of
+    where the script is invoked from. Returns None if not found.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if parent.name == ".sumela":
+            return parent
+    return None
+
+
+def _cache_path() -> Path | None:
+    """Resolve `.sumela/.retrieval-cache.json`. Never write outside `.sumela/`."""
+    root = _find_sumela_root()
+    return (root / ".retrieval-cache.json") if root is not None else None
+
+
+def _cache_load(path: Path | None) -> dict:
+    """Read the cache file as {key: iso_timestamp}. Missing/corrupt → empty dict."""
+    if path is None or not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError, ValueError):
+        return {}
+
+
+def _entry_is_fresh(iso_ts: object, now: float) -> bool:
+    """True if an ISO timestamp entry is within the TTL window."""
+    if not isinstance(iso_ts, str):
+        return False
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+    except (ValueError, TypeError):
+        return False
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return (now - dt.timestamp()) < CACHE_TTL_SECONDS
+
+
+def cache_check_and_record(key: str) -> bool:
+    """Return True if `key` was queried within the TTL (a hit → caller skips).
+
+    On a miss, record `key` with the current timestamp, prune expired entries,
+    and persist. All file I/O is best-effort: any failure degrades to "miss"
+    (i.e. the query proceeds) rather than crashing the caller.
+    """
+    path = _cache_path()
+    now = time.time()
+    cache = _cache_load(path)
+
+    if _entry_is_fresh(cache.get(key), now):
+        return True
+
+    # Miss: record + prune expired, then persist (best-effort).
+    # Best-effort cache: last-writer-wins, no lock. A lost entry just means a re-query, never a wrong result.
+    cache = {k: v for k, v in cache.items() if _entry_is_fresh(v, now)}
+    cache[key] = datetime.now(timezone.utc).isoformat()
+    if path is not None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cache, f, indent=2)
+        except OSError:
+            pass  # cache is an optimization; never block the query on write failure
+    return False
 
 
 def _print_report(lines: list):
@@ -308,16 +389,43 @@ def main():
                         help=f"Directory containing graph.json (default: {DEFAULT_GRAPH_DIR}).")
     parser.add_argument("--graph", default=None,
                         help="Full path to graph.json (overrides --graph-dir).")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Bypass the per-session retrieval dedup cache (always re-query).")
     args = parser.parse_args()
 
     graph_path = args.graph or os.path.join(args.graph_dir, "graph.json")
     graph = Graph(graph_path)
     matches = graph.find_by_symbol(args.symbol)
     if not matches:
+        # Unresolved symbol → fall back to the normalized symbol string as the
+        # cache key so a repeated identical no-match query is also short-circuited.
+        if not args.no_cache:
+            miss_key = f"graph::sym:{args.symbol.strip().lower()}::nomatch|json={int(args.json)}"
+            if cache_check_and_record(miss_key):
+                print("cached — skipped (already queried this session)")
+                sys.exit(1)
         if args.json:
             print(json.dumps({"status": "NO_MATCH", "symbol": args.symbol}, indent=2))
             sys.exit(1)
         _report_failure("Match", f"no node matches symbol '{args.symbol}' (case-insensitive substring on label or id).", exit_code=1)
+
+    # Per-session dedup: short-circuit a repeat of the SAME query (same resolved
+    # node ids + same query shape) within the TTL. Key on resolved node id(s).
+    if not args.no_cache:
+        node_ids = sorted(m["id"] for m in matches)
+        # matches is non-empty here, so node_ids always has entries — key on resolved ids.
+        id_part = "|".join(node_ids)
+        shape = "|".join([
+            f"depth={args.depth}",
+            f"impact={int(args.impact)}",
+            f"relation={args.relation or ''}",
+            f"confidence={args.confidence or ''}",
+            f"json={int(args.json)}",
+        ])
+        cache_key = f"graph::{id_part}::{shape}"
+        if cache_check_and_record(cache_key):
+            print("cached — skipped (already queried this session)")
+            sys.exit(0)
 
     if args.json:
         _print_json(graph, matches, args)
