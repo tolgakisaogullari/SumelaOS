@@ -32,6 +32,9 @@ import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.memory_ingest import resolve_collection_arg
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -185,7 +188,9 @@ def build_filter(developer: str = "", domain: str = "", since: str = "", until: 
         must.append(FieldCondition(key="date_int", range=Range(gte=gte, lte=lte)))
     return Filter(must=must) if must else None
 
-DEFAULT_COLLECTION = os.getenv("QDRANT_COLLECTION", "chat_history")
+# Logical base default; resolved to the per-project physical collection after arg
+# parsing (QDRANT_COLLECTION env still overrides, inside the resolver).
+DEFAULT_COLLECTION = "chat_history"
 DEFAULT_LIMIT = 5
 DEFAULT_THRESHOLD = 0.0
 
@@ -213,9 +218,17 @@ def query_qdrant(
     metadata listing via scroll when query_vector is None (filter-only mode)."""
     client = QdrantClient(host=host, port=port, check_compatibility=False)
 
-    collections = [c.name for c in client.get_collections().collections]
-    if collection not in collections:
-        raise ValueError(f"Collection '{collection}' not found. Available: {collections}")
+    # collection_exists resolves aliases (an adopted legacy collection is reachable
+    # only via its alias name, which get_collections() does NOT list). A not-yet-built
+    # collection is a normal "memory empty" state, not an error — return empty so the
+    # caller reports "0 matches" instead of crashing the agent's retrieval.
+    try:
+        exists = client.collection_exists(collection)
+    except Exception:
+        exists = True  # don't block on a flaky check; the real query below surfaces errors
+    if not exists:
+        print(f"[note] collection '{collection}' not built yet — no memory to search.", file=sys.stderr)
+        return [], 0
 
     if query_vector is None:
         # Filter-only listing: gather ALL points matching the filter (not top-K), paging
@@ -288,6 +301,10 @@ def main():
     parser.add_argument("--no-cache", action="store_true",
                         help="Bypass the per-session retrieval dedup cache (always re-query).")
     args = parser.parse_args()
+
+    # Resolve a logical base (chat_history|wiki_pages|code_chunks) to the per-project
+    # physical collection; a custom/explicit name passes through unchanged.
+    args.collection = resolve_collection_arg(args.collection)
 
     query_filter = build_filter(args.developer, args.domain, args.since, args.until)
     query_text = args.query.strip()

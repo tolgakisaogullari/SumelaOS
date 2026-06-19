@@ -44,7 +44,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.memory_ingest import (
     get_repo_root, get_extra_ingest_dirs, chunk_text, get_embedding,
-    deterministic_id, print_report,
+    deterministic_id, print_report, resolve_collection_arg, project_slug,
 )
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -84,7 +84,10 @@ except ImportError:
 OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-COLLECTION_NAME = os.getenv("WIKI_PAGES_COLLECTION", "wiki_pages")
+# Per-project physical collection (honors WIKI_PAGES_COLLECTION override inside the
+# resolver). PROJECT_SLUG namespaces the payload and point IDs (see ingest-code).
+COLLECTION_NAME = resolve_collection_arg("wiki_pages")
+PROJECT_SLUG = project_slug()
 CHUNK_SIZE = 512
 OVERLAP = 50
 MAX_WORKERS = 4
@@ -266,7 +269,7 @@ def main():
 
         points = []
         for cd in chunks_data:
-            point_id = deterministic_id(page_path, cd["chunk_index"])
+            point_id = deterministic_id(f"{PROJECT_SLUG}::{page_path}", cd["chunk_index"])
             fm = cd["fm"]
             page_type = fm.get("type", "concept")
             tags_raw = fm.get("tags", "")
@@ -283,6 +286,7 @@ def main():
                         "page_type": page_type,
                         "tags": tags,
                         "date_updated": date_updated,
+                        "project_slug": PROJECT_SLUG,
                         "chunk_index": cd["chunk_index"],
                         "total_chunks": cd["total_chunks"],
                     },

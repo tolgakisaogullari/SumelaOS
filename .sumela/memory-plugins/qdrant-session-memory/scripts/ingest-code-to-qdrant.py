@@ -46,7 +46,10 @@ from typing import List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.memory_ingest import get_repo_root, chunk_text, get_embedding, deterministic_id, print_report
+from lib.memory_ingest import (
+    get_repo_root, chunk_text, get_embedding, deterministic_id, print_report,
+    resolve_collection_arg, project_slug,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -88,7 +91,11 @@ except ImportError:
 OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-COLLECTION_NAME = os.getenv("CODE_CHUNKS_COLLECTION", "code_chunks")
+# Per-project physical collection (honors CODE_CHUNKS_COLLECTION override inside the
+# resolver). PROJECT_SLUG namespaces both the payload and the point IDs so two
+# projects sharing one Qdrant instance never overwrite each other's points.
+COLLECTION_NAME = resolve_collection_arg("code_chunks")
+PROJECT_SLUG = project_slug()
 CHUNK_SIZE = 512
 OVERLAP = 50
 MAX_WORKERS = 4
@@ -344,7 +351,7 @@ def main():
 
         points = []
         for cd in chunks_data:
-            point_id = deterministic_id(rel_path, cd["chunk_index"])
+            point_id = deterministic_id(f"{PROJECT_SLUG}::{rel_path}", cd["chunk_index"])
             points.append(
                 PointStruct(
                     id=point_id,
@@ -353,6 +360,7 @@ def main():
                         "text": cd["chunk"],
                         "file_path": rel_path,
                         "file_type": cd["file_type"],
+                        "project_slug": PROJECT_SLUG,
                         "chunk_index": cd["chunk_index"],
                         "total_chunks": cd["total_chunks"],
                     },

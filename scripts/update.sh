@@ -146,6 +146,27 @@ EOF
 }
 reconcile_gitignore
 
+# --- Migrate Qdrant memory collections to per-project namespacing ------------
+# Runs BEFORE the version gate so an already-current install still migrates (the
+# namespacing change can ship without a version bump that the gate would otherwise
+# skip). Best-effort + idempotent: the script records its per-(instance,slug)
+# decisions and no-ops on re-run; it does NOTHING unless the qdrant-session-memory
+# plugin is installed AND a local Qdrant is reachable. Honors --dry-run.
+migrate_qdrant_collections() {
+  local mig="$ROOT/.sumela/memory-plugins/qdrant-session-memory/scripts/migrate-collections.py"
+  [ -f "$mig" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  local qhost="${QDRANT_HOST:-localhost}" qport="${QDRANT_PORT:-6333}"
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -fsS --max-time 2 "http://${qhost}:${qport}/readyz" >/dev/null 2>&1 || return 0
+  local -a margs=()
+  [ "$DRY_RUN" = true ] && margs+=(--dry-run)
+  echo ""
+  info "Checking Qdrant memory collections for per-project namespacing…"
+  python3 "$mig" ${margs[@]+"${margs[@]}"} 2>&1 | sed 's/^/  /'
+}
+migrate_qdrant_collections
+
 if [ "$SRC_VER" = "$LOCAL_VER" ] && [ "$FORCE" != true ]; then
   ok "Already on core version ${LOCAL_VER}. (Use --force to re-check files anyway.)"
   exit 0

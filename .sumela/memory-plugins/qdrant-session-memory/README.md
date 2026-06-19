@@ -27,7 +27,36 @@ All scripts accept CLI arguments and environment variables. CLI args take preced
 | Qdrant host | `--host` | `QDRANT_HOST` | `localhost` |
 | Qdrant port | `--port` | `QDRANT_PORT` | `6333` |
 | Ollama URL | `--ollama-url` | `OLLAMA_URL` | `http://localhost:11434` |
-| Collection name | `--collection` | `QDRANT_COLLECTION` | `chat_history` |
+| Collection (logical base) | `--collection` | `QDRANT_COLLECTION` | `chat_history` |
+| Collection prefix (override) | — | `SUMELA_COLLECTION_PREFIX` | derived per-install |
+
+## Per-project collection isolation
+
+One Qdrant instance is shared across every SumelaOS project on a machine. To keep
+projects from intermingling (and to stop a prune in one project deleting a same-path
+point in another), the three logical collections are **namespaced per project**:
+the physical names are `{slug}__chat_history`, `{slug}__wiki_pages`,
+`{slug}__code_chunks`, where `slug` is a stable per-install id (basename + a hash of
+the install path), persisted once in `.sumela/_migration/collection-prefix`.
+
+You keep using the **logical base names** everywhere (`--collection code_chunks`,
+the agent's retrieval tiers, the git hooks) — every script resolves a base to the
+project's physical collection automatically. Set `SUMELA_COLLECTION_PREFIX` to pin a
+custom slug, or a per-base env var (`QDRANT_COLLECTION` / `WIKI_PAGES_COLLECTION` /
+`CODE_CHUNKS_COLLECTION`) to pin an explicit full collection name.
+
+**Existing installs** are migrated automatically by `scripts/update.sh` /
+`scripts/setup-memory.sh` (and idempotently re-checked) via `migrate-collections.py`,
+which either *adopts* legacy bare collections (zero-copy alias, when the data is
+confidently this project's) or *rebuilds* fresh namespaced ones — never adopting
+another project's data. Run it directly to inspect or force a choice:
+
+```bash
+python .sumela/memory-plugins/qdrant-session-memory/scripts/migrate-collections.py --dry-run
+python .../migrate-collections.py --adopt     # force zero-copy adoption
+python .../migrate-collections.py --rebuild   # force fresh rebuild
+python .../migrate-collections.py --gc        # drop orphaned legacy bare collections
+```
 
 ### Examples
 

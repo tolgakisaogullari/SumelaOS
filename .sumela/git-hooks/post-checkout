@@ -21,9 +21,15 @@ case "$prev" in
   *)      prev="$SUMELA_EMPTY_TREE" ;;
 esac
 
-sumela_memory_sync "$prev" "$new"   # Qdrant chat_history (session summaries)
-sumela_wiki_sync   "$prev" "$new"   # Qdrant wiki_pages   (curated wiki)
-sumela_code_sync   "$prev" "$new"   # Qdrant code_chunks  (opt-in)
+# Migrate LOCAL Qdrant collections to per-project namespacing BEFORE the Qdrant syncs.
+# If it DEFERS (another migrate in progress / unresolved), skip the three Qdrant syncs
+# this checkout so an ingest can't pre-empt a pending adopt; they catch up next time.
+# graph_sync (graphify, not Qdrant) is independent and always runs.
+if sumela_collections_migrate; then
+  sumela_memory_sync "$prev" "$new"   # Qdrant chat_history (session summaries)
+  sumela_wiki_sync   "$prev" "$new"   # Qdrant wiki_pages   (curated wiki)
+  sumela_code_sync   "$prev" "$new"   # Qdrant code_chunks  (opt-in)
+fi
 sumela_graph_sync  "$prev" "$new"   # graphify code graph
 sumela_update_check                 # notice if a newer SumelaOS is available (rate-limited)
 exit 0

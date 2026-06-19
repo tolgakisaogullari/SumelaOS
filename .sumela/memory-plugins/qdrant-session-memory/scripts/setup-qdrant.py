@@ -21,6 +21,12 @@ Environment:
 import sys
 import os
 import argparse
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.memory_ingest import (
+    COLLECTION_BASES, resolved_collection, resolve_collection_arg, collection_or_alias_exists,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -35,11 +41,14 @@ except ImportError:
 EMBED_DIM = 1024  # Qwen3-Embedding-0.6B
 DISTANCE = Distance.COSINE
 
-COLLECTIONS = [
-    ("chat_history", "Conversational session memory — session-summary chunks for past-decision recall"),
-    ("wiki_pages",   "Curated wiki content — ADRs, entity defs, sprint plans, concept pages"),
-    ("code_chunks",  "Source code semantic chunks — file-level and symbol-level for code search"),
-]
+# Logical bases → purpose. The physical, per-project collection name is resolved at
+# runtime (see lib.memory_ingest.resolved_collection) so two projects on one shared
+# Qdrant instance never share a collection.
+COLLECTION_PURPOSE = {
+    "chat_history": "Conversational session memory — session-summary chunks for past-decision recall",
+    "wiki_pages":   "Curated wiki content — ADRs, entity defs, sprint plans, concept pages",
+    "code_chunks":  "Source code semantic chunks — file-level and symbol-level for code search",
+}
 
 
 def main():
@@ -51,31 +60,37 @@ def main():
     parser.add_argument("--port", type=int, default=int(os.getenv("QDRANT_PORT", "6333")),
                         help="Qdrant port (default: 6333 or QDRANT_PORT env)")
     parser.add_argument("--collection", default=None,
-                        help="Create only this collection (default: create all three)")
+                        help="Create only this base (chat_history|wiki_pages|code_chunks); "
+                             "default: create all three.")
     args = parser.parse_args()
 
     client = QdrantClient(host=args.host, port=args.port)
 
-    collections = COLLECTIONS
+    bases = list(COLLECTION_BASES)
     if args.collection:
-        collections = [(n, d) for n, d in COLLECTIONS if n == args.collection]
-        if not collections:
-            print(f"ERROR: Unknown collection '{args.collection}'. Available: {[n for n, _ in COLLECTIONS]}")
+        # Accept either a logical base or an already-resolved physical name; map back
+        # to the base so we can look up its purpose.
+        match = [b for b in COLLECTION_BASES
+                 if args.collection == b or args.collection == resolved_collection(b)]
+        if not match:
+            print(f"ERROR: Unknown collection '{args.collection}'. Available bases: {list(COLLECTION_BASES)}")
             sys.exit(1)
+        bases = match
 
     created = 0
-    for name, purpose in collections:
-        if client.collection_exists(name):
+    for base in bases:
+        name = resolved_collection(base)
+        if collection_or_alias_exists(client, name):
             print(f"[skip] '{name}' already exists.")
             continue
         client.create_collection(
             collection_name=name,
             vectors_config=VectorParams(size=EMBED_DIM, distance=DISTANCE),
         )
-        print(f"[ok]   '{name}' created — {purpose}")
+        print(f"[ok]   '{name}' created — {COLLECTION_PURPOSE[base]}")
         created += 1
 
-    print(f"\nDone. {created} new collection(s); {len(collections) - created} existed.")
+    print(f"\nDone. {created} new collection(s); {len(bases) - created} existed.")
 
 
 if __name__ == "__main__":

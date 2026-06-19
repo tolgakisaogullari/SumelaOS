@@ -156,6 +156,12 @@ if want qdrant-session-memory && [ -d "$PLUGDIR/qdrant-session-memory" ]; then
   # 4) Create collections + seed the index, once Qdrant is reachable.
   if qdrant_up; then
     s="$PLUGDIR/qdrant-session-memory/scripts"
+    # Migrate FIRST (idempotent, best-effort): if this machine has pre-namespacing
+    # bare collections from an earlier install, adopt (alias) or rebuild them into
+    # this project's namespaced names BEFORE setup-qdrant would create empty ones —
+    # otherwise setup-qdrant pre-creates the namespaced collection and adoption of
+    # the legacy data is lost. On a fresh machine this is a cheap no-op.
+    [ -f "$s/migrate-collections.py" ] && { python3 "$s/migrate-collections.py" 2>&1 | sed 's/^/  /' || true; }
     [ -f "$s/setup-qdrant.py" ] && { python3 "$s/setup-qdrant.py" >/dev/null 2>&1 && ok "Qdrant collections ready" || todo "setup-qdrant.py failed — run: python3 $s/setup-qdrant.py"; }
     # Seed wiki_pages (cheap). code_chunks is left empty here; the first pull that
     # touches code builds it automatically (empty collection -> full walk), then

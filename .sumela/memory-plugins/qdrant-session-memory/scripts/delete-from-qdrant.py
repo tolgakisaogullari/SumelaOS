@@ -23,6 +23,10 @@ Environment: QDRANT_HOST (default localhost), QDRANT_PORT (default 6333).
 import argparse
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.memory_ingest import resolve_collection_arg
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -30,7 +34,9 @@ if hasattr(sys.stdout, "reconfigure"):
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Delete points from a Qdrant collection by a payload key match.")
-    p.add_argument("--collection", required=True, help="Qdrant collection name (e.g. wiki_pages, code_chunks).")
+    p.add_argument("--collection", required=True,
+                   help="Qdrant collection: a logical base (wiki_pages, code_chunks, chat_history) "
+                        "resolves to the per-project physical name; any other name passes through.")
     p.add_argument("--key", required=True, help="Payload field to match (e.g. page_path, file_path, session_id).")
     p.add_argument("--value", required=True, help="Value the payload field must equal for a point to be deleted.")
     p.add_argument("--host", default=os.getenv("QDRANT_HOST", "localhost"))
@@ -44,13 +50,14 @@ def main() -> int:
         print("delete-from-qdrant: qdrant_client not installed — skipping.")
         return 0
 
+    collection = resolve_collection_arg(a.collection)
     try:
         client = QdrantClient(host=a.host, port=a.port, check_compatibility=False)
         client.delete(
-            collection_name=a.collection,
+            collection_name=collection,
             points_selector=Filter(must=[FieldCondition(key=a.key, match=MatchValue(value=a.value))]),
         )
-        print(f"delete-from-qdrant: removed points where {a.key} == '{a.value}' from '{a.collection}'.")
+        print(f"delete-from-qdrant: removed points where {a.key} == '{a.value}' from '{collection}'.")
     except Exception as e:  # collection missing / Qdrant down / etc. — never fail the caller.
         print(f"delete-from-qdrant: skipped ({e}).")
     return 0

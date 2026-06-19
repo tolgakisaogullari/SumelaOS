@@ -12,9 +12,16 @@
 from="$(git rev-parse --verify --quiet ORIG_HEAD 2>/dev/null)"
 [ -n "$from" ] || from="HEAD^"
 
-sumela_memory_sync "$from" "HEAD"   # Qdrant chat_history (session summaries)
-sumela_wiki_sync   "$from" "HEAD"   # Qdrant wiki_pages   (curated wiki)
-sumela_code_sync   "$from" "HEAD"   # Qdrant code_chunks  (opt-in)
+# Migrate LOCAL Qdrant collections to per-project namespacing BEFORE the Qdrant syncs.
+# If it DEFERS (returns non-zero: another migrate in progress / unresolved), skip the
+# three Qdrant syncs this pull so an ingest can't pre-empt a pending adopt — they catch
+# up on the next pull once migration settles. graph_sync (graphify, not Qdrant) is
+# independent and always runs.
+if sumela_collections_migrate; then
+  sumela_memory_sync "$from" "HEAD"   # Qdrant chat_history (session summaries)
+  sumela_wiki_sync   "$from" "HEAD"   # Qdrant wiki_pages   (curated wiki)
+  sumela_code_sync   "$from" "HEAD"   # Qdrant code_chunks  (opt-in)
+fi
 sumela_graph_sync  "$from" "HEAD"   # graphify code graph
 sumela_update_check                 # notice if a newer SumelaOS is available (rate-limited)
 exit 0

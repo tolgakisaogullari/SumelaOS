@@ -250,6 +250,70 @@ _sumela_qdrant_up() {
   curl -fsS --max-time 2 "http://${qhost}:${qport}/readyz" >/dev/null 2>&1
 }
 
+# One-time migration of pre-namespacing Qdrant collections to this project's
+# per-project namespaced names. Teammates get framework updates via a plain `git
+# pull` (NOT scripts/update.sh, which pulls upstream SumelaOS), so the pull hook is
+# the ONLY automatic surface that can migrate their LOCAL Qdrant — without this they
+# would silently rebuild (re-embed) instead of adopting their existing collections.
+# Same contract as the sync helpers: best-effort, never fails git, writes ONLY to the
+# gitignored .sumela/_migration/. MUST run synchronously BEFORE the sync helpers in
+# the hook so an ingest can't pre-create the namespaced collection and pre-empt the
+# zero-copy adopt. Steady-state cost is a single marker stat (no python spawn):
+#   * marker present + matches (instance,slug) -> instant no-op
+#   * Qdrant down                              -> skip (retry next pull), no python
+# Opt out: SUMELA_DISABLE_COLLECTION_MIGRATE=1.
+#
+# RETURN CONTRACT: 0 = safe to run the Qdrant sync helpers; 1 = migration DEFERRED for
+# this pull (another migrate holds the lock, or a base is unresolved). The caller MUST
+# skip the Qdrant syncs (memory/wiki/code) when this returns 1 — otherwise an ingest
+# would create the namespaced collection empty and pre-empt the pending adopt. (Not-
+# applicable cases — disabled / no plugin / Qdrant down / already-migrated — return 0;
+# the syncs self-guard on Qdrant reachability anyway.)
+sumela_collections_migrate() {
+  [ -n "${SUMELA_DISABLE_COLLECTION_MIGRATE:-}" ] && return 0
+
+  local repo; repo="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -n "$repo" ] || return 0
+  local install="${SUMELA_INSTALL_ROOT:-$repo}"
+
+  local mig="$install/.sumela/memory-plugins/qdrant-session-memory/scripts/migrate-collections.py"
+  [ -f "$mig" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  # Cheap sentinel gate (local file reads only) — skip before any Qdrant probe or
+  # python spawn once migration is done for this (instance, slug).
+  local qhost="${QDRANT_HOST:-localhost}" qport="${QDRANT_PORT:-6333}"
+  # Normalize the port to base-10 so it matches python's int(QDRANT_PORT) in the marker
+  # (e.g. "06333" -> 6333). 10# forces decimal (bash would read a leading-zero value as
+  # octal). Non-numeric ports are left as-is (python would have failed to write a marker).
+  case "$qport" in (""|*[!0-9]*) : ;; (*) qport=$((10#$qport)) ;; esac
+  local prefix_file="$install/.sumela/_migration/collection-prefix"
+  local marker="$install/.sumela/_migration/.migrated"
+  local slug=""
+  [ -f "$prefix_file" ] && slug="$(tr -d '[:space:]' < "$prefix_file" 2>/dev/null)"
+  if [ -n "$slug" ] && [ -f "$marker" ]; then
+    local expected; expected="$(printf '%s:%s\t%s' "$qhost" "$qport" "$slug")"
+    grep -qxF "$expected" "$marker" 2>/dev/null && return 0
+  fi
+
+  # Not yet migrated for this (instance, slug): only do real work when Qdrant is up.
+  _sumela_qdrant_up || return 0
+
+  local log="$install/.sumela/.memory-sync.log"
+  [ -f "$log" ] && [ "$(wc -c <"$log" 2>/dev/null || echo 0)" -gt 524288 ] && : >"$log"
+  echo "sumela: migrating local Qdrant memory collections to per-project namespacing (one-time; log: .sumela/.memory-sync.log)"
+  # Synchronous (NOT backgrounded): must finish before the sync helpers run. It is
+  # fast (samples + alias/create) and only does real work once; subsequent pulls hit
+  # the marker gate above. Capture the exit code: 75 (EX_DEFERRED) means another migrate
+  # is in progress or a base is unresolved -> tell the caller to skip the syncs.
+  local rc=0
+  { echo "===== collections-migrate @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="; } >>"$log" 2>&1
+  ( cd "$install" && python3 "$mig" ) >>"$log" 2>&1 </dev/null; rc=$?
+  { echo "===== collections-migrate: done (rc=$rc) ====="; } >>"$log" 2>&1
+  [ "$rc" -eq 75 ] && return 1   # DEFERRED -> caller skips Qdrant syncs this pull
+  return 0
+}
+
 # Delete Qdrant points for files that were DELETED upstream (orphan cleanup). The
 # ingest scripts only re-upsert files they still see on disk, so a removed file's
 # embedding lingers and keeps surfacing in search — this drops it by payload key.

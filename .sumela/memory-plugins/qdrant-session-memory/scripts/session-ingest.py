@@ -50,7 +50,11 @@ import uuid
 import hashlib
 import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import List
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.memory_ingest import resolve_collection_arg, project_slug
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -197,8 +201,9 @@ def main():
         description="Ingest a session summary markdown into Qdrant."
     )
     parser.add_argument("summary_path", help="Path to session summary markdown file")
-    parser.add_argument("--collection", default=os.getenv("QDRANT_COLLECTION", "chat_history"),
-                        help="Qdrant collection name (default: chat_history or QDRANT_COLLECTION env)")
+    parser.add_argument("--collection", default="chat_history",
+                        help="Qdrant collection: a logical base (chat_history) resolves to the "
+                             "per-project physical name; QDRANT_COLLECTION env overrides.")
     parser.add_argument("--ollama-url", default=os.getenv("OLLAMA_URL", "http://localhost:11434"),
                         help="Ollama base URL (default: http://localhost:11434 or OLLAMA_URL env)")
     parser.add_argument("--host", default=os.getenv("QDRANT_HOST", "localhost"),
@@ -211,6 +216,12 @@ def main():
     parser.add_argument("--fallback-date", default="",
                         help="Used as `session_date` when frontmatter has none (ISO YYYY-MM-DD).")
     args = parser.parse_args()
+
+    # Resolve the logical base to the per-project physical collection, and the slug
+    # used to namespace point IDs + stamp payloads (so two projects on one shared
+    # Qdrant never collide). See lib.memory_ingest.
+    collection = resolve_collection_arg(args.collection)
+    slug = project_slug()
 
     summary_path = args.summary_path
     if not os.path.exists(summary_path):
@@ -259,11 +270,12 @@ def main():
             chunk_files = extract_affected_files(chunk) or affected_files
             points.append(
                 PointStruct(
-                    id=deterministic_id(session_id, i),
+                    id=deterministic_id(f"{slug}::{session_id}", i),
                     vector=embedding,
                     payload={
                         "text": chunk,
                         "session_id": session_id,
+                        "project_slug": slug,
                         "date": session_date,
                         "date_int": date_int,
                         "developer": developer,
@@ -287,14 +299,14 @@ def main():
         # post-merge ingest hook relies on. Embeddings are computed above, so by
         # the time we delete we are committed to a successful re-insert.
         client.delete(
-            collection_name=args.collection,
+            collection_name=collection,
             points_selector=Filter(
                 must=[FieldCondition(key="session_id", match=MatchValue(value=session_id))]
             ),
         )
-        client.upsert(collection_name=args.collection, points=points)
+        client.upsert(collection_name=collection, points=points)
         qdrant_ok = True
-        print(f"[session-ingest] Replaced session '{session_id}' with {len(points)} chunks in Qdrant '{args.collection}'.")
+        print(f"[session-ingest] Replaced session '{session_id}' with {len(points)} chunks in Qdrant '{collection}'.")
     except Exception as e:
         print(f"[session-ingest] WARNING: Qdrant upsert failed: {e}")
         print("[session-ingest] Fallback: markdown summary already exists; will retry on next run.")
