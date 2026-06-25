@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.memory_ingest import (
     get_repo_root, get_extra_ingest_dirs, chunk_text, get_embedding,
     deterministic_id, print_report, resolve_collection_arg, project_slug,
+    qdrant_client_preflight,
 )
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -190,6 +191,12 @@ def extract_frontmatter(content: str) -> tuple[dict, str]:
 
 
 def main():
+    # Preflight: qdrant-client>=1.12 required (git pull bumps requirements, not the venv).
+    preflight = qdrant_client_preflight()
+    if preflight:
+        report_failure("qdrant-client", preflight)
+        sys.exit(1)
+
     if not WIKI_DIR.exists() and not EXTRA_DIRS:
         report_failure("Input", f"No docs to ingest: wiki dir not found ({WIKI_DIR}) "
                                 f"and no extra ingest dirs configured")

@@ -48,7 +48,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.memory_ingest import (
     get_repo_root, chunk_text, get_embedding, deterministic_id, print_report,
-    resolve_collection_arg, project_slug,
+    resolve_collection_arg, project_slug, qdrant_client_preflight,
 )
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -242,6 +242,13 @@ def main():
              "incrementally. Omit for a full src/ walk.",
     )
     args = parser.parse_args()
+
+    # Preflight: qdrant-client>=1.12 is required (a git pull bumps requirements, not the
+    # venv). Report one actionable line instead of a traceback on an old/missing client.
+    preflight = qdrant_client_preflight()
+    if preflight:
+        report_failure("qdrant-client", preflight)
+        sys.exit(1)
 
     client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, check_compatibility=False)
 

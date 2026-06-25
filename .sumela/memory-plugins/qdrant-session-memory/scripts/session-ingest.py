@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.memory_ingest import resolve_collection_arg, project_slug
+from lib.memory_ingest import resolve_collection_arg, project_slug, qdrant_client_preflight
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -216,6 +216,13 @@ def main():
     parser.add_argument("--fallback-date", default="",
                         help="Used as `session_date` when frontmatter has none (ISO YYYY-MM-DD).")
     args = parser.parse_args()
+
+    # Preflight: qdrant-client>=1.12 required (a git pull bumps requirements, not the venv).
+    # Report one actionable line instead of a traceback before any embedding work.
+    preflight = qdrant_client_preflight()
+    if preflight:
+        report_failure("qdrant-client", preflight)
+        sys.exit(1)
 
     # Resolve the logical base to the per-project physical collection, and the slug
     # used to namespace point IDs + stamp payloads (so two projects on one shared

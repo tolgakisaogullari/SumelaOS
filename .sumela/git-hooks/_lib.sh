@@ -310,7 +310,16 @@ sumela_collections_migrate() {
   { echo "===== collections-migrate @ $(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null) ====="; } >>"$log" 2>&1
   ( cd "$install" && python3 "$mig" ) >>"$log" 2>&1 </dev/null; rc=$?
   { echo "===== collections-migrate: done (rc=$rc) ====="; } >>"$log" 2>&1
-  [ "$rc" -eq 75 ] && return 1   # DEFERRED -> caller skips Qdrant syncs this pull
+  if [ "$rc" -eq 76 ]; then
+    # qdrant-client too old/missing in this developer's venv (git pull can't fix the
+    # venv). Surface a VISIBLE, actionable one-liner on the pull's stdout — without it
+    # the only trace is the log nobody reads, and retrieval silently returns empty.
+    # No marker was written, so the next pull AFTER upgrading migrates automatically.
+    echo "sumela: ⚠ memory NOT migrated — qdrant-client is too old/missing for this project's scripts (need >=1.12)."
+    echo "        Fix once: bash scripts/setup-memory.sh   (auto-migrates on your next pull after that; details: .sumela/.memory-sync.log)"
+    return 1   # skip this pull's Qdrant syncs (they'd fail / pre-empt the pending migration)
+  fi
+  [ "$rc" -eq 75 ] && return 1   # DEFERRED (lock held / partial) -> caller skips Qdrant syncs this pull
   return 0
 }
 

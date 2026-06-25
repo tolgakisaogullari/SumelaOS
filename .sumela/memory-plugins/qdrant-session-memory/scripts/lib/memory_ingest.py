@@ -7,6 +7,49 @@ import sys, os, re, hashlib, uuid
 from pathlib import Path
 from typing import List
 
+# --- qdrant-client version preflight ----------------------------------------
+# The scripts use APIs added in qdrant-client 1.12 (check_compatibility=,
+# get_aliases, update_collection_aliases, count(exact=)). A `git pull` that bumps
+# requirements.txt does NOT touch a developer's venv, so a teammate on an older
+# client would otherwise hit a raw traceback (migration) or a silent-empty
+# retrieval (resolver points at a namespaced collection migration never created).
+# Every entry script preflights this and prints ONE actionable line instead.
+REQUIRED_QDRANT_CLIENT = (1, 12, 0)
+
+
+def qdrant_client_status() -> "tuple[str, str | None]":
+    """('ok' | 'old' | 'missing', installed_version_or_None). 'old' when the installed
+    qdrant-client predates REQUIRED_QDRANT_CLIENT. Never raises."""
+    try:
+        import qdrant_client  # noqa: F401
+    except Exception:
+        return ("missing", None)
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+        try:
+            v = version("qdrant-client")
+        except PackageNotFoundError:
+            return ("ok", None)  # importable but no dist metadata — don't false-alarm
+    except Exception:
+        return ("ok", None)
+    nums = re.findall(r"\d+", v)
+    parts = tuple(int(n) for n in nums[:3])
+    return ("old", v) if parts < REQUIRED_QDRANT_CLIENT else ("ok", v)
+
+
+def qdrant_client_preflight() -> "str | None":
+    """None when the client is OK; otherwise a one-line, actionable message string
+    (no traceback) that an entry script can print/report before exiting."""
+    status, v = qdrant_client_status()
+    if status == "ok":
+        return None
+    req = ".".join(map(str, REQUIRED_QDRANT_CLIENT))
+    if status == "missing":
+        return (f"SumelaOS memory: qdrant-client not installed (need >={req}). "
+                f"Run: bash scripts/setup-memory.sh")
+    return (f"SumelaOS memory: qdrant-client {v} is too old (need >={req}). "
+            f"Run: bash scripts/setup-memory.sh")
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 

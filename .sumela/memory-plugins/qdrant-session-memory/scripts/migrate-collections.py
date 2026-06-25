@@ -52,7 +52,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.memory_ingest import (
     COLLECTION_BASES, get_repo_root, project_slug, resolved_collection,
-    collection_or_alias_exists,
+    collection_or_alias_exists, qdrant_client_preflight,
 )
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -66,6 +66,9 @@ CLIENT_TIMEOUT = 30  # bound Qdrant ops so a reachable-but-wedged server can't h
 EX_DEFERRED = 75  # exit code (EX_TEMPFAIL): migration did NOT settle this run (lock held / partial).
                   # The pull hook reads this and SKIPS the Qdrant syncs for this pull so an
                   # ingest can't pre-create a namespaced collection and pre-empt a pending adopt.
+EX_CLIENT_OUTDATED = 76  # qdrant-client missing/too old: the pull hook surfaces a VISIBLE one-line
+                         # "run setup-memory.sh" on git-pull stdout and skips syncs. No marker is
+                         # written, so the next pull after the developer upgrades self-heals.
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
 _HELD_LOCK = None  # set while this process holds the migration lock (for the signal handler).
 
@@ -329,12 +332,18 @@ def main() -> int:
         print("migrate-collections: --adopt and --rebuild are mutually exclusive.")
         return 2
 
-    try:
-        from qdrant_client import QdrantClient
-        from qdrant_client import models
-    except ImportError:
-        print("migrate-collections: qdrant-client not installed — skipping (nothing migrated).")
-        return 0
+    # Preflight: a `git pull` bumped requirements to qdrant-client>=1.12 but did NOT
+    # touch the developer's venv. On an old/missing client, exit with EX_CLIENT_OUTDATED
+    # so the pull hook prints a VISIBLE "run setup-memory.sh" line (instead of a traceback
+    # buried in the log) and skips this pull's syncs. No marker is written → the next pull
+    # after the developer upgrades migrates automatically.
+    preflight = qdrant_client_preflight()
+    if preflight:
+        print(f"migrate-collections: {preflight}")
+        return EX_CLIENT_OUTDATED
+
+    from qdrant_client import QdrantClient
+    from qdrant_client import models
 
     try:
         client = QdrantClient(host=args.host, port=args.port,

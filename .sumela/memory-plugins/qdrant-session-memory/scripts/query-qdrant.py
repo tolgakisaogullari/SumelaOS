@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.memory_ingest import resolve_collection_arg
+from lib.memory_ingest import resolve_collection_arg, COLLECTION_BASES, qdrant_client_preflight
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -213,6 +213,7 @@ def query_qdrant(
     host: str,
     port: int,
     query_filter=None,
+    legacy_base: "str | None" = None,
 ) -> tuple[list, int]:
     """Semantic search (optionally filtered) when query_vector is given; pure
     metadata listing via scroll when query_vector is None (filter-only mode)."""
@@ -227,6 +228,21 @@ def query_qdrant(
     except Exception:
         exists = True  # don't block on a flaky check; the real query below surfaces errors
     if not exists:
+        # Distinguish "not MIGRATED" from "genuinely empty": if the namespaced collection
+        # is missing but the LEGACY bare collection still holds data, migration hasn't run
+        # (e.g. an old qdrant-client made the pull-hook migration fail). Surface a clear,
+        # actionable signal instead of a silent empty result. We deliberately do NOT read
+        # the bare collection — on a multi-project machine it may hold another project's
+        # data, the exact intermingling per-project namespacing exists to prevent.
+        if legacy_base:
+            try:
+                if client.collection_exists(legacy_base):
+                    print(f"[warn] SumelaOS memory not migrated to per-project collections: "
+                          f"found legacy '{legacy_base}' but not '{collection}'. Retrieval is "
+                          f"unavailable until you run: bash scripts/setup-memory.sh", file=sys.stderr)
+                    return [], 0
+            except Exception:
+                pass
         print(f"[note] collection '{collection}' not built yet — no memory to search.", file=sys.stderr)
         return [], 0
 
@@ -302,8 +318,19 @@ def main():
                         help="Bypass the per-session retrieval dedup cache (always re-query).")
     args = parser.parse_args()
 
+    # Preflight: a git pull bumped requirements to qdrant-client>=1.12 but not the venv.
+    # On an old/missing client, report ONE actionable line instead of a TypeError traceback
+    # from the check_compatibility= kwarg below.
+    preflight = qdrant_client_preflight()
+    if preflight:
+        report_failure("qdrant-client", preflight)
+        sys.exit(1)
+
     # Resolve a logical base (chat_history|wiki_pages|code_chunks) to the per-project
-    # physical collection; a custom/explicit name passes through unchanged.
+    # physical collection; a custom/explicit name passes through unchanged. Remember the
+    # bare base so a missing namespaced collection can be diagnosed as "not migrated"
+    # (vs genuinely empty) when the legacy bare collection still exists.
+    legacy_base = args.collection if args.collection in COLLECTION_BASES else None
     args.collection = resolve_collection_arg(args.collection)
 
     query_filter = build_filter(args.developer, args.domain, args.since, args.until)
@@ -352,6 +379,7 @@ def main():
             host=args.host,
             port=args.port,
             query_filter=query_filter,
+            legacy_base=legacy_base,
         )
     except Exception as e:
         report_failure("Qdrant Search", str(e))
