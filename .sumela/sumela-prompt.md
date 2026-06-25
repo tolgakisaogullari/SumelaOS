@@ -101,7 +101,7 @@ to the area, before raw `ls`/`grep` recon. Ad-hoc work: scope to the nouns in th
 
 GATE 2 — IMPACT BEFORE A CONTRACT CHANGE: before modifying the signature/contract (params, return,
 visibility, deletion) of a symbol you did NOT author this session, run
-`query-graph.py <symbol> --impact --depth 1 --limit 10` first (direct callers). YOU judge whether
+`query-graph.py <symbol> --impact --depth 1` first (direct callers). YOU judge whether
 the edit is a contract change (the framework never parses the language). NO fire for: body-internal
 edits, private/internal symbols, symbols you authored this session, TDD Red-phase test authorship,
 or trivial user-directed edits. A graph miss = note once, continue (do NOT escalate to code_chunks).
@@ -193,7 +193,7 @@ NEVER write to `.sumela/rules/`, `.sumela/skills/`, `_SCHEMA.md`, or canonical w
 
 NEVER include passwords, tokens, or PII in `evidence` fields. Sanitize.
 
-For `scope: rule` signals, the default target is `.sumela/rules/<existing-category>.md` (append) or `.sumela/rules/<new-topic>.md` (new domain). The deprecated `.sumela/learned-rules/` path MUST NOT be used.
+For `scope: rule` signals, the default target is an OVERLAY rule file — `.sumela/rules/<existing-overlay-category>.md` (append) or `.sumela/rules/<new-topic>.md` (new). NEVER target an upstream-managed CORE rule file (`engineering_philosophy`, `identity_and_behavior`, `architecture_patterns`, `audit_and_output`, `security_protocol`, `git_workflow_mandatory_review_protocol`, `self_improvement_protocol`) — `update.sh` refreshes those, so a rule appended there is lost or permanently forks the file; see `self-improvement-curator/SKILL.md` (direct rule integration). The deprecated `.sumela/learned-rules/` path MUST NOT be used.
 </signal_capture>
 
 <context_manifest_protocol>

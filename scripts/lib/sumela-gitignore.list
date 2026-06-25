@@ -8,6 +8,7 @@
 .sumela/.graph-sync.log
 .sumela/.code-chunks-synced
 .sumela/.update-check
+.sumela/.retrieval-cache.json
 .superpowers/
 **/scripts/.superpowers/
 graphify-out/
