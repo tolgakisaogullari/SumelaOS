@@ -101,7 +101,7 @@ to the area, before raw `ls`/`grep` recon. Ad-hoc work: scope to the nouns in th
 
 GATE 2 — IMPACT BEFORE A CONTRACT CHANGE: before modifying the signature/contract (params, return,
 visibility, deletion) of a symbol you did NOT author this session, run
-`query-graph.py <symbol> --impact --depth 1 --limit 10` first (direct callers). YOU judge whether
+`query-graph.py <symbol> --impact --depth 1` first (direct callers). YOU judge whether
 the edit is a contract change (the framework never parses the language). NO fire for: body-internal
 edits, private/internal symbols, symbols you authored this session, TDD Red-phase test authorship,
 or trivial user-directed edits. A graph miss = note once, continue (do NOT escalate to code_chunks).

@@ -225,7 +225,7 @@ Information gap detected.
 └── Else → Tier 4 (grep / Read on known path).
 ```
 
-**Workflow retrieval gates (canonical in the eager block):** three SOFT/best-effort lifecycle gates live in `.sumela/sumela-prompt.md` `<workflow_retrieval_gates>` — GATE 1 task-intake (brainstorming entry → Tier-3 `_SEARCH_INDEX` + Tier-1b `wiki_pages`), GATE 2 impact-before-contract-change (`query-graph.py <symbol> --impact --depth 1 --limit 10`), GATE 3 find-code-by-behavior (`query-qdrant.py --collection code_chunks` before blind grep). They are best-effort, not mandatory. The eager block is canonical; this file is operational detail only — do not redefine trigger detection here.
+**Workflow retrieval gates (canonical in the eager block):** three SOFT/best-effort lifecycle gates live in `.sumela/sumela-prompt.md` `<workflow_retrieval_gates>` — GATE 1 task-intake (brainstorming entry → Tier-3 `_SEARCH_INDEX` + Tier-1b `wiki_pages`), GATE 2 impact-before-contract-change (`query-graph.py <symbol> --impact --depth 1`), GATE 3 find-code-by-behavior (`query-qdrant.py --collection code_chunks` before blind grep). They are best-effort, not mandatory. The eager block is canonical; this file is operational detail only — do not redefine trigger detection here.
 
 ### Citation rule
 
