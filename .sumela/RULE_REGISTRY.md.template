@@ -34,7 +34,10 @@ Selection logic:
 
 What is NOT in this registry:
 - The `self_improvement_protocol` rule file is a pointer to `self-improvement-curator/SKILL.md`. The full self-improvement contract lives in the skill, not the rule.
-- Future learned rules added by `/evolve` SHOULD append to existing rule files (e.g., `backend_standards.md`, `mobile_standards.md`) rather than create new rule files; the `/evolve` workflow runs a duplicate check before writing.
+- Future learned rules added by `/evolve` SHOULD append to an OVERLAY rule file — a project-owned stack/ops/domain file (`backend_standards.md`, `mobile_standards.md`, `operational_excellence_maintenance.md`, `domains/<slug>.md`) or a new `.sumela/rules/<topic>.md` — and run the duplicate check before writing. A principle that belongs to the framework itself should be proposed UPSTREAM, not appended locally.
+
+Upstream-managed CORE rule files — DO NOT append project rules to these:
+- `engineering_philosophy`, `identity_and_behavior`, `architecture_patterns`, `audit_and_output`, `security_protocol`, `git_workflow_mandatory_review_protocol`, `self_improvement_protocol` are SHIPPED and MANAGED by SumelaOS upstream; `scripts/update.sh` refreshes them (with consent) on every upgrade. A project rule appended to one of these is lost when the upstream diff is applied, or it permanently forks the file. Project rules belong in an OVERLAY file (any rule file NOT in this 7-file set, plus `rules/templates/`, is project-owned and untouched by update). See `self-improvement-curator/SKILL.md` (direct rule integration) for the routing contract.
 
 Registry maintenance is part of the `/evolve` contract:
 - When `/evolve` creates a NEW rule file, it MUST also add a `<rule>` entry here AND update `<phase_to_rule_matrix>` in the SAME approve transaction (with diff preview and explicit user approval). If the registry update is rejected, the rule file write rolls back. See `self-improvement-curator/SKILL.md` `<evolve_review_workflow>` REGISTRY UPDATE step for the full contract.

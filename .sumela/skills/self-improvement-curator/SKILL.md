@@ -62,14 +62,14 @@ During every user turn — and after you independently resolve a bug or problem 
    Generalization test: *"Would this sentence prevent a DIFFERENT future case of the same class (another service, another module)?"* If no, it is too specific — generalize it or skip it. Strip instance-specific identifiers (the concrete service/file/value) from `proposed_change`; keep them only in `evidence` as the triggering example.
 
    - **Confidence:** `medium` by default (concrete evidence — the error + the fix diff — but the user didn't weigh in, so it MUST be captured); escalate to `high` if the same class already cost time in a prior session (it is then also `friction`) or the root cause was non-obvious.
-   - **Scope:** usually `rule` (a standard the agent should follow going forward — append to the most relevant `.sumela/rules/<category>.md`). Use `wiki` only when the lesson is a project-specific architectural fact, not a general practice.
+   - **Scope:** usually `rule` (a standard the agent should follow going forward — append to the most relevant OVERLAY `.sumela/rules/<category>.md`, never an upstream-managed CORE rule file; see "direct rule integration"). Use `wiki` only when the lesson is a project-specific architectural fact, not a general practice.
 
 7. **`preference`** — The user volunteers a durable, forward-looking standing instruction about how you should work, **without reacting to a specific mistake**: *"always use strict mode from now on"*, *"keep comments minimal"*, *"write PR descriptions in this format"*, *"'deploy' means staging"*. Capture the standing rule and the scope it applies to.
 
    **Distinct from `correction`:** `correction` is REACTIVE — the user rejects a specific output, so an error occurred. `preference` is PROACTIVE — a standing rule offered with no triggering mistake. Test: *if the user is fixing something you just did → `correction`; if they are setting a rule for FUTURE work independent of any specific output → `preference`.* (Negative-reactive phrasings like "don't do it this way again" / "don't use that" stay `correction`.)
 
    - **Confidence:** an explicit standing instruction → `high` (MUST capture); a preference merely inferred from one ambiguous remark → `medium`.
-   - **Scope:** usually `rule` (a behavioral standard — append to the relevant `.sumela/rules/<category>.md`); use `active-context` if it is sprint-scoped rather than durable. If unsure, pick the closest scope and let `/evolve` reclassify.
+   - **Scope:** usually `rule` (a behavioral standard — append to the relevant OVERLAY `.sumela/rules/<category>.md`, never an upstream-managed CORE rule file; see "direct rule integration"); use `active-context` if it is sprint-scoped rather than durable. If unsure, pick the closest scope and let `/evolve` reclassify.
 
 **Confidence assignment (CRITICAL — anti-silence rule):**
 
@@ -98,7 +98,22 @@ During every user turn — and after you independently resolve a bug or problem 
 | Current sprint/status | `active-context` | `docs/second-brain/wiki/active-project-context.md` |
 | Wiki format itself | `schema` | `docs/second-brain/wiki/_SCHEMA.md` |
 
-**IMPORTANT — direct rule integration:** For `scope: rule`, the DEFAULT target is `.sumela/rules/`. Do not use `.sumela/learned-rules/` anymore. Append the new rule to the most relevant existing category file (e.g., `backend_standards.md`, `frontend_standards.md`), or create a new one if it's a completely new domain. Since `.sumela/rules/` is the canonical IDE-agnostic rule layer, this eliminates the need for manual migration to IDE-specific folders.
+**IMPORTANT — direct rule integration:** For `scope: rule`, the DEFAULT target is `.sumela/rules/`. Do not use `.sumela/learned-rules/` anymore.
+
+**CORE vs OVERLAY — NEVER append a project rule to an upstream-managed CORE file.** These 7 universal rule files are SHIPPED and MANAGED by SumelaOS upstream, and `scripts/update.sh` refreshes them (with consent) on every upgrade:
+`engineering_philosophy`, `identity_and_behavior`, `architecture_patterns`, `audit_and_output`, `security_protocol`, `git_workflow_mandatory_review_protocol`, `self_improvement_protocol`.
+A rule appended to one of these is either silently lost when the user applies the upstream diff, or it permanently forks the file — costing every future upstream improvement to it. (This is a recurring trap: a general-sounding principle "fits" `engineering_philosophy.md`, so it gets appended there and is clobbered on the next update.)
+
+Route a new project rule to an **OVERLAY** file instead — these are project-owned and `update.sh` NEVER touches them:
+- the most relevant stack / ops / domain file: `backend_standards.md`, `frontend_standards.md`, `mobile_standards.md`, `operational_excellence_maintenance.md`, `domains/<slug>.md`; or
+- a NEW `.sumela/rules/<topic>.md` — **any rule file NOT in the 7-core set above is OVERLAY by construction** (update only refreshes the named core files + `rules/templates/`).
+Then register the file in `RULE_REGISTRY.md` (see REGISTRY UPDATE) — a new overlay rule usually wants `activation="universal"` if it is a general standard.
+
+To EXTEND or OVERRIDE a core rule's behavior for this project (not add an unrelated rule), do NOT edit the core file — add an OVERLAY rule on the same topic (e.g. `engineering_philosophy_project.md`). Rules are additive constraints loaded together, so an overlay rule layers on top of (and can tighten/override) the core one while the core file stays cleanly upstream-managed.
+
+If the principle is genuinely UNIVERSAL and belongs to the framework itself (not just this project), do NOT append it locally at all — propose it UPSTREAM (a PR to the SumelaOS repo's core `engineering_philosophy.md` etc.) so every project gets it and you carry no local fork.
+
+Since `.sumela/rules/` is the canonical IDE-agnostic rule layer, this eliminates the need for manual migration to IDE-specific folders.
 
 If unsure, pick the closest scope and let `/evolve` review reclassify it.
 </signal_capture_workflow>
