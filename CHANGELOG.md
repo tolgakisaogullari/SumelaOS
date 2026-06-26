@@ -11,6 +11,29 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Added
 
+- **Self-activating bootstrap on `@`-attach — reliable opt-in adoption without auto-loading
+  (v0.12.0).** Field finding from a multi-IDE project where not every developer uses SumelaOS:
+  attaching `.sumela/sumela-prompt.md` to a turn via `@`-reference did NOT run
+  `<session_bootstrap>` — the agent treated the file as passive reference material and answered
+  the literal task (e.g. "git pull") *unless* the user also said "follow the flow". Root cause:
+  the bootstrap trigger was framed as session-state ("at the first user turn of every session"),
+  which an attached document cannot reason about, so a concurrent literal task always won. A new
+  `<activation>` block at the very top of `sumela-prompt.md` (before `<role>`) makes the file
+  self-activating — its presence in context IS the activation signal, framed as a read-time
+  imperative to execute now (not docs to read/remember) — and the `<session_bootstrap>` trigger
+  now also fires "the moment this file enters your context (e.g. attached via `@`-reference)".
+  Stays **opt-in**: no `CLAUDE.md`/`SessionStart` forcing, so developers who don't use the
+  framework are untouched; activation happens only when one deliberately attaches the file.
+  **Idempotent** — run once per session; if registries + eager skills are already in context it
+  skips straight to the request, so a pinned/re-attached file does not re-run STEP 0–5 or
+  re-emit STEP 2's one-per-session notifications. **Defers to `<authority_hierarchy>`** (an
+  explicit user instruction may waive bootstrap; task triviality/urgency is NOT a waiver), keeps
+  STEP 0 a non-blocking offer, and keeps bootstrap **silent** (tool calls visible, no narration/
+  manifest). Design validated by two independent distinct-lens reviews (consistency +
+  adversarial) before merge; verified end-to-end in a real project: attach-alone → full
+  bootstrap; plain follow-up → no spurious re-bootstrap; re-attach in same session → idempotent
+  skip; FAMILY A (`chat_history`) + FAMILY B (Graphify) retrieval routing intact.
+
 - **Lifecycle-anchored memory retrieval — gates fire on workflow moments, not just
   question-semantics (v0.10.0).** Until now retrieval was driven purely by the question-
   semantic FAMILY A/B/C routing, so memory was consulted only when the agent recognized an
