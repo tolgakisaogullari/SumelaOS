@@ -155,6 +155,14 @@ if command -v python3 >/dev/null 2>&1; then
   else
     bad "code-review invariants test failed"; sed 's/^/    /' "$WORK/code_review.log" | tail -25
   fi
+  # Secure-coding content, not shape: three rules in the v0.16.0 body sent the agent to
+  # a bypassable control (client-declared MIME type, ../-stripping, JWT with no algorithm
+  # allowlist), and the checklist could be ticked with no evidence and no way to say N/A.
+  if python3 "$REPO_ROOT/tests/test_secure_coding_standard.py" >"$WORK/secure_coding.log" 2>&1; then
+    ok "secure-coding standard: corrected controls, evidence-gated checklist, OWASP coverage"
+  else
+    bad "secure-coding standard test failed"; sed 's/^/    /' "$WORK/secure_coding.log" | tail -25
+  fi
   # Graph viz: forcing graph.html past graphify's node limit re-ran clustering and
   # wrote hundreds of MB on every pull, for a file nothing in the query path reads.
   if python3 "$REPO_ROOT/tests/test_graph_viz_not_forced.py" >"$WORK/graph_viz.log" 2>&1; then
@@ -163,7 +171,7 @@ if command -v python3 >/dev/null 2>&1; then
     bad "graph viz unit test failed"; sed 's/^/    /' "$WORK/graph_viz.log" | tail -20
   fi
 else
-  echo "  SKIP  python unit tests (get_repo_root, extra-ingest, embedding bounds, delete guard, graph viz) — python3 unavailable"
+  echo "  SKIP  python unit tests (get_repo_root, extra-ingest, embedding bounds, delete guard, skill structure, code review, secure coding, graph viz) — python3 unavailable"
 fi
 
 # setup-memory graph gate: a failed `graphify update` over a stale graph.json must not

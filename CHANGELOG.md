@@ -11,6 +11,101 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Changed
 
+- **`secure-coding-standard` told the agent to build three bypassable controls, and its
+  checklist could not be answered honestly (v0.17.0).** The skill's shape was sound — plan-time
+  loading, a confirmation gate, the security-TDD exception — but the rules inside it were in
+  places wrong, and a security rule that is wrong is worse than absent, because the agent follows
+  it confidently.
+
+  **Three rules produced vulnerable code.** "MUST validate strict MIME-types (not just
+  extensions)" sends the agent to `file.mimetype` — a multipart header the uploader controls;
+  type is now decided by MAGIC BYTES against an allowlist, with a server-generated filename,
+  `Content-Disposition: attachment` and `nosniff`. "ALWAYS sanitize file paths" is the textbook
+  BROKEN traversal fix (`....//` survives `..`-stripping, and `os.path.join` silently discards
+  the base on an absolute input); the rule is now resolve-then-verify-CONTAINMENT, with a
+  runnable example whose stated behaviour was checked against a real filesystem. JWT validation
+  listed issuer/audience/expiry/signing key but not the ALGORITHM, leaving `alg: none` and
+  HS/RS confusion — two full authentication bypasses — unaddressed.
+
+  **The checklist was unfalsifiable.** There was no way to mark an item N/A, so an agent on a
+  CLI project either lied about CSP or stalled — and an agent that learns to tick falsely ticks
+  the items that DO apply. There was no evidence requirement either, so the gate self-certified
+  with bare checkboxes while `reviewer-correctness-security.md` demanded `File:line` for every
+  finding on the same change. Every line is now answered as `[x] item — file:line | command
+  result` or `[~] item — N/A: reason`, and a new Step 2 scopes the categories to what the change
+  actually REACHES (an all-of-system checklist in front of a five-line diff gets skipped whole).
+
+  **The plan-time analysis never reached the reviewer.** Step 1 said "identify all external
+  inputs" without saying where to put the answer, and nothing produced the `{SECURITY_MANDATE}`
+  the review panel's Lane 1 expects. The threat-boundary analysis is now a written
+  `Security Constraints` block in the spec or plan, and that block IS the mandate.
+
+  **Coverage gaps closed.** Mass assignment, insecure deserialization, XXE, zip-slip and
+  decompression bombs, ReDoS, open redirect, session fixation, multi-tenant scoping, CSPRNG vs
+  `Math.random()` for tokens, constant-time comparison, AEAD and nonce reuse, password-reset
+  token hygiene, anti-enumeration timing, and the whole of **A09 Security Logging & Monitoring**
+  — none of which the skill mentioned. They live in a new `owasp-playbook.md`, written as
+  BROKEN / CONTROL / TEST per class so the plausible-but-wrong fix is named next to the one that
+  holds. The confirmation gate gained its most important trigger: **weakening or removing an
+  existing control** (`verify=False`, a deleted auth check, `--no-verify`, a widened permission)
+  — the most frequent way an agent introduces a vulnerability, and the one that never looks like
+  a security change.
+
+  **New: `agent-specific-threats.md`.** This skill is executed by an LLM, and did not address its
+  own author's failure modes: hallucinated package names (slopsquatting), plausible-looking
+  crypto, controls disabled to get a test green, secrets written into agent-authored specs and
+  plans, insecure defaults in generated IaC/CI, treating tool output as instructions, and — for
+  features the agent builds — prompt injection, authorization enforced outside the model, and
+  model output handled as untrusted input.
+
+  **Two adversarial reviews ran against the rewrite before it landed, and both found real defects.**
+  The security-content lens found that the new open-redirect CONTROL ("empty host plus a path
+  starting with a single `/`") was defeated by `/\evil.com` — the exact string the line above it
+  named as the bypass — and by `https:/evil.com`; the corrected control requires an empty scheme,
+  empty netloc and `^/[^/\]` after decoding, and the test now pins both payloads. It also showed
+  the `safe_open` snippet is TOCTOU-racy in the upload directory its own comment names (race won
+  on the 5th attempt), so the entry now states that limit instead of promising that no input ever
+  opens a file outside the base. Further content fixes: NoSQL operator injection and CSRF had no
+  playbook sections although SKILL.md pointed there for both; bcrypt was called memory-hard (it is
+  CPU-hard); the CORS `endsWith` example named a domain that does not actually pass it; anchoring
+  was listed first as the ReDoS control (it does not fix nested quantifiers); the SSRF reject-list
+  was missing `0.0.0.0/8`, `100.64.0.0/10` and `fc00::/7` and did not require checking every
+  resolved address; random GCM nonces carried no message-count bound; and the `Math.random()`
+  claim was replaced with the V8 state-recovery fact that is actually demonstrable.
+
+  The framework lens found the change's two headline claims did not hold. `requesting-code-review`
+  Step 4 is the **single filling authority** for `{SECURITY_MANDATE}` and explicitly forbids
+  callers from filling fields, so the instruction to pass the block as that parameter collided
+  with a MUST in the receiving skill — and the stated consequence ("the reviewer checks your code
+  against nothing") was false, since that skill always supplies a generic mandate. The block now
+  travels through `{DESCRIPTION}` and the plan. The spec-side section name was invented:
+  `brainstorming` requires **Security Considerations**, `writing-plans` requires **Security
+  Constraints**, and the skill now names each correctly plus a destination for the planless phases.
+  The severity model was attributed to `requesting-code-review`, which itself defers — canonical
+  is `receiving-code-review` → `<severity_model>`. The Step 7 checklist had collapsed 16 items into
+  five prose paragraphs answerable with five ticks, and "exactly two forms" left an agent facing a
+  real gap with `N/A` as its only legal output; there are now three forms, the third being
+  `[ ] NOT DONE`, and every clause is answered on its own row. Step 2's triage produced no artifact
+  and needed no reason for an N/A, and its table missed three Step 3 categories outright — it now
+  prints a verdict per row, costs a reason, and covers XSS/output rendering, state & concurrency
+  and mass assignment. The confirmation gate's new "weakening a control" trigger sat in a preamble
+  nothing re-invoked, so Step 7 opens with a mechanical `git diff | grep` sweep for it.
+
+  **The guard test was pinning vocabulary, not behaviour** — demonstrated, not argued: a nine-line
+  stub reading "Security is the reviewer's job" plus a keyword dump passed all 36 checks. The three
+  corrected controls are now asserted against `SKILL.md` itself rather than the whole corpus (the
+  playbook is only read for REACHABLE categories), the `"reachab"` check that was already true in
+  the pre-change file is replaced by a structural one, the spec/plan needle that the file's own
+  title satisfied is replaced, substance floors reject a keyword stub, and the cross-skill
+  contracts above are pinned so they cannot regress silently.
+
+  Project-specific leakage (FCM tokens, SMTP credentials, "report descriptions") is out of the
+  language-agnostic core: an enumerated app-specific list reads as exhaustive, and the agent
+  infers that a field not on it is loggable. The duplicated severity model now defers to
+  `requesting-code-review`, which owns it. Pinned by `tests/test_secure_coding_standard.py`
+  (wired into `tests/smoke.sh`, so CI runs it) — written and failing before the edit, per the
+  skill-authoring Iron Law.
+
 - **The code-review panel now reads the repo, sizes itself mechanically, and leaves evidence
   behind (v0.16.0).** Nine changes to `requesting-code-review` / `receiving-code-review`, each
   closing a way the gate could pass while doing nothing.
