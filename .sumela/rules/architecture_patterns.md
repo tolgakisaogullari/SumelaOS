@@ -7,7 +7,7 @@
 * **YAGNI (You Ain't Gonna Need It):** Do not build features or abstractions for "future possibilities" unless they are explicitly in the current sprint's plan.
 
 ## 🛠️ DESIGN PATTERN STRATEGY
-* **Proactive Identification:** During the `superpowers:brainstorming` and `superpowers:writing-plans` phases, identify if a complex structure requires a Design Pattern.
+* **Proactive Identification:** During the `brainstorming` and `writing-plans` phases, identify if a complex structure requires a Design Pattern.
 * **Pattern Selection:**
     * **Creation:** Use **Factory** or **Builder** for complex object graphs (e.g., complex configurations or multi-step builders).
     * **Behavioral:** Use **Strategy** for varying business rules (e.g., different Point calculation algorithms) or **Observer** for Event-Driven flows.
@@ -20,5 +20,5 @@
 * **Aggregates:** Ensure that the `UnitOfWork` maintains the consistency of related entities within a single transaction.
 
 ## ⚡ SUPERPOWERS ENFORCEMENT
-* **Pattern Justification:** When proposing a pattern in a `superpowers:writing-plans` output, provide a one-sentence justification explaining which SOLID principle it upholds.
-* **Refactoring vs. Patterns:** If existing code violates **KISS** due to complexity, use the `superpowers:writing-plans` skill to propose a pattern-based refactoring before adding new features.
+* **Pattern Justification:** When proposing a pattern in a `writing-plans` output, provide a one-sentence justification explaining which SOLID principle it upholds.
+* **Refactoring vs. Patterns:** If existing code violates **KISS** due to complexity, use the `writing-plans` skill to propose a pattern-based refactoring before adding new features.

@@ -3,23 +3,35 @@ name: receiving-code-review
 description: "Use when receiving code review feedback from a subagent reviewer or human partner - before implementing any suggested changes."
 ---
 
-<severity_sections>
-Map every review finding to the severity model used by `requesting-code-review`:
+<severity_model>
+**This section is the CANONICAL severity model for all SumelaOS code review.** The parallel
+panel's lanes in `requesting-code-review`, a human partner's comments, and an external PR
+reviewer's feedback all map onto this one table. It is defined HERE and nowhere else — do not
+restate or redefine it in another skill, because two copies drift and the reviewer and the
+author then disagree about what blocks.
 
-| Section | Required Action |
-|---------|-----------------|
-| Critical | Blocks commit/merge; must fix before proceeding |
-| Important | Required before proceeding unless technically disproven |
-| Minor | Optional; author may ignore at their discretion |
-| Recommendations / FYI | Informational; no action needed unless the author chooses |
+| Severity | What qualifies | Required action |
+|----------|----------------|-----------------|
+| Critical | Security flaw, data loss, broken functionality, exploitable token-lifecycle gap, silent breaking contract change | Blocks commit/merge; must fix before proceeding |
+| Important | Architecture problem, missed requirement, risky error handling, meaningful test gap | Required before proceeding unless technically disproven |
+| Minor | Style, small clarity, non-blocking optimization | Optional; author may ignore at their discretion |
+| Recommendations / FYI | Informational — an observation, not an asserted defect | No action needed unless the author chooses |
+
+**`(unproven)` does NOT lower severity.** A finding the reviewer could not settle from the
+code keeps the severity it was given; the label says the EVIDENCE is incomplete, not that the
+finding is weak. This matters because the findings verification most often cannot settle are
+absence-of-control findings — no revocation path, no security-boundary test, no rollback —
+and you cannot prove a negative by opening files. Demoting them would quietly empty the
+security floor of exactly the class it exists to catch. Treat `(unproven)` as "settle this",
+not "ignore this".
 
 **Approval standard:** Accept feedback as complete when the change definitively improves overall code health and no Critical or Important findings remain. Do not block on style preferences or optional suggestions.
-</severity_sections>
+</severity_model>
 
 <feedback_sources>
 Treat feedback source as part of the context:
 - **Human partner / user:** Highest priority. If feedback conflicts with the current plan, clarify intent before changing direction.
-- **Local subagent review:** Strong signal, but still verify against code, tests, architecture, and security constraints. This may arrive as a **merged parallel-panel report** — a task-scoped set of lanes (always a Correctness & Security floor, plus task-composed lanes) synthesized by `requesting-code-review`: the combined gate is AND (any lane's Critical blocks), and a `CONFLICT` marker means the lanes disagreed — resolve it on technical merit, do not auto-pick one side. A finding flagged by multiple lanes is corroborated, not duplicated. After you apply fixes, `requesting-code-review` Step 8 will ask the user whether to re-review or proceed — surface that choice, don't auto-advance.
+- **Local subagent review:** Strong signal, but still verify against code, tests, architecture, and security constraints. This may arrive as a **merged parallel-panel report** — a task-scoped set of lanes (always a Correctness & Security floor, plus task-composed lanes) synthesized by `requesting-code-review`: the combined gate is AND (any lane's Critical blocks), and a `CONFLICT` marker means the lanes disagreed — resolve it on technical merit, do not auto-pick one side. A finding flagged by multiple lanes is corroborated, not duplicated. Every Critical and Important in that report already carries an evidence line from the orchestrator's Step 6a verification: `CONFIRMED` findings are code-backed, `(unproven)` ones could not be settled and keep their severity — settle them, do not discount them — and anything in the `Rejected on verification` appendix is NOT actionable and must not be implemented. After you apply fixes, `requesting-code-review` Step 8 will ask the user whether to re-review or proceed — surface that choice, don't auto-advance.
 - **External / GitHub reviewer:** Evaluate as a suggestion unless repository policy or the user makes it mandatory. If it conflicts with an earlier user decision or documented architecture, stop and ask the user.
 </feedback_sources>
 
@@ -48,7 +60,19 @@ Execute feedback processing using these strict steps:
    - Commit/push only when the active GitHub PR workflow or the user explicitly authorizes it.
    - Reply directly to inline review comments via the repository's approved API/tooling when available. Avoid top-level PR comments for inline findings.
 
-5. FINAL VERIFICATION: Ensure required fixes are complete, verification has run or blockers are stated, and the worktree/staged state matches the active workflow before returning to `requesting-code-review`, `subagent-driven-development`, or `finishing-a-development-branch`.
+5. OUTCOME LEDGER (before you report anything as complete):
+   Every finding id in the panel report gets EXACTLY ONE outcome — no finding may quietly vanish:
+   | Outcome | Meaning |
+   |---|---|
+   | `fixed` | the edit is in the tree |
+   | `skipped` | real, deliberately not applied — the reason is reported, and a Critical/Important needs the user's explicit deferral |
+   | `no_change_needed` | wrong, already handled, or disproven — with the evidence that disproves it |
+
+   Write them back into the report's `outcomes:` frontmatter (`requesting-code-review/review-report.md` defines the field), then **print two numbers and make them match**: the count of finding ids in the report body versus the count of `outcomes:` entries. A mismatch means you are not done — name the unaccounted ids rather than reporting completion. This is the difference between a ledger that is enforced and one that is merely requested: the counts are greppable by anyone, including the next round.
+
+   `Rejected on verification` entries are NOT findings and get no outcome — they were already disproven before the report was written and must not be implemented. An `(unproven)` finding DOES get one: it keeps its severity, so "could not settle it" is `skipped` with the reason, never silence.
+
+6. FINAL VERIFICATION: Ensure required fixes are complete, verification has run or blockers are stated, and the worktree/staged state matches the active workflow before returning to `requesting-code-review`, `subagent-driven-development`, or `finishing-a-development-branch`.
 </workflow>
 
 <communication_constraints>

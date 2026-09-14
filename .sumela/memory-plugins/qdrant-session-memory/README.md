@@ -1,5 +1,16 @@
 # Qdrant Session Memory Plugin
 
+## Contents
+
+- Prerequisites
+- Setup
+- Configuration
+- Per-project collection isolation
+- Session metadata — queryable by developer / domain / date
+- Scripts
+- Graceful Degradation
+
+
 Tier-1 memory: semantic search over session summaries stored in Qdrant vector database.
 
 ## Prerequisites

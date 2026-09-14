@@ -132,7 +132,11 @@ try {
         ".sumela/rules/audit_and_output.md",
         ".sumela/rules/security_protocol.md",
         ".sumela/rules/git_workflow_mandatory_review_protocol.md",
-        ".sumela/rules/self_improvement_protocol.md"
+        ".sumela/rules/self_improvement_protocol.md",
+        # NOT covered by $coreDirs: that entry is .sumela/rules/templates/, one
+        # level BELOW this file. init-sumela copies it to a LIVE rule, so an edit
+        # here only reaches an existing install if it is named explicitly.
+        ".sumela/rules/operational_excellence_maintenance.md.template"
     )
     $coreDirs = @(".sumela/skills", ".sumela/git-hooks", ".sumela/memory-plugins", ".sumela/rules/templates", "docs/second-brain/template", "scripts")
     $selfDefer = @("scripts/update.sh", "scripts/update.ps1")

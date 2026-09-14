@@ -20,8 +20,8 @@
 * **UI/UX Synergy:** (If applicable to API design) Ensure payloads are minimized for mobile performance. Use Gzip/Brotli compression and efficient JSON serialization settings.
 
 ## 🛡️ SUPERPOWERS DISCIPLINE
-* **Brainstorming Integration:** Use the `superpowers:brainstorming` skill to challenge the user's initial request if it violates these philosophies.
-* **Execution Excellence:** During `superpowers:executing-plans`, if you find a more minimalist way to achieve the goal while maintaining performance, pivot and document the change.
+* **Brainstorming Integration:** Use the `brainstorming` skill to challenge the user's initial request if it violates these philosophies.
+* **Execution Excellence:** During `executing-plans`, if you find a more minimalist way to achieve the goal while maintaining performance, pivot and document the change.
 
 ## 📚 External Library Research Protocol
 Before planning or implementing any feature that depends on a third-party

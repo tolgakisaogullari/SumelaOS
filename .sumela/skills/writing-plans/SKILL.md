@@ -107,7 +107,7 @@ Execute these steps strictly in order. DO NOT announce the skill unless specific
    - This is NOT a quality review. Do not approve your own plan; the independent `plan-document-reviewer` subagent remains mandatory.
 
 6. PLAN REVIEW LOOP:
-   - Dispatch `plan-document-reviewer` subagent with paths to the plan and the spec. DO NOT send session history.
+   - Dispatch `plan-document-reviewer` subagent using `writing-plans/plan-document-reviewer-prompt.md`, with paths to the plan and the spec. DO NOT send session history.
    - If ❌ Issues Found: Fix the plan and re-dispatch reviewer. (Max 3 iterations; if exceeded, ask human for guidance).
    - If ✅ Approved: Proceed to step 7.
 

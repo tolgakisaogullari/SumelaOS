@@ -37,8 +37,11 @@ fi
 
 info()  { echo "${CYAN}[INFO]${RESET} $1"; }
 ok()    { echo "${GREEN}[OK]${RESET} $1"; }
-warn()  { echo "${YELLOW}[WARN]${RESET} $1"; }
-err()   { echo "${RED}[ERROR]${RESET} $1"; }
+# stderr, not stdout: these are called from inside functions whose stdout is
+# captured by command substitution (slugify). A warning on stdout becomes the slug,
+# and the polluted value is non-empty, so the "unusable slug" guard passes it too.
+warn()  { echo "${YELLOW}[WARN]${RESET} $1" >&2; }
+err()   { echo "${RED}[ERROR]${RESET} $1" >&2; }
 
 # --- Non-interactive defaults ---
 NON_INTERACTIVE=false
@@ -132,11 +135,45 @@ if [ "$HOOKS_ONLY" != true ]; then
   fi
 fi
 
-# --- Helper: render template using Python (handles multi-line, pipes, special chars) ---
+# --- Helper: is python3 actually USABLE? ---------------------------------------
+# Presence is not capability: a pyenv/asdf shim for an uninstalled version sits on
+# PATH, is executable, and still exits 127 with "command not found". Every optional
+# python path in this installer probes through here, and the result is cached so the
+# probe costs one spawn per run.
+_SUMELA_PY=""
+have_python() {
+  if [ -z "$_SUMELA_PY" ]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c "pass" >/dev/null 2>&1; then
+      _SUMELA_PY=yes
+    else
+      _SUMELA_PY=no
+    fi
+  fi
+  [ "$_SUMELA_PY" = yes ]
+}
+
+# --- Helper: render a template by substituting every exported TMPL_* var --------
+# Two implementations that MUST stay byte-identical (pinned by
+# tests/test_setup_without_python.sh). python3 is preferred when present so the
+# behaviour existing installs already got does not change; the bash path exists
+# because README promises the core framework needs only git — and this function,
+# on the CORE path (AGENTS.md, RULE_REGISTRY.md, every rule template), was the one
+# unguarded python caller in the whole repo. Every other one degrades silently;
+# this one killed the install with a bare "python3: command not found".
+#
+# The bash path uses parameter substitution, NOT sed: `${c//pat/rep}` has no
+# regex, no delimiter and no backreference semantics, so `&`, `|`, `/`, `\`,
+# newlines, `→`, and glob metacharacters in a value are all literal. Verified on
+# bash 3.2.57 (the macOS system bash — the oldest target); `${!TMPL_@}` works
+# there too, which matters because 3.2 has no associative arrays.
 render_template() {
   local template="$1"
   local output="$2"
-  python3 -c "
+  # Try python, but VERIFY it worked rather than trusting `command -v`: a pyenv /
+  # asdf shim for an uninstalled version is on PATH, is executable, and still exits
+  # 127 with "command not found". Presence is not capability.
+  if have_python &&
+     python3 -c "
 import os, re, sys
 with open(sys.argv[1], 'r') as f:
     content = f.read()
@@ -146,7 +183,22 @@ for key, val in os.environ.items():
         content = content.replace(placeholder, val)
 with open(sys.argv[2], 'w') as f:
     f.write(content)
-" "$template" "$output"
+" "$template" "$output" 2>/dev/null && [ -s "$output" ]; then
+    if [ -n "${SUMELA_RENDER_TRACE:-}" ]; then echo "render: python $template" >&2; fi
+    return
+  fi
+  if [ -n "${SUMELA_RENDER_TRACE:-}" ]; then echo "render: bash $template" >&2; fi
+
+  local content key lkey val
+  # $(cat) strips ALL trailing newlines; printf re-appends exactly one, which is
+  # what python's read/write round-trip produces for these templates.
+  content="$(cat "$template")"
+  for key in ${!TMPL_@}; do
+    lkey="$(printf '%s' "${key#TMPL_}" | tr '[:upper:]' '[:lower:]')"
+    val="${!key}"
+    content="${content//\{\{$lkey\}\}/$val}"
+  done
+  printf '%s\n' "$content" > "$output"
 }
 
 # Slugify a domain name -> filesystem-safe slug. Unicode NFKD strips diacritics across
@@ -156,15 +208,61 @@ with open(sys.argv[2], 'w') as f:
 # mapped first so they are not dropped. Uses python3 (already required by render_template);
 # ASCII input yields the same slug as a plain tr pipeline.
 slugify() {
-  python3 -c '
+  local _slug
+  # Probe python rather than trust `command -v`: a pyenv/asdf shim for an
+  # uninstalled version is on PATH, is executable, and still exits 127.
+  if have_python; then
+    _slug="$(python3 -c '"'"'
 import sys, unicodedata, re
 s = sys.argv[1]
 # Latin letters NFKD leaves intact (so encode("ascii","ignore") would drop them) -> map.
-nd = {"ı":"i","ß":"ss","ø":"o","Ø":"o","ł":"l","Ł":"l","đ":"d","Đ":"d"}
+nd = {"ı":"i","ß":"ss","ø":"o","Ø":"o","ł":"l","Ł":"l","đ":"d","Đ":"d","æ":"a","Æ":"a"}
 s = "".join(nd.get(ch, ch) for ch in s)
 s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 print(re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-"))
-' "$1"
+'"'"' "$1" 2>/dev/null)" && [ -n "$_slug" ] && { printf '%s\n' "$_slug"; return; }
+  fi
+
+  # Python-free degradation, deliberately locale-INDEPENDENT.
+  #
+  # Two locale traps ruled out the obvious implementations. A bracket range like
+  # [!\ -~] is COLLATION-ordered, not codepoint-ordered: under en_US.UTF-8 even a
+  # plain "P" matches it, so an ASCII name would take the non-ASCII branch. And BSD
+  # `sed y///` counts BYTES under LC_ALL=C, so a multibyte transform set is rejected
+  # outright ("transform strings are not the same length") for every input.
+  #
+  # So: the ASCII test is pinned to LC_ALL=C (where the range really is 0x20-0x7E),
+  # and the transliteration uses bash parameter substitution, which matches byte
+  # sequences literally and gives identical output under C and UTF-8 alike.
+  local _s="$1" _pair
+  for _pair in "ı:i" "İ:I" "ş:s" "Ş:S" "ğ:g" "Ğ:G" "ü:u" "Ü:U" "ö:o" "Ö:O" "ç:c" "Ç:C" \
+               "â:a" "Â:A" "î:i" "Î:I" "û:u" "Û:U" "á:a" "à:a" "ä:a" "ã:a" "Á:A" "À:A" \
+               "Ä:A" "Ã:A" "é:e" "è:e" "ë:e" "ê:e" "É:E" "È:E" "Ë:E" "Ê:E" "í:i" "ì:i" \
+               "ï:i" "Í:I" "Ì:I" "Ï:I" "ó:o" "ò:o" "õ:o" "ô:o" "Ó:O" "Ò:O" "Õ:O" "Ô:O" \
+               "ú:u" "ù:u" "Ú:U" "Ù:U" "ñ:n" "Ñ:N" "å:a" "Å:A" "æ:a" "Æ:A" "ß:ss" \
+               "ø:o" "Ø:O" "ł:l" "Ł:L" "đ:d" "Đ:D"; do
+    _s="${_s//${_pair%%:*}/${_pair#*:}}"
+  done
+
+  # Anything the table could not map is dropped by the squeeze below, so a fully
+  # non-Latin name (Greek, Cyrillic, CJK) would slug to empty. Announce that rather
+  # than silently producing a different slug than a python-equipped machine would:
+  # init-sumela pins slug parity between the two install routes as a hard contract.
+  # The warning goes to stderr — this function's stdout IS the slug.
+  # `case ... in *[!\ -~]*` cannot be used here: a bracket RANGE is collation-ordered,
+  # so under a UTF-8 locale even a plain "P" falls outside ` `..`~` and the warning
+  # fired on every ASCII name. Putting LC_ALL=C on a preceding `printf` does NOT fix
+  # it — printf emits the same bytes in every locale; the SHELL does the matching.
+  # `tr -d` puts the locale on the tool that actually inspects the bytes.
+  if [ -n "$(printf '%s' "$_s" | LC_ALL=C tr -d '\040-\176')" ]; then
+    warn "python3 unavailable and '$1' has characters this fallback cannot transliterate; its slug may differ from a python-equipped install. Verify .sumela/rules/domains/ and the RULE_REGISTRY rows agree."
+  fi
+
+  printf '%s' "$_s" \
+    | LC_ALL=C tr '[:upper:]' '[:lower:]' \
+    | LC_ALL=C tr -cs 'a-z0-9' '-' \
+    | LC_ALL=C sed 's/^-*//; s/-*$//'
+  echo
 }
 
 # --- Git hook wiring (core.hooksPath) — used by the full install AND by --hooks-only ---
@@ -927,10 +1025,27 @@ if [ ${#PLUGINS[@]} -gt 0 ]; then
   done
 
   # Insert plugin entries before the closing </available_skills> tag.
-  # Done via python3 (already required by render_template) — BSD awk on macOS
-  # rejects multi-line `-v` variables ("awk: newline in string").
+  # BSD awk on macOS rejects multi-line `-v` variables ("awk: newline in string"),
+  # hence python or bash parameter substitution rather than awk/sed. python3 is no
+  # longer guaranteed here (render_template stopped requiring it), so this degrades
+  # the same way: a plugin selection implies python for the plugin ITSELF, but the
+  # install must not die half-written just because the interpreter is missing.
   if [ -n "$PLUGIN_ENTRIES" ]; then
     export TMPL_PLUGIN_ENTRIES="$PLUGIN_ENTRIES"
+    if ! have_python; then
+      _reg=".sumela/SKILL_REGISTRY.md"
+      _tag="</available_skills>"
+      _content="$(cat "$_reg")"
+      case "$_content" in
+        *"$_tag"*)
+          _content="${_content/"$_tag"/$PLUGIN_ENTRIES
+$_tag}"
+          printf '%s\n' "$_content" > "$_reg"
+          ok "Plugins appended to SKILL_REGISTRY.md" ;;
+        *)  warn "</available_skills> tag not found; plugins not appended" ;;
+      esac
+      unset _reg _tag _content
+    else
     python3 -c "
 import os, sys
 path = '.sumela/SKILL_REGISTRY.md'
@@ -946,6 +1061,7 @@ else:
     sys.stderr.write('WARN: </available_skills> tag not found; plugins not appended\n')
 "
     ok "Plugins appended to SKILL_REGISTRY.md"
+    fi
   fi
 fi
 
@@ -1065,7 +1181,7 @@ fi
 # =============================================================================
 # 7f. SYNC ORG-SHARED RULES (monorepo — no-op unless .sumela-shared/rules/ exists)
 # =============================================================================
-if [ -f scripts/sync-shared-rules.py ] && command -v python3 >/dev/null 2>&1; then
+if [ -f scripts/sync-shared-rules.py ] && have_python; then
   shr_out="$(python3 scripts/sync-shared-rules.py --check 2>&1)"
   case "$shr_out" in
     *"no .sumela-shared/rules"*) : ;;   # not a shared-rules monorepo — silent

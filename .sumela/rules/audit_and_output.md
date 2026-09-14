@@ -22,5 +22,5 @@
 5. **### Feedbacks & Critical Warnings:** A comprehensive, high-level analysis of existing flaws and structural weaknesses found in the provided context.
 
 ## 🛠️ SUPERPOWERS ALIGNMENT
-* **Planning Phase:** When using the `superpowers:writing-plans` skill, incorporate the findings from the "Proactive Audit" into the plan if they impact the current task.
-* **Verification Phase:** Use the `superpowers:verification-before-completion` skill to ensure that the newly generated code does not introduce the very "Technical Debt" or "Logical Fallacies" defined in this protocol.
+* **Planning Phase:** When using the `writing-plans` skill, incorporate the findings from the "Proactive Audit" into the plan if they impact the current task.
+* **Verification Phase:** Use the `verification-before-completion` skill to ensure that the newly generated code does not introduce the very "Technical Debt" or "Logical Fallacies" defined in this protocol.

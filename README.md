@@ -26,7 +26,7 @@ Like the monks who built Sumela on impossible ground, we build agent workflows o
 
 ## Quick Start
 
-**Prerequisites.** The core framework needs only **git** and any AI coding agent — nothing else. The optional memory layer adds: **Python 3.10+** (both plugins), **Docker + Ollama** (Qdrant session memory), and the **graphify** CLI (code graph). Setup installs the safe deps and *confirms* each invasive step, but it cannot install Docker/Ollama for you — have those present first if you want the Qdrant plugin. Decline the plugins and there are no extra prerequisites.
+**Prerequisites.** The core framework needs only **git** and any AI coding agent — nothing else. (Python 3 is *used* by the installer when present and skipped when not; the generated files are byte-identical either way, pinned by a test. The one difference: transliterating a non-ASCII **team-mode domain name** into a file slug is more accurate with Python, and the installer says so when it matters.) The optional memory layer adds: **Python 3.10+** (both plugins), **Docker + Ollama** (Qdrant session memory), and the **graphify** CLI (code graph). Setup installs the safe deps and *confirms* each invasive step, but it cannot install Docker/Ollama for you — have those present first if you want the Qdrant plugin. Decline the plugins and there are no extra prerequisites.
 
 > Setup is automatic in the sense that it leaves **no manual file-editing homework** — it does ask a few setup questions (3 languages, governance mode, which plugins/IDEs), each with a sensible default.
 
@@ -129,7 +129,7 @@ it anytime is safe (idempotent).
 - **Auto-detection** — `/initSumela` scans your existing project and generates configuration automatically
 - **Team-ready** — git-native shared session memory, conflict-free wiki, and per-developer language overrides (see [Working as a Team](#working-as-a-team))
 - **Governed learning** — in team mode, `/evolve` routes rule/skill/schema changes through a reviewed pull request (CODEOWNERS)
-- **Enforced structure** — `validate-structure.sh` runs via a pre-commit hook and an opt-in CI workflow, so the contract can't silently drift
+- **Enforced structure** — `validate-structure.sh` runs via a pre-commit hook and an opt-in CI workflow, so the contract can't silently drift. Without Python 3 the hook still runs and still passes, but the registry/skill-count reconcile inside it is skipped — so on a Python-less machine it checks *less*, quietly. CI has Python, so drift is caught there.
 - **Versioned upgrades** — `update.sh` refreshes the framework core without touching your project's overlay; `sync-mirrors.sh` keeps verbatim IDE mirrors in lockstep
 
 ## Working as a Team

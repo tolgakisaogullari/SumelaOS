@@ -14,7 +14,7 @@ Complete ALL sections before deploying. A failed item is a blocked deployment.
 **Code Quality**
 - [ ] All tests pass (unit, integration, e2e)
 - [ ] Build succeeds with no errors or warnings
-- [ ] Code reviewed and approved (`requesting-code-review` was executed)
+- [ ] Code reviewed and approved — a `.sumela/reviews/` report validates per `requesting-code-review/review-report.md` → `<how_a_gate_checks_it>` (any outstanding findings named here)
 - [ ] No debug statements or TODO items that must be resolved before launch
 - [ ] Error handling covers expected failure modes
 

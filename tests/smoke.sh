@@ -139,6 +139,22 @@ if command -v python3 >/dev/null 2>&1; then
   else
     bad "ingest delete guard test failed"; sed 's/^/    /' "$WORK/delete_guard.log" | tail -20
   fi
+  # Skill structure, measured as Anthropic's guidance measures it: SKILL.md under 500
+  # LINES, every sibling named directly from SKILL.md (a file reached through another
+  # referenced file may be read only partially), a TOC on long reference files.
+  if python3 "$REPO_ROOT/tests/test_skill_structure.py" >"$WORK/skill_structure.log" 2>&1; then
+    ok "skill structure: line budget, one-level references, TOC on long references"
+  else
+    bad "skill structure check failed"; sed 's/^/    /' "$WORK/skill_structure.log" | tail -25
+  fi
+  # Code-review skill contracts: diff-only lanes, a duplicated (and column-swapped)
+  # severity table, a self-scored size gate, and a self-matching artifact key are all
+  # invisible to validate-structure.sh and reconcile-registry.py.
+  if python3 "$REPO_ROOT/tests/test_code_review_invariants.py" >"$WORK/code_review.log" 2>&1; then
+    ok "code-review invariants: scope/evidence, one severity model, mechanical tier"
+  else
+    bad "code-review invariants test failed"; sed 's/^/    /' "$WORK/code_review.log" | tail -25
+  fi
   # Graph viz: forcing graph.html past graphify's node limit re-ran clustering and
   # wrote hundreds of MB on every pull, for a file nothing in the query path reads.
   if python3 "$REPO_ROOT/tests/test_graph_viz_not_forced.py" >"$WORK/graph_viz.log" 2>&1; then
@@ -160,6 +176,15 @@ fi
 
 # post-checkout: `git worktree add` hands the hook an all-zero prev HEAD, the same
 # signal `git clone` gives — treating it as a clone re-embedded the whole tree.
+# README promises the core framework needs only git; render_template called python3
+# unguarded on the CORE path, so a python-less machine got a bare "command not found".
+# Pins the python-free install AND that both renders stay byte-identical.
+if bash "$REPO_ROOT/tests/test_setup_without_python.sh" >"$WORK/nopython.log" 2>&1; then
+  ok "setup.sh installs without python3 (renders byte-identical to the python path)"
+else
+  bad "python-free install test failed"; sed 's/^/    /' "$WORK/nopython.log" | tail -20
+fi
+
 if bash "$REPO_ROOT/tests/test_post_checkout_worktree.sh" >"$WORK/worktree_hook.log" 2>&1; then
   ok "post-checkout: clone vs. \`git worktree add\` discrimination"
 else

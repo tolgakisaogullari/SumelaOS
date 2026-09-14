@@ -3,20 +3,13 @@ name: idea-explore
 description: "Use for divergent product ideation — when the user wants help deciding WHAT to build ('what should I build', 'what do you suggest'), asks you to suggest or propose new features or product improvements (not code-level refactors), wants to discuss what would add value, or has only a raw, unclear, or not-yet-formed idea. Run BEFORE any architecture, design, or code; hand off to brainstorming once a direction is chosen."
 ---
 
-<HARD-GATE>
-DO NOT jump to solutions, technical options, or architecture until Phase 2 is complete and the user has confirmed a direction. Problem clarity precedes solution design.
-</HARD-GATE>
+## Contents
 
-<philosophy>
-- Simplicity is the ultimate sophistication. Push toward the simplest version that still solves the real problem.
-- Start with the user experience, work backwards to the technology.
-- Say no to 1,000 things. Focus beats breadth.
-- Challenge every assumption. "How it's usually done" is not a reason.
-- The "Not Doing" list is arguably the most valuable output. Focus is about saying no to good ideas.
-</philosophy>
-
-<workflow>
-Guide the user through three phases. This is a conversation, not a template — adapt based on their responses.
+- Phase 1: Understand & Expand (Divergent)
+- Phase 2: Evaluate & Converge
+- Phase 3: Sharpen & Output
+- Handoff
+- Phase 3 output template: Problem Statement / Recommended Direction / Key Assumptions / MVP Scope / Not Doing / Open Questions
 
 ## Phase 1: Understand & Expand (Divergent)
 

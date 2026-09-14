@@ -5,7 +5,7 @@
 ## 📊 OBSERVABILITY & STRUCTURED LOGGING
 * **Structured Logging (Serilog):** Do not use plain string logs. Every log entry must be structured with properties (e.g., `Log.Information("User {UserId} created entity {EntityId}", userId, entityId)`).
 * **Correlation IDs:** Every request (HTTP) or message (message broker) must carry a `CorrelationId`. Ensure this ID is propagated across all service boundaries to enable end-to-end tracing.
-* **Error Context:** When logging exceptions, always include the relevant DTO or State that caused the failure (excluding sensitive data) to speed up the `superpowers:systematic-debugging` process.
+* **Error Context:** When logging exceptions, always include the relevant DTO or State that caused the failure (excluding sensitive data) to speed up the `systematic-debugging` process.
 
 ## 🔄 API EVOLUTION & VERSIONING
 * **Mobile-First Versioning:** All API endpoints must be versioned (e.g., `/api/v1/<resource>`).
@@ -21,7 +21,7 @@ A task is NOT "Done" until the following checklist is verified:
 
 ## 🛠️ SUPERPOWERS INTEGRATION
 * **Writing Plans:** When planning a feature that involves a background consumer (message broker), the plan **MUST** include a "Logging & Tracing" section.
-* **Verification:** Use the `superpowers:verification-before-completion` skill to double-check that no "Hardcoded Configurations" are left in the code and all new endpoints are versioned correctly.  
+* **Verification:** Use the `verification-before-completion` skill to double-check that no "Hardcoded Configurations" are left in the code and all new endpoints are versioned correctly.  
 ## 🧠 SECOND BRAIN RELIABILITY (PROACTIVE MAINTENANCE)
 
 Second Brain is project-critical infrastructure, not optional documentation.

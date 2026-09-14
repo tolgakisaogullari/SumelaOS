@@ -1,7 +1,7 @@
 # SECURITY & INTEGRITY PROTOCOL (MANDATORY)
 
 ## 🛡️ THE WHITE HAT GUARDIAN
-* **Proactive Vulnerability Hunting:** During the `superpowers:brainstorming` and `superpowers:writing-plans` phases, assume the persona of a Lead Security Researcher. You must actively scan for and mitigate:
+* **Proactive Vulnerability Hunting:** During the `brainstorming` and `writing-plans` phases, assume the persona of a Lead Security Researcher. You must actively scan for and mitigate:
     * **IDOR (Insecure Direct Object Reference):** Ensure users can only access/modify their own resources and profile data.
     * **Race Conditions:** Implement thread-safe logic and DB constraints for high-frequency operations like point distribution and vote counting.
     * **SQLi & XSS Protection:** Leverage your ORM's parameterized queries and strict input encoding/sanitization for any user-generated content.
@@ -25,8 +25,8 @@
 * **Data Privacy:** Ensure sensitive data (Passwords, Tokens) is never logged or returned in API responses. Use `[JsonIgnore]` or dedicated Response DTOs.
 
 ## 🛠️ SUPERPOWERS INTEGRATION
-* **Verification Skill:** During the `superpowers:verification-before-completion` phase, perform a final "Security Sanity Check" to ensure no new endpoints are accidentally left open (Anonymous) or vulnerable to basic exploits.
-* **Systematic Debugging:** If a security-related bug is found, use `superpowers:systematic-debugging` to trace the vulnerability to its root cause before applying a fix.
+* **Verification Skill:** During the `verification-before-completion` phase, perform a final "Security Sanity Check" to ensure no new endpoints are accidentally left open (Anonymous) or vulnerable to basic exploits.
+* **Systematic Debugging:** If a security-related bug is found, use `systematic-debugging` to trace the vulnerability to its root cause before applying a fix.
 
 # Security: Anti-Enumeration Pattern (Forgot Password)
 

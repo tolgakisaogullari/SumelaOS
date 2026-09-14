@@ -8,7 +8,11 @@
 .sumela/.graph-sync.log
 .sumela/.code-chunks-synced
 .sumela/.update-check
+.sumela/.last-update.json
 .sumela/.retrieval-cache.json
+# Code-review panel reports (per-developer evidence; quote the reviewed code, so they
+# inherit the diff's sensitivity — never commit)
+.sumela/reviews/
 .superpowers/
 **/scripts/.superpowers/
 graphify-out/

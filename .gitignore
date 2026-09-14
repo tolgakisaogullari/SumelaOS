@@ -38,7 +38,10 @@ docs/second-brain/wiki/
 .sumela/.graph-sync.log
 .sumela/.code-chunks-synced
 .sumela/.update-check
+.sumela/.last-update.json
 .sumela/.retrieval-cache.json
+# Code-review panel reports (per-developer evidence; quote the reviewed code)
+.sumela/reviews/
 
 # Per-developer overrides (personal; .example stays tracked)
 .sumela/local.md

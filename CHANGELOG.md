@@ -9,7 +9,300 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The code-review panel now reads the repo, sizes itself mechanically, and leaves evidence
+  behind (v0.16.0).** Nine changes to `requesting-code-review` / `receiving-code-review`, each
+  closing a way the gate could pass while doing nothing.
+
+  **Reviewers could not read the code.** All three lanes carried `Review ONLY the provided
+  {CODE_DIFF}`. A diff hunk is ±3 lines of context, so a lane could not check whether a guard
+  already existed above the change, whether callers were updated, or whether a test existed
+  when the test file was not in the diff — and the rule flatly **contradicted** the Integration
+  lane's own instruction to run graphify `--impact` on every changed symbol, an instruction that
+  requires leaving the diff. Lanes now read files, callers, tests and config freely: the diff
+  defines what a lane is ACCOUNTABLE for, not what it may READ. The reading is bounded (name the
+  candidate finding first; ~10 reads / 5 greps; never an unbounded `git log -p`) because one
+  unbounded call evicts the diff the lane is answerable for while it keeps emitting a
+  well-formed report.
+
+  **Nothing controlled false positives.** Every lane had to emit `Strengths` and a verdict, so a
+  lane with nothing to report invented something — the skill itself recorded one such case. Lanes
+  now get an explicit licence to report nothing, a **failure chain** gate (every link carries a
+  `File:line`; a link that reads "presumably" or "if a caller does X" means the finding is
+  DROPPED, not demoted — demotion only relabels noise), and a **mandatory coverage line** naming
+  what was examined and what could not be settled, so a skimmed lane and a thorough one no longer
+  produce the same empty report. Verification of each Critical/Important happens **inline in the
+  orchestrator** (one evidence line per finding: CONFIRMED / REJECTED / UNPROVEN) rather than in a
+  second wave of subagents — the orchestrator already had repo access and the job, and a verifier
+  panel would have doubled the median agent count of a gate that runs before every commit.
+  **`(unproven)` keeps its original severity:** the findings verification cannot settle are
+  overwhelmingly absence-of-control findings (no revocation path, no boundary test, no rollback)
+  — you cannot prove a negative by opening files — so demoting them would have quietly emptied
+  the security floor of exactly the class it exists to catch.
+
+  **A large diff produced no review at all.** Over ~300 lines the skill said "STOP and ask the
+  author to split the change" — but the review is mandatory before every commit and the "author"
+  is the agent itself, so the rule could only deadlock or be rationalized around. 300 is now a
+  **slicing unit**: the diff is cut into coherent groups and the panel runs per slice, with an
+  explicit cross-slice pass afterwards. The line count is no longer self-scored — `git diff
+  --numstat` is printed, and every excluded path must be printed with its line count and reason.
+
+  **Effort now scales with risk, and the tier cannot be self-discounted.** A one-line typo fix
+  used to get the same three-lane panel as a migration. Tier is decided by a printed grep over
+  the changed files (`auth|token|secret|migration|schema|payment|pii|\.tf$|Dockerfile|...`): any
+  hit is Deep (4 lanes), no hit and ≤40 lines is Focused (the mandatory Correctness & Security
+  floor alone), everything else is Standard. **Judgment may escalate a tier; it may never
+  de-escalate one** — otherwise the discount is granted by the agent that benefits from it.
+
+  **The gate had no evidence to check.** `finishing-a-development-branch` spent two paragraphs
+  begging the agent to confirm the review had run, because nothing was written down. The panel now
+  writes a report to the **main checkout's** `.sumela/reviews/` — main checkout, because the
+  directory is untracked and `git worktree remove` would otherwise delete the evidence
+  `shipping-and-launch` is meant to gate on. It is keyed by `reviewed_state:` (a hash of what was
+  actually reviewed via `git hash-object`), since a literal `worktree` marker matches itself
+  forever and a gate built on it always passes. Both downstream gates now check the file, the
+  hash, and the verdict — and honour a recorded `user_decision: proceed` instead of re-blocking a
+  choice the user already made.
+
+  **Two dimensions lost in the lane split are back:** reuse & simplification (Design & Contracts)
+  and scope discipline / YAGNI (Lane 1, which already owns spec conformance). Both were in the
+  legacy single-reviewer prompt and neither survived the split — a reviewer that only hunts bugs
+  never asks whether the code needed to exist.
+
+  **Three payload fields close three blind spots:** `{VERIFICATION_EVIDENCE}` (so lanes can catch
+  "suite is green but no test reaches the new branch" — with "verification was not run" handled
+  once as a Step 1 precondition instead of becoming an identical finding from every lane in every
+  slice), `{PRIOR_ROUNDS}` (so a rejected false positive does not return every round and get
+  re-argued; rounds converge, and a rejection whose file was touched again expires), and
+  `{CHANGED_FILES}`. Step 4 is now the single authority that fills every field, so an unfilled
+  `{PLACEHOLDER}` cannot reach a lane as literal text. The author's narrative is explicitly framed
+  as a **claim to verify** — a security mitigation claimed in `{DESCRIPTION}` but absent from the
+  code is itself a finding.
+
+- **Eleven ideas borrowed from Qwen Code's `/review`, three of them deliberately not as written (v0.16.0).**
+  Source: `QwenLM/qwen-code`, `docs/users/features/code-review.md`. Their implementation is a
+  product (CLI, PR fetch, GitHub API, headless runner, cache); the review *logic* is prompt on
+  both sides, so nothing here needed a new runtime dependency. Two adversarial design reviews
+  ran before any of it was written and rejected the first draft outright — five of the eleven
+  collided with rules added earlier in this release.
+
+  **Taken as-is.** Findings for one root cause at several sites now aggregate into ONE finding
+  listing every location, instead of a 3-slice panel reporting the same systemic issue twelve
+  times. `Ready: Yes` now additionally requires verification evidence covering the diff — the
+  panel could previously certify a tree nothing had executed. Findings carry a stable id
+  (`r<round>.F<n>`), assigned by the orchestrator after dedupe and aggregation: never by a lane
+  (ids would collide across slices) and never severity-coded (dedupe raises severity, which
+  would mutate the id and orphan the previous round's ledger). Qwen's JSON-findings pipeline
+  was deliberately reduced to just those ids — four consumers read their JSON, one reads ours,
+  and a schema validator would have put Python on the review path.
+
+  **Taken, but re-shaped, because copying them would have broken what they touch.**
+  *Rejection asymmetry:* a REJECTED verdict now needs quoted contradicting code, a diff comment
+  documenting the behaviour as deliberate, **or a scoped negative search** (pattern, where run,
+  `0 hits`). That third ground is not in the source and is what makes the rule survivable: you
+  cannot quote a line proving a line is missing, so without it no absence-of-control finding
+  could ever be rejected, every hallucinated Critical would become permanent, and — since
+  `(unproven)` keeps its severity and blocks — the re-review loop would never terminate. An
+  UNPROVEN finding that survives two rounds with no new evidence and no edit to its cited file
+  now goes `UNPROVEN — stale` and stops blocking, for the same reason.
+  *Plausibility default:* shipped as a DEFINITION of what satisfies the failure chain's
+  INPUT/STATE link (cite where the exclusion would have to live and show it absent), not as the
+  carve-out it is upstream. As a carve-out it directly contradicted the failure-chain gate,
+  which names "in some configuration" and "if a caller does X" as drop triggers — the exact
+  phrasing a race and a retry storm require. Two unqualified contradictory rules in one block
+  means the model picks whichever supports the conclusion it already wants.
+  *Confidence field:* adopted; Qwen's semantics rejected. There, low confidence does not block
+  and never reaches the PR. Here it must block, because the findings verification cannot settle
+  are overwhelmingly absence-of-control ones. Their review is a PR comment, where noise is
+  expensive; ours is a commit gate, where a miss is.
+  *Test-delta attribution:* the source's rule needs a pre-change baseline run. The reduced form
+  defaults to **UNATTRIBUTED** and demands the trace (test entry point, the path followed, no
+  changed file on it) before a failure may be called pre-existing — an unevidenced
+  "probably pre-existing" excuses a real regression in writing, which is worse than silence.
+  *Gap sweep:* their iterative reverse audit became four DIFF-DERIVED searches, each printed
+  with its hit count (`gap-sweep.md`) — an added field nothing reads, a removed guard nobody
+  re-established, an added early exit and what no longer runs after it, a cross-slice contract.
+  Open-ended "what did we miss" introspection by the orchestrator that just merged the findings
+  would have been theater.
+
+  **Cut.** Qwen's "what is NOT flagged" list lost ~60% of its content: its pre-existing clause
+  was a *weaker* restatement of the ATTRIBUTION rule already in every lane (which covers
+  pre-existing issues in *changed* files too), and its style clause contradicted Lane 2's
+  existing "at most Minor" rule. Only the genuinely new parts survive — risk-free refactors,
+  and the linter/type-checker exception scoped to what this diff introduces. Lane 2's rule was
+  amended to defer rather than compete.
+
+  **The self-modification guard is the one finding this borrowing produced rather than
+  transferred.** SumelaOS had zero protection: lanes judge against "the project's loaded rules",
+  those come from the working tree, and nothing flagged a diff editing `.sumela/rules/`, the
+  review skills, the hooks, `AGENTS.md`, or `CODEOWNERS`. A change could loosen its own review
+  unnoticed. Qwen's fix — read rules from the base branch — does not port: the primary mode here
+  reviews staged/unstaged work where no base ref exists (`{HEAD_SHA}` is a worktree *label*, and
+  every lane is explicitly told `git show <label>:` is not a command), the semantics are
+  backwards in a repo where new rules ARE the deliverable, and the threat model is
+  self-deception rather than an untrusted third-party PR. What shipped (`self-modification-guard.md`)
+  announces the modification, forces Deep, and makes Lane 2 own "a change that weakens a rule is
+  a finding at the severity of what it weakens" — while stating plainly what it does NOT fix:
+  the modified rule was already loaded from the working tree at session start, and nothing at
+  Step 1 can un-read it. It also carries a **framework-upgrade carve-out**, without which every
+  consumer would pay a forced 4-lane Deep review and a false security banner on their first
+  review after every `scripts/update.sh` run — `update.sh` rewrites every trigger path.
+
+  Two more holes closed on the way: the report is refused unless `.sumela/reviews/` is actually
+  gitignored (the reconcile is consent-gated, so a user who declined it would have had
+  secret-quoting reports written into a tracked directory), and the shared execution-rules block
+  — three byte-identical copies — now has a drift guard, since a lane running a stale copy of
+  the false-positive controls still emits a perfectly well-formed report.
+
+  The report format itself moved to `review-report.md` as a single canonical spec. Four files
+  touch it — the writer, its own next-round reader, the outcome ledger, and the two gates — and
+  each was restating parts of it, the same drift this release de-duplicated the severity model
+  to stop.
+
+- **Skill structure is now checked the way Anthropic's guidance measures it (v0.16.0).**
+  `writing-skills` had always said `<200 words for frequently-loaded skills, <500 for others`,
+  and nothing enforced it. The first attempt here enforced it — and that was a mistake, because
+  the rule was wrong: the official guidance is *"keep SKILL.md body under 500 **lines**"*, a
+  different unit and roughly 6-8x looser. Under the word count 19 of 22 skills looked over
+  budget; under the real measure exactly one is (`init-sumela`, 607 lines).
+
+  The wrong number was not harmless. Chasing it produced two rule violations in a single
+  session, both caught by review rather than by the guard: common-path content was moved into
+  sibling files so the counter would drop — a "reduction" that relocated tokens instead of
+  removing them — and when that was caught, the re-baseline was justified with "only the
+  measurement changed" for a file that had in fact grown by ~1000 words. A metric that measures
+  the wrong thing does not merely fail to help; it pushes toward gaming it.
+
+  `tests/test_skill_word_budget.py` is replaced by `tests/test_skill_structure.py`, which
+  checks what the guidance actually says: SKILL.md under 500 lines (over-limit files pinned,
+  ratchet-only); **every sibling `.md` named DIRECTLY in SKILL.md**; and a `## Contents` list on
+  any reference file over 100 lines. The second check is the one that bites, and it found real
+  defects the word count never could (the third found one more): Claude may preview a file with `head -100` rather than
+  read it whole when it arrives there through *another* referenced file, so a rule two levels
+  down can silently not apply. Three were fixed — `code-reviewer.md` was reachable from
+  `requesting-code-review` only via `ide-fallback.md`; `writing-plans` named the
+  `plan-document-reviewer` subagent but never its prompt file; and `brainstorming/idea-explore.md`
+  (131 lines) gained a table of contents.
+
+  Recorded for the next person who reaches for a size limit: prompt caching does not change any
+  of this. Cached content still occupies the context window and still counts as input tokens
+  (`total = cache_read + cache_creation + input`); caching makes a re-read cheaper, not smaller.
+  And skills are not all loaded up front — only each skill's name and description are, with
+  SKILL.md read when the task matches, which is exactly what `SKILL_REGISTRY.md` already does.
+
+- **One severity model, and the merge that nearly deleted it (v0.16.0).** The model lived in two
+  tables. The `requesting-code-review` one had `Section | Meaning | Required Action` headers with
+  the **second and third columns swapped** on three of its four rows — the qualifiers
+  ("exploitable token-lifecycle gap", "meaningful test gap") sat under `Required Action` and the
+  actions sat under `Meaning`. Merging by column name, as first planned, would have moved the
+  action words, dropped every qualifier, and passed a column-wise diff check: the only place the
+  panel's severity thresholds were written down would have vanished silently. Adversarial review
+  caught it. The tables are now merged cell by cell into a single canonical `<severity_model>` in
+  `receiving-code-review` (which is invoked standalone for human and GitHub feedback, so it cannot
+  be a pointer), keeping the stronger wording from each side; `requesting-code-review` points at
+  it and states only the gate discriminator. Per-lane `SEVERITY STRICTNESS` lines and the
+  `output_format` headings are deliberately grandfathered — they calibrate a lane, they do not
+  redefine the model. The legacy single-reviewer template's third, already-drifted prose copy was
+  aligned rather than left to rot behind a user-visible menu option.
+
 ### Fixed
+
+- **Two review rounds on this release's own changes, and what they caught (v0.16.0).**
+  The overhaul above was reviewed by its own panel — Deep tier, self-modification guard active
+  (28 trigger paths) — across two rounds. Round 1: 4 Criticals, 9 Importants. Round 2 on the
+  fixes: 1 Critical, 9 Importants. Both artifacts are in `.sumela/reviews/`. Recorded here
+  because most of what it found was the author's own reasoning failing in ways a green test
+  suite could not see:
+
+  **A test that certified a comparison it never made.** `test_setup_without_python.sh`'s
+  headline assertion — python and python-free renders are byte-identical — passed with the
+  python renderer destroyed: the fallback caught BOTH sides and `cmp` compared bash to bash.
+  Fixed with a renderer trace; mutation now goes red. The fix then shipped a second bug the
+  same test was blind to: `[ -n "$VAR" ] && echo ...` as `render_template`'s last command
+  returns 1 with the variable unset, and `set -euo pipefail` aborted every real install. Every
+  test case set the variable. The smoke suite caught it (30→16), and a case with the variable
+  unset now pins it.
+
+  **A locale fix that fixed nothing.** The first fix put `LC_ALL=C` on a `printf`, which emits
+  identical bytes in every locale, while the `case` glob that actually collates kept running
+  under the ambient one. In any UTF-8 locale the "cannot transliterate" warning fired on every
+  plain-ASCII domain name. Now `tr -d '\040-\176'` — the locale is on the tool that inspects
+  the bytes. Verified across `C`, `en_US.UTF-8` and `tr_TR.UTF-8`. Fixing it would also have
+  made the stdout-pollution guard vacuous (that guard only went red *because* of the spurious
+  warning), so the test's domain list gained a name that legitimately cannot be transliterated.
+
+  **The word-budget ratchet, gamed twice by its own author.** First by extracting two
+  common-path files and letting the metric certify a reduction that never happened — the
+  precise "fake split" the rule text forbids. When review caught that, the re-baseline was
+  justified with "only the measurement changed"; `git show HEAD:…/SKILL.md | wc -w` says 2035
+  under the identical metric, and the extracted content did not exist at HEAD. The skill grew
+  by ~1000 words. The comment now says so, and records the >2x overage against its type budget
+  as debt. The exemption mechanism was then found dodgeable by `git mv` (renaming a file to
+  `*-prompt.md` dropped it from the count) and is now a declarative list, one line and one
+  stated reason per file.
+
+  **Two gates that fixed one hole by opening another.** Hardening "a `proceed` decision must
+  not waive a stale hash" made `shipping-and-launch` unpassable: `git diff --staged` is empty
+  after the commit, so a pre-commit report could never match at ship time. `reviewed_state` is
+  now a TREE hash (`git write-tree` from the index equals `HEAD^{tree}` of the commit it
+  becomes). And the self-modification guard's provenance test was unexecutable — `$SRC` is a
+  local inside `update.sh` whose clone is trapped away on exit — so `update.sh` now writes
+  `.sumela/.last-update.json` (version, timestamp, vendored file list) and the guard reads it.
+
+  One verification verdict in round 1 was itself wrong and is recorded as withdrawn: a lane's
+  collation claim was REJECTED on evidence contaminated by the reviewer's own shell locale.
+  An environment-dependent probe is not the "quoted contradicting code" the rejection rule
+  demands.
+
+- **The bash installer no longer requires Python 3, and README no longer claims otherwise (v0.16.0).**
+  `scripts/setup.sh`'s `render_template()` called `python3 -c` **unguarded**, on the CORE path —
+  `AGENTS.md`, `.sumela/RULE_REGISTRY.md`, every rule and domain template. Every other Python
+  caller in the repo is guarded and degrades silently (`update.sh`, `validate-structure.sh`, all
+  the git hooks); the install was the single unguarded one, and it is the one a first-time user
+  hits. README promised *"the core framework needs only git and any AI coding agent — nothing
+  else"*. It did not.
+
+  The dependency was a choice, not a necessity: `scripts/setup.ps1` already renders the same
+  templates with literal replacement and no Python at all. The fix is a bash fallback using
+  parameter substitution — **not `sed`**, which was the entire basis of the "too fragile for
+  shell" argument that had kept this open. `${c//pat/rep}` has no regex, no delimiter and no
+  backreference semantics, so `&`, `|`, `/`, backslashes, newlines, `→` and glob metacharacters
+  in a value are all literal; verified on bash 3.2.57, the macOS system bash and the oldest
+  target, where `${!TMPL_@}` also works (3.2 has no associative arrays).
+
+  Writing the test first surfaced a second, larger bug: **presence is not capability**. The
+  test's stub interpreter sits on PATH and is executable and still exits 127 — which is exactly
+  what a pyenv or asdf shim for an uninstalled version does, a far more common real-world state
+  than "no Python at all". Every `command -v python3` guard in the installer would have sailed
+  straight past it. All optional Python paths now probe through one cached `have_python()`
+  helper that actually runs the interpreter.
+
+  `slugify()` gets the same treatment, with an honest caveat rather than a silent divergence:
+  the fallback transliterates the Latin-1 and Turkish letters these taxonomies use (verified
+  identical to the NFKD path on Turkish and accented domain names), and *announces* when a
+  non-ASCII name may slug differently, because `init-sumela` pins slug parity between the two
+  install routes as a hard contract. The plugin-registry append degrades the same way.
+
+  Pinned by `tests/test_setup_without_python.sh` (wired into `tests/smoke.sh`), which asserts
+  the install SUCCEEDS without Python **and that both renders are byte-identical** — the second
+  assertion is the one that keeps a fallback honest over time. It also pins that `--hooks-only`
+  stays Python-free: it already was, by exiting before any render, so a preflight placed at the
+  top of the file would have newly broken the `/onboardSumela` teammate path.
+
+  README is corrected in the three places that were wrong, not just the headline one, and
+  `init-sumela` now says to check registry parity by hand rather than report an import as
+  "proven" when the reconcile could not run.
+
+- **The stale `superpowers:` skill prefix no longer reaches live rules (v0.16.0).** 21 occurrences
+  across 7 rule files addressed skills as `superpowers:<name>` — an upstream plugin namespace
+  SumelaOS does not use; `SKILL_REGISTRY.md` addresses every skill by bare name. One of the seven,
+  `.sumela/rules/operational_excellence_maintenance.md.template`, is copied by `init-sumela` into a
+  **live, loaded rule**, and it sat in neither `CORE_FILES` nor any `CORE_DIRS` entry (`CORE_DIRS`
+  covers `.sumela/rules/templates/`, one level below it) — so the fix would have shipped to fresh
+  installs and never reached an upgraded one. It is now named explicitly in both `scripts/update.sh`
+  and `scripts/update.ps1`. The `.superpowers/` runtime gitignore patterns and the
+  `using-superpowers` skill are untouched (neither matches the `superpowers:` prefix).
 
 - **A failed Qdrant delete no longer leaves a stale tail and reports SUCCESS (v0.15.0).** Both bulk
   ingests refresh a file idempotently as DELETE-by-filter then UPSERT. The delete sat in a

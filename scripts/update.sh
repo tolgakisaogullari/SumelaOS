@@ -182,6 +182,10 @@ CORE_FILES=(
   ".sumela/rules/security_protocol.md"
   ".sumela/rules/git_workflow_mandatory_review_protocol.md"
   ".sumela/rules/self_improvement_protocol.md"
+  # NOT covered by CORE_DIRS: that entry is .sumela/rules/templates/, one level
+  # BELOW this file. init-sumela copies it to a LIVE rule, so an edit here only
+  # reaches an existing install if it is named explicitly.
+  ".sumela/rules/operational_excellence_maintenance.md.template"
 )
 CORE_DIRS=(
   ".sumela/skills"
@@ -346,6 +350,30 @@ fi
 
 # --- Finalize ----------------------------------------------------------------
 printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
+
+# Record that THIS run vendored these files. `requesting-code-review`'s
+# self-modification guard has to tell a framework upgrade (vendored content the
+# developer did not write) from a hand-edited rule, and it cannot do that from the
+# diff's shape: bumping VERSION is what a normal commit does, and CORE_FILES contains
+# security_protocol.md. Without a record the guard has no executable test — $SRC is a
+# local here and CLONE_TMP is trapped away on exit, so nothing survives to compare
+# against. Per-developer state; gitignored alongside the other runtime artifacts.
+if [ "$DRY_RUN" != true ]; then
+  {
+    printf '{\n'
+    printf '  "version": "%s",\n' "$SRC_VER"
+    printf '  "updated_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '  "files": [\n'
+    _first=1
+    for _f in ${new_list[@]+"${new_list[@]}"} ${changed_list[@]+"${changed_list[@]}"}; do
+      [ "$_first" = 1 ] || printf ',\n'
+      printf '    "%s"' "$_f"; _first=0
+    done
+    [ "$_first" = 1 ] || printf '\n'
+    printf '  ]\n}\n'
+  } > "$ROOT/.sumela/.last-update.json" 2>/dev/null || true
+  unset _first _f
+fi
 chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" "$ROOT/.sumela/git-hooks/post-commit" 2>/dev/null || true
 
 echo ""

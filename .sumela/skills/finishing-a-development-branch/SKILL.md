@@ -15,8 +15,8 @@ Execute these steps strictly in sequence. DO NOT announce the skill.
 
 2. MANDATORY COMMIT (THE CHECKPOINT):
    - Run `git status` to check for uncommitted/staged changes.
-   - CRITICAL REVIEW GATE: You MUST ensure that the `requesting-code-review` skill was executed and explicitly approved before proceeding. "Inline execution", "I applied secure coding standards myself", or "Tests passed" are NOT valid excuses. If the `requesting-code-review` skill was NOT formally executed, you MUST STOP this workflow immediately and run `requesting-code-review`. Do not commit until the review is fully resolved.
-   - CRITICAL REMINDER: If this skill was invoked AFTER review feedback was already received and applied inline, still verify that `requesting-code-review` was formally dispatched earlier in the session. Inline review execution (subagent dispatched directly without going through the `requesting-code-review` workflow) does NOT satisfy the review gate. If formal review was skipped, STOP and run `requesting-code-review` before proceeding.
+   - CRITICAL REVIEW GATE — **check the artifact, do not trust your own recollection.** `requesting-code-review` Step 6c writes a report to the main checkout's `.sumela/reviews/`. Validate it against `requesting-code-review/review-report.md` → `<how_a_gate_checks_it>` — every numbered check, in order. Note that `user_decision: proceed` waives a non-`Yes` verdict but NEVER a stale `reviewed_state`. Any failure → STOP and run `requesting-code-review`.
+   - Why an artifact and not a memory check: a gate that asks the agent whether it remembers running the review is a gate the agent can pass by being wrong. The report is the evidence; the hash is what makes it non-forgeable by drift.
    - Commit the approved STAGED changes using a descriptive, conventional commit message (e.g., `git commit -m "feat: implement [feature] based on plan"`). If critical security mitigations were applied, mention them briefly in the commit body.
    - NEVER merge or push without committing the approved work first.
 

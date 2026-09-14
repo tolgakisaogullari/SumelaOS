@@ -8,18 +8,18 @@
     3. Explicitly ask the user: *"I have reviewed these changes. Shall I proceed with the commit/merge?"*
 
 ## 🔄 BRANCH & WORKTREE MANAGEMENT
-* **Branch Isolation:** When using `superpowers:using-git-worktrees` or creating new branches, never merge back to `main` or `master` until the feature is fully verified by the `superpowers:verification-before-completion` skill.
+* **Branch Isolation:** When using `using-git-worktrees` or creating new branches, never merge back to `main` or `master` until the feature is fully verified by the `verification-before-completion` skill.
 * **Clean History:** Avoid "WIP" (Work In Progress) commits on the main branch. Ensure all commits follow the **Conventional Commits** standard (e.g., `feat:`, `fix:`, `refactor:`).
 
-## 🕵️ MANDATORY REVIEW SKILL (SUPERPOWERS:REQUESTING-CODE-REVIEW)
-* **Skill Enforcement:** For any complex feature or refactoring, you **MUST** invoke the `superpowers:requesting-code-review` skill before finalizing the task. 
+## 🕵️ MANDATORY REVIEW SKILL (requesting-code-review)
+* **Skill Enforcement:** For any complex feature or refactoring, you **MUST** invoke the `requesting-code-review` skill before finalizing the task. 
 * **Self-Critique:** During the review, actively look for:
     * Violation of any of the 10 established Project Rules.
     * Unnecessary files or "debug" code left behind.
     * Potential performance regressions in ORM or frontend/mobile components.
 
 ## 🛠️ SUPERPOWERS INTEGRATION
-* **Execution Phase:** During `superpowers:executing-plans`, if a step involves a git action, pause and report the status of the `uncommitted changes`.
+* **Execution Phase:** During `executing-plans`, if a step involves a git action, pause and report the status of the `uncommitted changes`.
 * **Merge Gate:** Before a merge command, verify that the `CorrelationId` and `Logging` standards (from Rule 10) are implemented in the new code.
 
 # Windows CMD Worktree Path Navigation
