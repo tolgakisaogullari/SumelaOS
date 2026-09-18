@@ -1,0 +1,73 @@
+---
+type: decision
+tags: [architecture, decisions, {{project_name}}]
+date_created: {{date_created}}
+date_updated: {{date_created}}
+---
+
+# Architecture Decisions — {{project_name}}
+
+> **The project's standing decision record.** Every decision here is one another developer would
+> still follow without an agent: technology choices, patterns, contract shapes, layer boundaries.
+>
+> This page is the CUMULATIVE surface — the reason a decision made three sessions ago is not lost.
+> `context-handoff` points the next session here instead of copying decisions into a prompt,
+> because this is the only place that can record that a decision was later **superseded**.
+>
+> **Writers:** `using-second-brain` operation 5 (DECISION CAPTURE, mid-session, asks first) and
+> `finishing-a-development-branch` Step 7 item 4 (at branch close). `context-handoff` never writes
+> here directly — it routes to those, so the consent gate and AD numbering stay in one place.
+>
+> **Decisions about how the AGENT works** (rules, skills, workflow) do NOT belong here — they go to
+> `_improvement-queue/` via the `decision` signal and are reviewed with `/evolve`. The test:
+> *"If a new developer joined the team without an agent, would this still apply to them?"*
+
+---
+
+## Conventions
+
+This is a CONTAINER page: it holds many decisions as `## AD-XX` sections, which is why its
+frontmatter carries `type: decision` but no `decision_id` / `decision_status` — those are
+per-entry and live in each entry's **Status** line. Link one as `[[architecture-decisions#AD-NN]]`.
+
+- **Numbering:** zero-padded and sequential, allocated as `max + 1` by scanning the `## AD-` headings
+  under **Decisions** below (this preamble deliberately contains no allocatable id, so the first real
+  decision gets the first number). Allocate on the
+  integration branch, not inside a worktree — the read-modify-write is not locked, so two parallel
+  sessions can otherwise claim the same number.
+- **Never delete or rewrite a decision.** Reversing one means setting the old entry's **Status** to
+  `superseded`, pointing its **Superseded by** at the new AD, and appending the new entry. History
+  stays readable; only the status changes.
+- **Status values:** `accepted` | `superseded` | `deprecated`. Readers act on `accepted` entries
+  only; the others are kept so the reasoning trail survives.
+- After adding an entry, update `_SEARCH_INDEX.md`'s `architecture-decisions` row Key Terms with the
+  new ID, and append a `decision` entry to `_LOG.md`. Full format in `_SCHEMA.md`.
+
+**Entry shape** — copy this block, do not copy the `_SCHEMA.md` single-decision-page template
+(that one carries its own YAML frontmatter and would inject a second block mid-page):
+
+```markdown
+## AD-NN: [Decision Title]
+
+**Status:** <accepted | superseded | deprecated>
+**Date:** YYYY-MM-DD
+**Superseded by:** <AD-NN, or — >
+
+**Decision:** In one sentence, what was decided.
+
+**Context:** Why was this decision needed? What problem existed?
+
+**Alternatives:** Which options were evaluated?
+- Option A: … (Pros / Cons)
+- Option B: … (Pros / Cons)
+
+**Outcome:** What did it lead to? Which pages/areas are affected?
+- change on `[[entity-X]]`
+- new endpoint in `[[api-registry]]`
+```
+
+---
+
+## Decisions
+
+<!-- Append each new AD below, newest last, using the Entry shape above. -->

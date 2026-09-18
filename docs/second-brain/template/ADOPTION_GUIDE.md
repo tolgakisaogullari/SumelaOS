@@ -14,7 +14,7 @@ This template implements Andrej Karpathy's LLM Wiki pattern — a three-layer kn
 - **`artifacts/`** — Immutable. LLM-generated write-once documents (plans, specs).
 - **`wiki/`** — Live. Continuously updated synthesis layer maintained by the agent.
 
-The template includes 4 wiki special files (`_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`), the `_improvement-queue/` directory (one `IMP-*.md` per signal — team-safe, no merge conflicts), one starter page (`active-project-context.md`), and empty directory scaffolding for sources and artifacts.
+The template includes 4 wiki special files (`_INDEX.md`, `_LOG.md`, `_SCHEMA.md`, `_SEARCH_INDEX.md`), the `_improvement-queue/` directory (one `IMP-*.md` per signal — team-safe, no merge conflicts), two starter pages (`active-project-context.md` for current sprint state, and `architecture-decisions.md` — the standing AD record that `context-handoff` points each new session at), and empty directory scaffolding for sources and artifacts.
 
 Companion components (not included in this template but required for full functionality):
 - `AGENTS.md` — Canonical agent bootstrap file at repo root

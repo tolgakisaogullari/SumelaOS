@@ -96,8 +96,22 @@ When the user asks you to interact with the Second Brain, execute one of these s
    - **BOUNDARY with `self-improvement-curator`:** This workflow captures decisions about **the project** (which technology, which pattern, which endpoint design — things another developer without Claude would still follow). Decisions about **how the agent itself should work** (rule changes, skill updates, workflow preferences) are handled by `self-improvement-curator`'s `decision` signal → `_improvement-queue/`, NOT this workflow. Decision tree: *"If a new developer joined the team without Claude, would this decision still apply to them?"* → Yes = this workflow (wiki) / No = `self-improvement-curator` (queue). If both apply, split into two captures.
    - ASK the user: *"Would you like me to save this decision to the wiki?"* — NEVER auto-capture without approval.
    - If approved:
-     - Read `wiki/architecture-decisions.md` to find the latest AD-XX number.
-     - Append a new AD entry using the `_SCHEMA.md` decision template (Decision → Context → Alternatives → Outcome).
+     - Read `wiki/architecture-decisions.md` to find the latest AD-XX number, then repair whichever of these
+       is missing (check BOTH — an upgraded install typically has one without the other):
+       - **Page absent** → create it from `docs/second-brain/template/wiki/architecture-decisions.md.template`,
+         substituting the project name and today's date for its `{{project_name}}`/`{{date_created}}`
+         placeholders, ADD its `_INDEX.md` Decision Records link and its `_SEARCH_INDEX.md` row in the same
+         step (the installer skips the page precisely when those rows are absent, so nothing else will add
+         them and the page would land orphaned), and start numbering at AD-01.
+       - **Page present but unlinked** → add its `_INDEX.md` Decision Records link and its `_SEARCH_INDEX.md`
+         row. An install that upgraded into this page keeps its own index files, so the page lands orphaned:
+         Tier-3 keyword search cannot reach it and `context-handoff`'s standing-decisions pointer dangles.
+     - Append a new AD entry using the **Entry shape** block documented at the top of `architecture-decisions.md`
+       (`## AD-XX` heading, then `**Status:** accepted` / `**Date:**` / `**Superseded by:** —`, then
+       Decision → Context → Alternatives → Outcome). Do NOT copy `_SCHEMA.md`'s single-decision-page
+       template into it — that one carries its own `---` frontmatter and would inject a second YAML
+       block mid-page, and it has no Status field, which the supersede convention and
+       `context-handoff`'s standing-decisions filter both depend on.
      - Update `_INDEX.md` if the decision count changed significantly or a new category emerged.
      - Update `_SEARCH_INDEX.md`: update the `architecture-decisions` row's Key Terms with the new AD-XX ID.
      - Append a `decision` entry to `_LOG.md`.
@@ -142,7 +156,7 @@ Persists the session's conversational context as a structured, queryable wiki pa
 
 ### When invoked
 - **Task/branch completion** — `finishing-a-development-branch` Step 7 (so EVERY finished task leaves a record, even with no handoff).
-- **Context-pressure handoff** — `context-handoff` Protocol A/B Step 3.
+- **Context-pressure handoff** — `context-handoff` Protocol A Step 4 / Protocol B Step 6 (its `<decision_triage>` runs one step earlier, so each decision's durable home is already assigned when the summary is written).
 - **Explicit** — user asks to "save the session".
 If a summary for the same task already exists for today, UPDATE/supersede it (do not create a near-duplicate); idempotent re-ingest makes re-running safe.
 
@@ -154,7 +168,7 @@ Resolve and write into the `session-summary` frontmatter (format = `_SCHEMA.md` 
 - `session_date` ← today (ISO); `session_topics` ← 2-5 topics.
 
 ### Content (substantive — NOT lip-service)
-Fill every applicable section of the template with real detail: Topics; **Decisions Made with their rationale**; **Work Completed** (concrete changes + commit hash(es) + files); Artifacts (spec/plan links); Open Questions/Blockers; Related Wiki Pages. A pointer-only stub defeats the memory — capture enough that the work is reconstructable. Keep the `## Decisions Made` heading verbatim (parsed by `session-ingest.py`).
+Fill every applicable section of the template with real detail: Topics; **Decisions Made with their rationale**; **Work Completed** (concrete changes + commit hash(es) + files); Artifacts (spec/plan links); Open Questions/Blockers; **Notes for the Next Session** (hard-won experience — dead ends, tooling quirks, how this user works — the session-to-session experience channel, which is NOT the `/evolve` queue: a pending signal is inert until `/evolve` runs and the next session sees only its count); Related Wiki Pages. A pointer-only stub defeats the memory — capture enough that the work is reconstructable. Keep the `## Decisions Made` heading verbatim and IN ENGLISH even in a non-English project — it has two consumers: `session-ingest.py` parses it into the Qdrant `decisions` payload, and `context-handoff` `<decision_triage>` reads it to route each decision to its durable home. A translated heading yields zero decisions on both paths, silently. The prose under it follows the project's documentation language.
 
 ### Steps
 1. Read `_SCHEMA.md` Session Summary Page Template (if not already in context).

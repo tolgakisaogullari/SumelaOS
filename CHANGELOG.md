@@ -11,6 +11,85 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Changed
 
+- **A session's decisions died with the session; the handoff prompt carried none of them
+  (v0.18.0).** `context-handoff` wrote decisions into the session summary, then handed the next
+  agent a prompt whose only decision section was *Pending Decisions / Blockers* — open questions,
+  the opposite of decisions already made. The summary's path appeared under `Second Brain Status`
+  as a status line with no instruction attached, and session bootstrap reads `_INDEX.md` and
+  `active-project-context.md` but never the summary. So the rationale was written, filed, and
+  never read. Nothing accumulated either: each session's decisions sat in its own summary, and the
+  one retrieval path that could have found them (Tier-1 `chat_history`) is explicitly best-effort,
+  so a decision from session 3 silently stopped constraining session 7.
+
+  **Decisions now get a durable home at handoff, instead of a longer prompt.** A new
+  `<decision_triage>` step runs before the summary is written and routes every decision by the
+  existing boundary test — *"would a developer without an agent still follow this?"*: project-level
+  ones to `architecture-decisions.md` as an AD, agent-workflow ones to `_improvement-queue/` as a
+  `decision`/`preference` signal, tactical ones to the summary alone. The handoff prompt then
+  carries *Decisions — This Session* (each line ending in the home it was filed to) and
+  *Decisions — Standing*, which POINTS at `architecture-decisions.md` rather than copying it.
+
+  **The pointer is deliberate.** An earlier design generated the cumulative list by collecting
+  `## Decisions Made` blocks out of past summaries. Two independent reviews killed it: session
+  summaries are an append-only record with no retraction, so a derived "currently in force" list
+  renders decisions reversed three sessions ago as current, forever, and grows monotonically. Only
+  `architecture-decisions.md` carries `decision_status`/`superseded_by`. A list that lies about
+  what still holds is worse than no list.
+
+  **`context-handoff` does not write ADs itself**, though it is the moment the decisions surface.
+  `using-second-brain` operation 5 already owns that path and asks *"save this decision to the
+  wiki?"* before writing; AD numbers are allocated by reading the page's current maximum, an
+  unlocked read-modify-write, and handoff is the most worktree-exposed moment in the system. A
+  third writer would have bypassed a consent gate and raced for numbers. Triage routes to that
+  workflow; if the user declines or context is too tight, the decision is carried as an
+  *AD candidate* line for `finishing-a-development-branch` to promote at a calmer moment.
+
+  **`architecture-decisions.md` now ships with a FRESH install.** It is the surface the whole design
+  points at and `setup.sh`/`setup.ps1` never created it, so on a new project the pointer would have
+  dangled. An install that UPGRADES into this version deliberately does not get the page from
+  `update.sh`: the installer's keep-guard preserves that project's existing `_INDEX.md` /
+  `_SEARCH_INDEX.md`, so dropping the page in would land it orphaned — present but unreachable from
+  Tier-3 search. On those installs the first AD write creates the page and its index rows together
+  (`using-second-brain` operation 5, which also repairs a page that is present but unlinked), and
+  until then the handoff prompt renders "page not created yet" rather than a dangling link.
+
+  **Two adjacent bugs fixed.** The Session Summary template's `spec_artifact`/`plan_artifact`
+  pointed at `../artifacts/…`, but summaries live in `wiki/session-summaries/`, one level deeper —
+  every documented value was a broken link, now `../../artifacts/…`. And `## Decisions Made` is
+  parsed verbatim by `session-ingest.py` while nothing pinned the heading to English: a
+  Turkish-configured project writing `## Alınan Kararlar` extracted zero decisions, silently, with
+  a SUCCESS report. Both `_SCHEMA.md` and `using-second-brain` now state the rule, and
+  `tests/test_decision_heading_parity.py` fails if the template heading, the parser and the skill
+  ever drift apart.
+
+  **Experience crosses the session boundary directly, not through `/evolve`.** The session summary
+  gains a `## Notes for the Next Session` section and the prompt an *Agent Notes* block: dead ends
+  and why they failed, tooling quirks, files that look relevant but are not, how this user prefers
+  to work. An earlier draft routed the preference-shaped ones into the `_improvement-queue/` signal
+  path — that was wrong. A captured signal stays `pending` until someone runs `/evolve`, and
+  bootstrap shows the next session only the pending COUNT, never the content, so filing experience
+  as a signal takes it OUT of circulation exactly when it is needed. Notes are carried forward and
+  PRUNED at each handoff, which is what lets experience accumulate without the prompt growing
+  without bound. `finishing-a-development-branch` then rolls the notes that GENERALIZE beyond the
+  task up into `/evolve` signals in one batch at task end — the calm moment, and the right place to
+  decide what becomes permanent.
+
+  **Pre-existing bug found while testing this: re-running `setup.sh` destroyed every wiki page.**
+  The installer is a documented re-runnable flow, but its wiki-template loop rendered
+  unconditionally — a second run overwrote `active-project-context.md`, `_LOG.md`, `_INDEX.md` and
+  `_SEARCH_INDEX.md` with empty templates, silently discarding sprint state and the log ledger. The
+  loop now keeps any page that already exists; `_SCHEMA.md` stays the single exception, since it is
+  framework-derived and `update.sh` refreshes it too. This mattered here because the feature above
+  ships a page whose own rule is "never delete a decision" onto that loop.
+
+  **Also:** a `<minimum_viable_handoff>` ladder, because this skill fires when context is already
+  gone and its own mandatory steps could fail half-done — it ranks what to drop by
+  irreplaceability, and the newest, most expensive items rank lowest. The `/evolve` pending-count
+  command was duplicated verbatim three times in the skill body; it is now defined once. And
+  `tests/test_setup_without_python.sh` seeded its throwaway installs from `scripts`/`.sumela` only,
+  so a change to `docs/second-brain/template/` plus its `validate-structure.sh` requirement landed
+  half-applied and failed every seeded install — the seed list now includes the template tree.
+
 - **`secure-coding-standard` told the agent to build three bypassable controls, and its
   checklist could not be answered honestly (v0.17.0).** The skill's shape was sound — plan-time
   loading, a confirmation gate, the security-TDD exception — but the rules inside it were in

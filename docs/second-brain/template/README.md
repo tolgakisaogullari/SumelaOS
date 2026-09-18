@@ -38,7 +38,9 @@ docs/second-brain/
     ├── _improvement-queue/ <- Self-improvement queue (one IMP-*.md per signal; team-safe).
     ├── summaries/         <- One summary page per raw_sources/ file.
     ├── session-summaries/ <- Per-session work records (ingested into Qdrant chat_history).
-    └── active-project-context.md <- Current sprint snapshot (read every session).
+    ├── active-project-context.md <- Current sprint snapshot (read every session).
+    └── architecture-decisions.md <- Standing AD record; the cumulative decision surface
+                                     a handoff points the next session at.
 ```
 
 ## Companion Files (Not Included)

@@ -74,8 +74,11 @@ status: active            # optional — active | archive | deprecated
 # for the decision type:
 ---
 type: decision
-decision_id: AD-12        # required — Architecture Decision ID
-decision_status: accepted # accepted | superseded | deprecated
+decision_id: AD-12        # required for a STANDALONE one-decision page; OMITTED on the
+                          # `architecture-decisions.md` CONTAINER page, which holds many
+                          # `## AD-XX` sections whose ids/status are per-entry (see Section 8)
+decision_status: accepted # accepted | superseded | deprecated. Same exemption as decision_id:
+                          # on the container page each entry states `**Status:**` inline instead
 superseded_by: AD-15      # optional — if superseded
 ---
 
@@ -102,8 +105,8 @@ session_topics: [card-limits, refactor]  # required — 2-5 topics (also ingeste
 developer: Ada Lovelace                  # required — who DID the work (git config user.name); "unknown" if unset
 developer_email: ada@example.com          # optional — git config user.email
 domains: [Card]                           # optional — domain(s) this session's work belongs to (from .sumela/local.md)
-spec_artifact: ../artifacts/specs/2026-06-04-card-limits-design.md   # optional — spec produced/used this session
-plan_artifact: ../artifacts/plans/2026-06-04-card-limits.md          # optional — plan produced/used this session
+spec_artifact: ../../artifacts/specs/2026-06-04-card-limits-design.md   # optional — spec produced/used this session
+plan_artifact: ../../artifacts/plans/2026-06-04-card-limits.md          # optional — plan produced/used this session
 ---
 ```
 
@@ -274,6 +277,14 @@ What is this entity, what does it do?
 
 ### Decision Page Template (Architecture Decision Record)
 
+> **Two shapes exist — pick by where the decision lives.** `architecture-decisions.md` is a
+> CONTAINER page holding many decisions as `## AD-XX` sections (that is what `[[architecture-decisions#AD-05]]`
+> links into). Its frontmatter carries `type: decision` but NO `decision_id`/`decision_status`,
+> because those are per-entry: each entry states `**Status:**` and `**Superseded by:**` inline. The
+> template below is the STANDALONE form — one page, one decision — and its frontmatter must not be
+> pasted into the container page. The container's own header documents the entry shape to copy.
+
+
 ```markdown
 ---
 type: decision
@@ -364,7 +375,7 @@ Does this source contradict the existing wiki? How was it resolved?
 
 The per-session work record. Written at the end of a task (`finishing-a-development-branch`) AND on a context-pressure handoff (`context-handoff`), via the canonical procedure in `using-second-brain` `<session_summary_protocol>`. It is ingested into Qdrant `chat_history`, so its frontmatter is what makes "which developer did what last week, in which domain" queryable.
 
-**This must be substantive, not lip-service.** Record the actual decisions (with rationale), the concrete work (commits + changed files), and the spec/plan paths if the task produced them — so a future session (or teammate) can reconstruct what happened and why. A pointer-only stub defeats the memory.
+**This must be substantive, not lip-service.** Record the actual decisions (with rationale), the concrete work (commits + changed files), the spec/plan paths if the task produced them, and the experience notes a follow-on session would otherwise rediscover the hard way — so a future session (or teammate) can reconstruct what happened and why. A pointer-only stub defeats the memory.
 
 Copy this frontmatter verbatim and fill the values — do NOT keep inline `# comments` in it (omit optional lines you don't use rather than commenting them). Write `domains` in the canonical `<domain_scopes>` casing (e.g. `Card`, not `card`) so `--domain` queries match (the filter is exact):
 
@@ -376,8 +387,8 @@ session_topics: [topic-1, topic-2]
 developer: <git config user.name, or "unknown">
 developer_email: <git config user.email>
 domains: [<Domain>]
-spec_artifact: ../artifacts/specs/YYYY-MM-DD-<topic>-design.md
-plan_artifact: ../artifacts/plans/YYYY-MM-DD-<topic>.md
+spec_artifact: ../../artifacts/specs/YYYY-MM-DD-<topic>-design.md
+plan_artifact: ../../artifacts/plans/YYYY-MM-DD-<topic>.md
 tags: [session, <domain-or-topic>]
 date_created: YYYY-MM-DD
 date_updated: YYYY-MM-DD
@@ -400,17 +411,29 @@ date_updated: YYYY-MM-DD
 - Task/change 2 — ...
 
 ## Artifacts Created / Updated
-- Spec: [<spec-name>](../artifacts/specs/YYYY-MM-DD-<topic>-design.md)   <!-- omit if none -->
-- Plan: [<plan-name>](../artifacts/plans/YYYY-MM-DD-<topic>.md)          <!-- omit if none -->
+- Spec: [<spec-name>](../../artifacts/specs/YYYY-MM-DD-<topic>-design.md)   <!-- omit if none -->
+- Plan: [<plan-name>](../../artifacts/plans/YYYY-MM-DD-<topic>.md)          <!-- omit if none -->
 
 ## Open Questions / Blockers
 - Question / blocker for next session (or "none")
+
+## Notes for the Next Session
+<!-- Hard-won EXPERIENCE: what the next session would otherwise waste time rediscovering.
+     Approaches tried and rejected (and why), tooling/environment quirks, files that look
+     relevant but are not, a measurement that came back negative, how this user prefers to
+     work. This is the session-to-session experience channel and it is deliberately NOT the
+     /evolve queue: a pending signal is inert until /evolve runs, and the next session sees
+     only its count. Write it here so the next session reads it immediately. Prune what is no
+     longer true when carrying notes forward. -->
+- Note — why it matters next time
 
 ## Related Wiki Pages
 - [[architecture-decisions]] / [[active-project-context]] / domain pages touched
 ```
 
-**Required frontmatter:** the base required fields every page carries (`tags`, `date_created`, `date_updated` — see Section 3) PLUS `type`, `session_date`, `session_topics`, `developer`. `domains`/`spec_artifact`/`plan_artifact` are optional but SHOULD be filled when applicable (they power domain- and artifact-scoped recall). The `## Decisions Made` heading is parsed by `session-ingest.py` — keep it verbatim.
+**Required frontmatter:** the base required fields every page carries (`tags`, `date_created`, `date_updated` — see Section 3) PLUS `type`, `session_date`, `session_topics`, `developer`. `domains`/`spec_artifact`/`plan_artifact` are optional but SHOULD be filled when applicable (they power domain- and artifact-scoped recall). Artifact paths are relative to THIS page's directory (`wiki/session-summaries/`), so they start `../../artifacts/` — one level deeper than a page sitting directly in `wiki/`.
+
+**Structural headings stay in English, even in a non-English project.** `## Decisions Made` is parsed verbatim by `session-ingest.py` (`DECISION_HEADERS`, which also accepts `## Decisions`) and is read by `context-handoff` `<decision_triage>` when it routes each decision to its durable home. Translating the heading — `## Alınan Kararlar`, `## Entscheidungen` — extracts ZERO decisions, silently, on both paths. The prose UNDER the heading follows the project's documentation language; the heading itself is structure, like the `_LOG.md` entry-type enum. The same rule applies to every `##` heading in this template.
 
 ---
 

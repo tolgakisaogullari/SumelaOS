@@ -9,7 +9,8 @@
 <!-- Entity and concept pages added here as they are created. -->
 
 ## Decision Records
-<!-- Architecture decision records (ADR) added here as they are created. -->
+- [[architecture-decisions]] — the project's standing AD record (the cumulative decision surface).
+<!-- Individual ADs live as `## AD-XX` sections inside that page; link them as [[architecture-decisions#AD-05]]. -->
 
 ## Insights
 <!-- Query write-back analyses saved here. Format: [[insights/YYYY-MM-DD-topic]] -->

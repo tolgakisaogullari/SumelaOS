@@ -62,8 +62,12 @@ seed() {
   git -C "$REPO_ROOT" clone --quiet --no-hardlinks . "$dst" 2>/dev/null || return 1
   ( cd "$dst" && git checkout --quiet -- . ) || return 1
   # Carry uncommitted framework changes in, so the test exercises the CURRENT
-  # installer rather than the last commit's.
-  ( cd "$REPO_ROOT" && git ls-files -m -o --exclude-standard -- scripts .sumela AGENTS.md.template 2>/dev/null ) \
+  # installer rather than the last commit's. docs/second-brain/template is in the
+  # list because the installer COPIES from it: omitting it meant a new wiki template
+  # plus its validate-structure.sh requirement landed here half-applied, and every
+  # seeded install failed structure validation for a file the test itself withheld.
+  ( cd "$REPO_ROOT" && git ls-files -m -o --exclude-standard -- \
+      scripts .sumela AGENTS.md.template docs/second-brain/template 2>/dev/null ) \
     | while IFS= read -r f; do
         [ -f "$REPO_ROOT/$f" ] || continue
         mkdir -p "$dst/$(dirname "$f")"

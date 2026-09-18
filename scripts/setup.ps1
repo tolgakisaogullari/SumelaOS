@@ -183,7 +183,8 @@ if (-not $HooksOnly) {
         "docs/second-brain/template/wiki/_SEARCH_INDEX.md.template",
         "docs/second-brain/template/wiki/_improvement-queue/README.md",
         "docs/second-brain/template/wiki/_SCHEMA.md",
-        "docs/second-brain/template/wiki/active-project-context.md.template"
+        "docs/second-brain/template/wiki/active-project-context.md.template",
+        "docs/second-brain/template/wiki/architecture-decisions.md.template"
     )
 
     $MissingTemplates = @()
@@ -732,21 +733,48 @@ $WikiTemplates = @(
     @{ Src = "_SEARCH_INDEX.md.template"; Dst = "_SEARCH_INDEX.md" }
     @{ Src = "_SCHEMA.md"; Dst = "_SCHEMA.md" }
     @{ Src = "active-project-context.md.template"; Dst = "active-project-context.md" }
+    @{ Src = "architecture-decisions.md.template"; Dst = "architecture-decisions.md" }
     @{ Src = "_improvement-queue/README.md"; Dst = "_improvement-queue/README.md" }
 )
+
+# See setup.sh: decide per page by asking whether the indexes already link it — linked means
+# the page must exist (or the link dangles); unlinked means writing it would orphan it.
+$WikiPagesWritten = 0
+$WikiPagesKept = 0
+$LinkedOnCreate = @("architecture-decisions.md")
+
+function Test-WikiPageLinked([string]$PageName) {
+    $slug = [IO.Path]::GetFileNameWithoutExtension($PageName)
+    foreach ($idx in @("docs/second-brain/wiki/_INDEX.md", "docs/second-brain/wiki/_SEARCH_INDEX.md")) {
+        if ((Test-Path $idx) -and (Select-String -Path $idx -Pattern $slug -SimpleMatch -Quiet)) { return $true }
+    }
+    return $false
+}
 
 foreach ($entry in $WikiTemplates) {
     $src = "docs/second-brain/template/wiki/$($entry.Src)"
     $dst = "docs/second-brain/wiki/$($entry.Dst)"
-    if (Test-Path $src) {
+    $needsLink = $LinkedOnCreate -contains $entry.Dst
+    if (-not (Test-Path $src)) {
+        Write-Warn "Template not found: $src — skipping"
+    }
+    elseif ((-not (Test-Path $dst)) -and $needsLink -and (-not (Test-WikiPageLinked $entry.Dst))) {
+        Write-Ok "Skipped $dst (indexes do not link it — the first AD write creates page + rows together)"
+    }
+    elseif ((Test-Path $dst) -and ($entry.Dst -ne "_SCHEMA.md") -and ($entry.Dst -ne "_improvement-queue/README.md")) {
+        # See setup.sh: wiki pages accumulate (sprint state, the AD record, the _LOG
+        # ledger) and setup is re-runnable, so never overwrite an existing one.
+        # _SCHEMA.md is framework-derived and is the single exception.
+        $WikiPagesKept++
+        Write-Ok "Kept $dst (already present — not overwritten)"
+    }
+    else {
         $content = Get-Content $src -Raw
         $content = $content.Replace('{{project_name}}', [string]($ProjectName))
         $content = $content.Replace('{{date_created}}', [string]($DateCreated))
         $content | Set-Content $dst -NoNewline
+        $WikiPagesWritten++
         Write-Ok "Copied $dst"
-    }
-    else {
-        Write-Warn "Template not found: $src — skipping"
     }
 }
 
@@ -1035,7 +1063,11 @@ Write-Host "  Files generated:"
 Write-Host "    - AGENTS.md"
 Write-Host "    - .sumela/RULE_REGISTRY.md"
 Write-Host "    - .sumela/rules/ (stack-specific rules)"
-Write-Host "    - docs/second-brain/wiki/ (6 wiki pages)"
+if ($WikiPagesKept -gt 0) {
+    Write-Host "    - docs/second-brain/wiki/ ($WikiPagesWritten written, $WikiPagesKept kept)"
+} else {
+    Write-Host "    - docs/second-brain/wiki/ ($WikiPagesWritten wiki pages)"
+}
 if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
 if ($HooksWired) { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks; pre-commit validation)" }

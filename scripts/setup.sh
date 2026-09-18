@@ -117,6 +117,7 @@ if [ "$HOOKS_ONLY" != true ]; then
     "docs/second-brain/template/wiki/_improvement-queue/README.md"
     "docs/second-brain/template/wiki/_SCHEMA.md"
     "docs/second-brain/template/wiki/active-project-context.md.template"
+    "docs/second-brain/template/wiki/architecture-decisions.md.template"
   )
 
   MISSING_TEMPLATES=()
@@ -893,19 +894,57 @@ WIKI_TEMPLATES=(
   "_SEARCH_INDEX.md.template:_SEARCH_INDEX.md"
   "_SCHEMA.md:_SCHEMA.md"
   "active-project-context.md.template:active-project-context.md"
+  "architecture-decisions.md.template:architecture-decisions.md"
 )
+
+# Was this wiki already initialized before this run? Pages that must arrive TOGETHER
+# with their _INDEX/_SEARCH_INDEX rows can only be created on a fresh wiki: on an
+# existing one the keep-guard preserves the old index files, so writing the page here
+# would produce exactly the "present but unlinked" orphan that `using-second-brain`
+# operation 5 treats as a defect. On an existing wiki that operation creates the page
+# AND its rows together, which is the only way to land it linked.
+# Pages in LINKED_ON_CREATE are referenced by _INDEX.md / _SEARCH_INDEX.md, so page and rows
+# must agree. Decide per page by asking the question that actually matters — do the indexes
+# already link it? If they DO, the page must exist or the link dangles. If they do NOT (an
+# install that upgraded from before the page shipped, and whose own index files the keep-guard
+# preserves), writing it would land it orphaned — unreachable from Tier-3 search — so leave it
+# to `using-second-brain` operation 5, which creates the page AND its rows together on the first
+# AD write, and also repairs a present-but-unlinked page. Both index files are rendered earlier
+# in this same loop, so by the time we get here they are in their final state.
+WIKI_PAGES_WRITTEN=0
+WIKI_PAGES_KEPT=0
+LINKED_ON_CREATE=( "architecture-decisions.md" )
+
+wiki_page_is_linked() {  # $1 = page basename, e.g. architecture-decisions.md
+  local slug="${1%.md}"
+  grep -qs -- "$slug" docs/second-brain/wiki/_INDEX.md docs/second-brain/wiki/_SEARCH_INDEX.md
+}
 
 for entry in "${WIKI_TEMPLATES[@]}"; do
   IFS=':' read -r src_name dst_name <<< "$entry"
+  needs_link=false
+  for n in "${LINKED_ON_CREATE[@]}"; do [ "$dst_name" = "$n" ] && needs_link=true; done
   src="docs/second-brain/template/wiki/$src_name"
   dst="docs/second-brain/wiki/$dst_name"
-  if [ -f "$src" ]; then
+  if [ ! -f "$src" ]; then
+    warn "Template not found: $src — skipping"
+  elif [ ! -f "$dst" ] && [ "$needs_link" = true ] && ! wiki_page_is_linked "$dst_name"; then
+    ok "Skipped $dst (indexes do not link it — the first AD write creates page + rows together)"
+  elif [ -f "$dst" ] && [ "$dst_name" != "_SCHEMA.md" ]; then
+    # Wiki pages accumulate content the framework must never destroy: the sprint
+    # state in active-project-context, the AD record whose own rule is "never delete
+    # a decision", the _LOG ledger. setup.sh is a documented re-runnable flow, so an
+    # unconditional render silently wiped all of it on the second run. _SCHEMA.md is
+    # the one exception: it is framework-derived, so it is refreshed (update.sh
+    # refreshes it too, with consent).
+    WIKI_PAGES_KEPT=$((WIKI_PAGES_KEPT + 1))
+    ok "Kept $dst (already present — not overwritten)"
+  else
     export TMPL_PROJECT_NAME="$PROJECT_NAME"
     export TMPL_DATE_CREATED="$DATE_CREATED"
     render_template "$src" "$dst"
+    WIKI_PAGES_WRITTEN=$((WIKI_PAGES_WRITTEN + 1))
     ok "Copied $dst"
-  else
-    warn "Template not found: $src — skipping"
   fi
 done
 
@@ -915,6 +954,9 @@ IQ_DST="docs/second-brain/wiki/_improvement-queue/README.md"
 if [ -f "$IQ_SRC" ]; then
   export TMPL_PROJECT_NAME="$PROJECT_NAME"
   render_template "$IQ_SRC" "$IQ_DST"
+  # Counted here because setup.ps1 renders this one inside its wiki loop; without this
+  # the two installers would report different page counts for the same install.
+  WIKI_PAGES_WRITTEN=$((WIKI_PAGES_WRITTEN + 1))
   ok "Copied $IQ_DST"
 else
   warn "Template not found: $IQ_SRC — skipping"
@@ -1227,7 +1269,11 @@ echo "  Files generated:"
 echo "    - AGENTS.md"
 echo "    - .sumela/RULE_REGISTRY.md"
 echo "    - .sumela/rules/ (stack-specific rules)"
-echo "    - docs/second-brain/wiki/ (6 wiki pages)"
+if [ "$WIKI_PAGES_KEPT" -gt 0 ]; then
+  echo "    - docs/second-brain/wiki/ ($WIKI_PAGES_WRITTEN written, $WIKI_PAGES_KEPT kept)"
+else
+  echo "    - docs/second-brain/wiki/ ($WIKI_PAGES_WRITTEN wiki pages)"
+fi
 [ ${#IDES[@]} -gt 0 ] && echo "    - IDE pointer files"
 [ ${#PLUGINS[@]} -gt 0 ] && echo "    - SKILL_REGISTRY.md (plugins appended)"
 [ "$HOOKS_WIRED" = true ] && echo "    - git hooks wired (core.hooksPath = .sumela/git-hooks; pre-commit validation)"

@@ -400,11 +400,11 @@ Based on detected stack:
 
 ### Step 3.4: Generate Wiki Pages
 
-From templates:
-- `active-project-context.md` → fill with current project state from git log, README, detected structure
-- `_INDEX.md` → standard sections with project name
-- `_LOG.md`, `_SEARCH_INDEX.md` → standard templates
-- `_improvement-queue/` → create the directory and copy its `README.md` anchor (the queue is a directory, one `IMP-*.md` per signal — no monolithic file)
+From templates (same set as `setup.sh` `WIKI_TEMPLATES`):
+- `active-project-context.md` → fill from git log, README, detected structure
+- `_INDEX.md`, `_LOG.md`, `_SEARCH_INDEX.md` → standard templates
+- `architecture-decisions.md` → REQUIRED; both index templates row it, so omitting it dangles
+- `_improvement-queue/` → the dir + its `README.md` anchor (one file per signal)
 
 ### Step 3.5: Generate IDE Pointers
 

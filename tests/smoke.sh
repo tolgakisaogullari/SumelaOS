@@ -60,6 +60,7 @@ stage_copy() {
       --exclude='./.sumela/rules/backend_standards.md' \
       --exclude='./.sumela/rules/frontend_standards.md' \
       --exclude='./.sumela/rules/mobile_standards.md' \
+      --exclude='./docs/second-brain/wiki' \
       -cf - . ) | ( cd "$1" && tar -xf - )
   ( cd "$1" && git init -q && git add -A && git -c user.email=smoke@test -c user.name=smoke commit -qm init ) || true
 }
@@ -117,6 +118,14 @@ if command -v python3 >/dev/null 2>&1; then
     ok "get_repo_root resolves repo root across layouts"
   else
     bad "get_repo_root unit test failed"; sed 's/^/    /' "$WORK/get_repo_root.log" | tail -15
+  fi
+  # Regression guard: the '## Decisions Made' heading is parsed by session-ingest.py and
+  # read by context-handoff's decision triage. If the _SCHEMA template's heading drifts from
+  # what the parser accepts, every summary extracts ZERO decisions, silently.
+  if python3 "$REPO_ROOT/tests/test_decision_heading_parity.py" >"$WORK/decision_parity.log" 2>&1; then
+    ok "decision-heading parity (schema <-> parser <-> context-handoff)"
+  else
+    bad "decision-heading parity test failed"; sed 's/^/    /' "$WORK/decision_parity.log" | tail -15
   fi
   # Extra-ingest-dirs config resolution + path validation (env/conf precedence,
   # reject absolute/escape/glob/symlink, skip-missing, dedupe).
@@ -201,8 +210,39 @@ fi
 
 echo ""
 echo "Run 2 — idempotency (re-run must not duplicate)"
+# Wiki pages ACCUMULATE (sprint state, the AD record whose own rule is "never delete a
+# decision", the _LOG ledger) and setup.sh is a documented re-runnable flow. It used to
+# render them unconditionally, so a second run silently wiped everything written since
+# the first. Plant a sentinel in each accumulating page BEFORE the re-run; exit code and
+# registry counts cannot catch this, which is why the bug survived until v0.18.0.
+for f in active-project-context architecture-decisions _LOG _INDEX _SEARCH_INDEX; do
+  if [ -f "$WORK/docs/second-brain/wiki/$f.md" ]; then
+    echo "SMOKE-SENTINEL-$f" >> "$WORK/docs/second-brain/wiki/$f.md"
+  else
+    bad "Run 1 never created wiki/$f.md (cannot test preservation)"
+  fi
+done
+# _SCHEMA.md is the deliberate exception — it MUST be overwritten from the template.
+# Sentinel it the other way round: this line has to be GONE after the re-run.
+if [ -f "$WORK/docs/second-brain/wiki/_SCHEMA.md" ]; then
+  echo "SMOKE-SENTINEL-schema-must-not-survive" >> "$WORK/docs/second-brain/wiki/_SCHEMA.md"
+else
+  bad "Run 1 never created wiki/_SCHEMA.md (cannot test the refresh exception)"
+fi
 if run_setup; then ok "second setup.sh run exited 0"; else bad "second setup.sh run exited non-zero"; sed 's/^/    /' "$WORK/setup.log" | tail -25; fi
 assert_count "<name>qdrant-session-memory</name>" ".sumela/SKILL_REGISTRY.md" 1 "plugin still registered exactly once after re-run"
+for f in active-project-context architecture-decisions _LOG _INDEX _SEARCH_INDEX; do
+  if grep -q "SMOKE-SENTINEL-$f" "$WORK/docs/second-brain/wiki/$f.md" 2>/dev/null; then
+    ok "re-run preserved wiki/$f.md"
+  else
+    bad "re-run DESTROYED user content in wiki/$f.md"
+  fi
+done
+if grep -q "SMOKE-SENTINEL-schema-must-not-survive" "$WORK/docs/second-brain/wiki/_SCHEMA.md" 2>/dev/null; then
+  bad "_SCHEMA.md was NOT refreshed on re-run (it is framework-derived, not user content)"
+else
+  ok "re-run still refreshes the derived _SCHEMA.md"
+fi
 
 echo ""
 echo "Run 3 — team mode + domains (domain-scope generation + parity)"

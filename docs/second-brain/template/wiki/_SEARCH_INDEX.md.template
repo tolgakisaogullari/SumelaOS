@@ -21,3 +21,4 @@
 | Page | Type | Tags | Key Terms | Summary |
 |---|---|---|---|---|
 | [[active-project-context]] | core | active-context, sprint | current-state, next-steps | Active sprint snapshot |
+| [[architecture-decisions]] | decision | architecture, decisions | architecture-decision, ADR, superseded, standing-decision | Standing architecture decision record |

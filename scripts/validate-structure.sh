@@ -189,6 +189,7 @@ EXPECTED_WIKI_TEMPLATES=(
   "_SEARCH_INDEX.md.template"
   "_SCHEMA.md"
   "active-project-context.md.template"
+  "architecture-decisions.md.template"
   "_improvement-queue/README.md"
 )
 
