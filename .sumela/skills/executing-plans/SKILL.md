@@ -13,6 +13,13 @@ Execute these steps strictly in order. This is the inline/fallback execution pat
 2. PLAN REVIEW & CONTEXT LOADING:
    - Read the implementation plan (`docs/second-brain/artifacts/plans/...`).
    - Review the plan critically before executing. Identify unclear instructions, missing files, unsafe assumptions, impossible verification steps, scope gaps, or conflicts with Second Brain state.
+   - **Read `## Task Ground Rules` if the plan has one, BEFORE writing any code.** These are the
+     constraints agreed for this task across earlier sessions — scope exclusions, off-limits areas,
+     work deferred to another team — and a resumed session has no other way to know them. Treat each
+     as binding for the whole task: if a plan step appears to require breaking one, that is a
+     conflict to raise with the user, NOT a rule to quietly set aside. A handoff prompt's
+     `### Task Ground Rules` section carries the same list; when both exist they must agree, and if
+     they do not, ask rather than picking one.
    - Note the **TDD Mode** (Enabled or Skipped) from the header.
    - Note the **Security Constraints**. Read `.sumela/skills/secure-coding-standard/SKILL.md` if not already in context — it applies to ALL implementation code, not only plans with an explicit security surface.
    - **PHASE RULE SYNC:** This skill activates the `implementation` phase. Per `.sumela/RULE_REGISTRY.md` `<phase_to_rule_matrix>`, confirm every universal rule, every implementation-phase rule, and every rule matching the active stack scope(s) and domain(s) is loaded — READ any missing rule file now. If the registry file is missing, tell the user to run setup — do not guess the matrix.

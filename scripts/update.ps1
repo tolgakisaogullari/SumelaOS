@@ -136,7 +136,11 @@ try {
         # NOT covered by $coreDirs: that entry is .sumela/rules/templates/, one
         # level BELOW this file. init-sumela copies it to a LIVE rule, so an edit
         # here only reaches an existing install if it is named explicitly.
-        ".sumela/rules/operational_excellence_maintenance.md.template"
+        ".sumela/rules/operational_excellence_maintenance.md.template",
+        # Same trap one directory up: .sumela/ itself is not a $coreDirs entry, so anything
+        # at its ROOT reached fresh installs only. The RENDERED RULE_REGISTRY.md stays
+        # OVERLAY and is still never overwritten; only this template is upstream-managed.
+        ".sumela/RULE_REGISTRY.md.template"
     )
     $coreDirs = @(".sumela/skills", ".sumela/git-hooks", ".sumela/memory-plugins", ".sumela/rules/templates", "docs/second-brain/template", "scripts")
     $selfDefer = @("scripts/update.sh", "scripts/update.ps1")
@@ -195,12 +199,115 @@ try {
     Write-Host "  New core files:      $($newList.Count)"
     Write-Host "  Changed core files:  $($changedList.Count)"
     if ($schemaChanged) { Write-Host "  Derived (live _SCHEMA): 1 (from refreshed template)" }
-    if ($deferredList.Count -gt 0) { Write-Host "  Updater self-changed: $($deferredList.Count) (re-run after this; not auto-applied)" }
+    if ($deferredList.Count -gt 0) { Write-Host "  Updater self-changed: $($deferredList.Count) (installed during this run; re-run with -Force to finish)" }
     Write-Host "  Overlay (AGENTS.md, registries, stack rules, wiki, governance/CI): left untouched"
+
+    # See update.sh: an updater only knows the CORE list IT shipped with, so when
+    # scripts/update.* change upstream this run may have skipped files that became CORE
+    # after this copy was written. Install the new updater rather than asking for a manual copy.
+    # Mirrors update.sh: the self-modification guard reads this to tell a vendored upgrade
+    # from a hand-edited file. Without it every Windows upgrade is classified as authored.
+    function Write-Provenance([string[]]$Paths, [string]$Version = $null, [bool]$PendingRerun = $false) {
+        if (-not $Version) { $Version = $srcVer }
+        if ($DryRun) { return }
+        $rec = Join-Path $root ".sumela/.last-update.json"
+        $all = @($Paths | Where-Object { $_ })
+        if (Test-Path $rec) {
+            try {
+                # See update.sh: only a record left by the FIRST pass of a two-pass upgrade is
+                # merged, and it says so itself via pending_rerun. Carrying every past record
+                # forward would make a file vendored once satisfy the self-modification guard
+                # forever, so a later hand-edit would be announced as a verified upgrade.
+                $prev = Get-Content $rec -Raw | ConvertFrom-Json
+                if ($prev.pending_rerun -eq $true) { $all += @($prev.files) }
+            } catch { }
+        }
+        $all = @($all | Sort-Object -Unique)
+        # Emit the JSON by hand. ConvertTo-Json UNWRAPS a single-element array, so a one-file
+        # release would write  "files": "path"  where update.sh always writes a list — and the
+        # guard that reads this expects a list on both platforms.
+        $esc = { param($x) $x -replace '\\', '\\\\' -replace '"', '\"' }
+        $items = ($all | ForEach-Object { '    "' + (& $esc $_) + '"' }) -join ",`n"
+        $pending = if ($PendingRerun) { "true" } else { "false" }
+        $json  = "{`n  `"version`": `"$Version`",`n" +
+                 "  `"updated_at`": `"$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))`",`n" +
+                 "  `"pending_rerun`": $pending,`n" +
+                 "  `"files`": [`n$items`n  ]`n}`n"
+        try { Set-Content -Path $rec -Value $json -Encoding UTF8 -NoNewline } catch { }
+    }
+
+    function Install-Self {
+        if ($deferredList.Count -eq 0 -or $DryRun) { return @() }
+        # See update.sh: "[s]kip all" is a statement about vendored overwrites in general,
+        # so silently replacing a fork's patched updater would contradict it.
+        if ($script:applyMode -eq 's') { return @() }
+        # ...and so is reviewing each file and declining all of them.
+        if ($changedList.Count -gt 0 -and $script:appliedChanged.Count -eq 0) { return @() }
+        $done = @()
+        foreach ($selfFile in $selfDefer) {
+            $selfSrc = Join-Path $src $selfFile
+            if (-not (Test-Path $selfSrc)) { continue }
+            $dest = Join-Path $root $selfFile
+            # Only the ones that actually differ — otherwise an unchanged twin gets a .bak
+            # and is recorded as vendored when nothing about it changed.
+            if ((Test-Path $dest) -and (Same-File $selfSrc $dest)) { continue }
+            $tmp  = "$dest.sumela-new"
+            try {
+                # Keep the outgoing copy: this is the one file the user cannot diff during the run.
+                if (Test-Path $dest) { Copy-Item -Path $dest -Destination "$dest.bak" -Force -ErrorAction SilentlyContinue }
+                # Stage then rename: never rewrite a script that may be executing, and only
+                # report success when the file actually landed.
+                Copy-Item -Path $selfSrc -Destination $tmp -Force -ErrorAction Stop
+                Move-Item -Path $tmp -Destination $dest -Force -ErrorAction Stop
+                $done += $selfFile
+            } catch {
+                Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+                Write-Warn "Could not install $selfFile - re-run the updater after fixing: $($_.Exception.Message)"
+            }
+        }
+        return $done
+    }
 
     if (($newList.Count -eq 0) -and ($changedList.Count -eq 0) -and (-not $schemaChanged)) {
         Write-Ok "No core file changes to apply."
-        if (-not $DryRun) { Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer }
+        if ($deferredList.Count -gt 0) {
+            # Updater-only release. Exiting here with a "copy it yourself" note stranded the old
+            # updater permanently. Install it — and deliberately do NOT stamp VERSION: "no core
+            # changes" was computed from the OLD updater's CORE list, which is exactly what we
+            # just replaced, so declaring the install current could lose a newly-CORE file.
+            $installed = Install-Self
+            if ($installed.Count -gt 0) {
+                Write-Ok "Updater refreshed: $($installed -join ' ')"
+                Write-Warn "Version NOT stamped: the new updater must re-check the file set it knows about."
+                Write-Warn "  RE-RUN NOW to finish:  pwsh scripts/update.ps1"
+                if (-not $DryRun) {
+                    Remove-Item -Path (Join-Path $root ".sumela/.update-check") -Force -ErrorAction SilentlyContinue
+                    Write-Provenance $installed -Version $localVer -PendingRerun $true
+                }
+                exit 0
+            }
+            elseif (-not $DryRun) {
+                # The copy failed. Stamping VERSION below would declare the install current and
+                # strand the old updater permanently, silently. See update.sh.
+                Write-Warn "Could not install the new updater. Version NOT stamped — fix the cause and re-run."
+                exit 1
+            }
+        }
+        if (-not $DryRun) {
+            # Re-stamp a record an earlier updater-only pass left at the OLD version:
+            # advancing VERSION without it breaks record.version == VERSION.
+            $carry = @()
+            $recPath = Join-Path $root ".sumela/.last-update.json"
+            if (Test-Path $recPath) {
+                try {
+                    $prevRec = Get-Content $recPath -Raw | ConvertFrom-Json
+                    if ($prevRec.pending_rerun -eq $true) { $carry = @($prevRec.files) }
+                } catch { }
+            }
+            Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer
+            if ($carry.Count -gt 0) { Write-Provenance $carry -Version $srcVer }
+            Remove-Item -Path (Join-Path $root ".sumela/.update-check") -Force -ErrorAction SilentlyContinue
+        }
         exit 0
     }
     if ($DryRun) {
@@ -220,6 +327,10 @@ try {
     foreach ($f in $newList) { Apply-File $f; Write-Ok "added  $f" }
 
     $nSkipped = 0
+    # Only APPLIED files go into the provenance record: one that vouches for a file the user
+    # declined would let a later hand-edit of it pass the self-modification guard as vendored.
+    $script:appliedChanged = @()
+    $script:applyMode = 'a'
     if ($changedList.Count -gt 0) {
         $mode = "a"
         if (-not $Yes) {
@@ -228,6 +339,7 @@ try {
             $ans = Read-Host
             if ($ans) { $mode = $ans }
         }
+        if ($mode -match '^[sS]') { $script:applyMode = 's' }
         foreach ($f in $changedList) {
             switch -Regex ($mode) {
                 '^[sS]' { Write-Host "  skip   $f"; $nSkipped++ }
@@ -235,9 +347,9 @@ try {
                     Write-Host ""; Write-Host "--- $f ---" -ForegroundColor White
                     & git --no-pager diff --no-index (Join-Path $root $f) (Join-Path $src $f) 2>$null
                     $yn = Read-Host "Update this file? [y/N]"
-                    if ($yn -match '^[yY]') { Apply-File $f; Write-Ok "updated $f" } else { Write-Host "  skip   $f"; $nSkipped++ }
+                    if ($yn -match '^[yY]') { Apply-File $f; $script:appliedChanged += $f; Write-Ok "updated $f" } else { Write-Host "  skip   $f"; $nSkipped++ }
                 }
-                default { Apply-File $f; Write-Ok "updated $f" }
+                default { Apply-File $f; $script:appliedChanged += $f; Write-Ok "updated $f" }
             }
         }
     }
@@ -257,6 +369,20 @@ try {
             Write-Ok "updated $schemaLive (from template)"
         } else { Write-Host "  skip   $schemaLive"; $nSkipped++ }
     }
+
+    # Install the new updater BEFORE the record is written: those paths are vendored content
+    # too, and the self-modification guard treats anything absent from the record as authored.
+    $selfInstalled = Install-Self
+    # See update.sh: a failed self-install must not be locked in behind the version gate, and
+    # the record must carry the version that actually ends up in .sumela/VERSION.
+    $declinedSelf = ($script:applyMode -eq 's') -or
+                    ($changedList.Count -gt 0 -and $script:appliedChanged.Count -eq 0)
+    $selfFailed = ($deferredList.Count -gt 0) -and ($selfInstalled.Count -eq 0) -and (-not $declinedSelf)
+    $recordVer = if ($selfFailed) { $localVer } else { $srcVer }
+    $vendored = @($newList) + @($script:appliedChanged)
+    if ($doSchema) { $vendored += $schemaLive }
+    if ($selfInstalled.Count -gt 0) { $vendored += $selfInstalled }
+    Write-Provenance $vendored -Version $recordVer
 
     # Skill registry: auto-register newly-added on-disk skills (with consent);
     # orphans reported, not deleted. Rules are NOT auto-reconciled.
@@ -290,7 +416,14 @@ try {
         }
     }
 
-    Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer
+    if ($selfFailed) {
+        Write-Warn "The new updater could not be installed; VERSION left at $localVer so a re-run retries."
+    } else {
+        Set-Content -Path (Join-Path $root ".sumela/VERSION") -Value $srcVer
+    }
+    # See update.sh: the update-check cache still holds the PRE-upgrade version, so the next
+    # pull would announce an upgrade that already happened. Delete it; _lib.sh re-probes.
+    Remove-Item -Path (Join-Path $root ".sumela/.update-check") -Force -ErrorAction SilentlyContinue
 
     Write-Host ""
     $validator = Join-Path $root "scripts/validate-structure.sh"
@@ -310,7 +443,26 @@ try {
         Write-Warn "Business-domain support arrived in this core, but your RULE_REGISTRY.md has no <domain_scopes> section yet."
         Write-Warn "  To enable domains: add the <domain_scopes> block (see RULE_REGISTRY.md.template) — fastest via /onboardSumela or /evolve. Until then domains are simply inactive (no breakage)."
     }
-    if ($deferredList.Count -gt 0) { Write-Warn "The updater itself changed upstream — re-run scripts/update.ps1 to pick up the new version." }
+    if ($deferredList.Count -gt 0) {
+        # See update.sh: an updater only knows the CORE list IT shipped with, so this run may
+        # have skipped files that became CORE after this copy was written. Install the new
+        # updater and make the re-run instruction impossible to miss.
+        if ($selfInstalled.Count -eq 0 -and ($script:applyMode -eq 's' -or
+            ($changedList.Count -gt 0 -and $script:appliedChanged.Count -eq 0))) {
+            Write-Warn "The updater also changed upstream; left in place because you declined the changes."
+            Write-Warn "  Apply it when you want to:  pwsh scripts/update.ps1 -Force"
+        } elseif ($selfInstalled.Count -eq 0) {
+            Write-Warn "The updater changed upstream but could NOT be installed — replace"
+            Write-Warn "  scripts/update.ps1 by hand, then re-run:  pwsh scripts/update.ps1 -Force"
+        } else {
+        Write-Warn "The updater itself changed upstream. The NEW scripts/update.ps1 has been installed."
+        Write-Warn "  This run was executed by the OLD one, which cannot know about files that became"
+        Write-Warn "  CORE in a release between your previous version and $srcVer."
+        Write-Warn "  RE-RUN NOW to finish the upgrade:  pwsh scripts/update.ps1 -Force"
+        Write-Warn "  (-Force is required: this run already stamped VERSION, so a plain re-run"
+        Write-Warn "   would stop at the version gate without applying anything.)"
+        }
+    }
     Write-Host "Review changes with 'git diff' before committing."
 }
 finally {

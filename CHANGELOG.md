@@ -11,6 +11,123 @@ check can detect a newer upstream via `git ls-remote --tags`.
 
 ### Changed
 
+- **Most decisions are scoped to the TASK, and v0.18.0 had nowhere to put them (v0.19.0).** The
+  triage introduced in v0.18.0 had three buckets: project-level (permanent, becomes an AD),
+  agent-workflow (goes to `/evolve`), and "tactical" — which meant the session summary and nothing
+  else, so it died with the session. That last bucket was doing far too much work. The decisions a
+  task actually accumulates are things like *"we are not touching the corporate side in this
+  task"*, *"we never edit another domain's code — we open a ticket for that team"*, *"skip the
+  migration, it goes in the follow-up"*. None of those is a project truth an AD should record, and
+  all of them must hold for every session of the task. v0.18.0 dropped them, which is the exact
+  failure the release was written to fix.
+
+  There is now a fourth bucket, presented as the common case rather than an edge one:
+  **`## Task Ground Rules`**. They are written to the plan artifact when the task has one, to every
+  session summary, and into each handoff prompt directly after the Continue Point — carried forward
+  and PRUNED each handoff, with a retired rule struck through and dated rather than deleted
+  silently. They retire with the task; one that turns out to hold beyond it was never task-scoped
+  and goes through operation 5's normal ask instead.
+
+  **They are enforced, not merely recorded.** `writing-plans` captures them at the moment they are
+  agreed — during scoping, which is where they actually come from and where they were previously
+  lost. `executing-plans` reads them before writing any code and treats a plan step that appears to
+  require breaking one as a conflict to raise, not a rule to set aside. `<minimum_viable_handoff>`
+  puts them in the NEVER-DROP tier beside the checkpoint: dropping a constraint leaves no visible
+  gap, it produces an agent confidently doing work it was told not to do.
+
+  This also settles a standing contradiction. `using-second-brain` declares `artifacts/` write-once
+  while `context-handoff` has always appended `[CHECKPOINT]` blocks to plan files. The rule now says
+  what it means: the plan BODY — intent, steps, acceptance criteria — is immutable, and there are
+  exactly two designated append blocks. Rewriting a step to encode a ground rule is still a
+  violation.
+
+- **Eleven defects found when a real project upgraded into v0.18.0 (v0.19.0).** A consumer
+  install ran a review panel over the vendored diff the day v0.18.0 shipped. The upgrade itself
+  was clean; what it surfaced were defects inside the release, and two older ones the round
+  exposed. All eleven were reproduced against this repo before being fixed.
+
+  **A refusal could become a write one session later.** `<decision_triage>` recorded both "the
+  user declined the AD capture" and "context was too tight to ask" as the same `AD candidate`
+  line, and `finishing-a-development-branch` — a mandatory, non-interactive step — promoted those
+  lines unconditionally. So a decision the user had explicitly refused got written at branch
+  finish with no second ask, narrowing *"NEVER auto-capture without approval"* into "never without
+  approval **this session**". The two outcomes are now distinct markers: `AD candidate (deferred)`
+  is promotable, `AD declined (<date>)` never is, and only a fresh operation 5 ask can record it.
+
+  **The headline feature silently no-opped on the installs that needed it most.** The AD repair
+  ladder handled "page absent" and "page present but unlinked" — but not "page present, linked,
+  and written before v0.18". On that page there is no `## Decisions` section and no per-entry
+  `**Status:**`, so the count found nothing, the `Status is accepted` filter matched nothing, and
+  the next session was told the decision record was empty while dozens of real ADs sat on disk.
+  The consumer's page had 45 of them. There is now a third branch: a one-time migration that wraps
+  the existing entries in the `## Conventions` + Entry-shape + `## Decisions` scaffold, keeping
+  every entry BYTE-IDENTICAL, and drops the page-level `decision_id`/`decision_status` this
+  release exempted. The standing-decisions filter is now allow-by-default — it excludes
+  `superseded`/`deprecated` rather than requiring `accepted` — so a legacy page reads correctly
+  even before it is migrated.
+
+  **Session summaries invited free-form capture into a tracked, vector-indexed store with no
+  exclusion clause.** `ingest-code-to-qdrant.py` has had `SECRET_PATTERNS` all along, but that is
+  a FILENAME skip-list and cannot help prose that quotes a DSN inline. The summary path had no
+  guard at all — and v0.18.0 is the release that widened what goes down it, explicitly asking for
+  "commands that do not work in this repo".
+
+  Unambiguous shapes are now masked before anything is derived from the text: DSN passwords,
+  JWTs, AWS key ids and PEM blocks, on all three ingest paths (session, wiki and code). "Before
+  anything derived" matters — an earlier ordering redacted only the chunks, leaving a secret
+  quoted inside a `## Decisions Made` bullet in the Qdrant payload verbatim.
+
+  Each of those four is bounded by its own grammar rather than by guessing. The DSN match ends
+  where a URI authority ends, at the last `@` before `/`, `?`, `#` or whitespace, so a password
+  containing `@` or `=` is masked in full while the match cannot run past the authority into the
+  sentence. A PEM block must be PEM LINES — a known header, a base64 line, or a blank one, each
+  possibly indented or blockquoted, which is how a key actually lands in a markdown summary.
+  Loosening that body to free text (to catch encrypted keys) made prose between two separately
+  MENTIONED markers match, silently deleting it; both properties are now pinned by tests.
+
+  The `key: value` shape is deliberately NOT masked. Several rounds of tightening a matcher for it
+  all kept catching ordinary sentences — "Token: rotated manually every Monday",
+  "private_key: ~/.ssh/id_ed25519", "client_secret: rotated-2024-01-15" — and a false positive is
+  worse than a miss here: redaction is destructive, and the chunk is the only thing the next
+  session can query. That class is REPORTED instead, and reported by NAME and line number only,
+  never by value: the git hooks tee this output into `.sumela/.memory-sync.log`, so echoing the
+  matched line would copy the suspected secret into a second plaintext file — the guard becoming a
+  leak of its own. It recognises the markdown spellings a summary actually uses
+  (`- **Token:** …`, `` - `API_KEY`: … ``, `- API key: …`) as well as `NAME=value`.
+
+  Both runs say plainly that the markdown on disk still holds the raw values and is git-tracked.
+  Both instruction blocks gained the missing clause: reference a secret by name and location, never
+  by value.
+
+  **`<minimum_viable_handoff>` contradicted the labels it was supposed to qualify.** Four steps
+  were still marked bare `(MANDATORY)` and two places still said `ALWAYS`, with no cross-reference
+  to the ladder — an agent under context pressure could read either and both were authoritative.
+  They now read `MANDATORY — degradable ONLY per <minimum_viable_handoff>`, and a degradation must
+  be declared. Ladder item 5 also claimed a later lint recovers dropped index rows; it does not —
+  operation 3's parity check compares the two indexes against each other, so dropping BOTH leaves
+  them agreeing and nothing is flagged, and it never auto-runs or auto-fixes.
+
+  **`## Key decisions` extracted nothing and still reported SUCCESS.** `DECISION_HEADERS` needs a
+  full-line match, so any trailing word kills it. Across one 141-summary corpus, 42 summaries with
+  a genuine decision section were invisible — 26 of them through English variants the v0.18.0
+  English-heading pin does not address. Loosening the regex would undercut that pin and its parity
+  test, so instead the silence is now audible: ingest WARNS when a `##` heading contains "decision"
+  but did not match, at the moment the author can still fix it.
+
+  **Three updater defects, all pre-existing, all silent.** `update.sh` never refreshed
+  `.sumela/.update-check`, so a just-upgraded install kept being told it was behind. Files at the
+  `.sumela/` ROOT are in neither `CORE_FILES` nor `CORE_DIRS` (that entry is `.sumela/rules/templates`,
+  one level down), so `RULE_REGISTRY.md.template` froze in every upgrading install from v0.8.0 —
+  meaning the anti-fork guidance added in v0.9.0, the rule the whole CORE/OVERLAY split exists to
+  teach, reached no upgrade at all. And the updater deferred its own replacement with only a
+  warning, so round N's updater ran the whole upgrade and skipped anything that became CORE in
+  between; it now installs the new updater and says, unmissably, to re-run. `.last-update.json`
+  also omitted the derived `_SCHEMA.md` it had just written, which made the self-modification guard
+  classify that file as authored after an upgrade.
+
+  `tests/test_session_ingest_guards.py` covers redaction, the near-miss headings and the
+  root-level CORE entry; both new guards were mutation-tested.
+
 - **A session's decisions died with the session; the handoff prompt carried none of them
   (v0.18.0).** `context-handoff` wrote decisions into the session summary, then handed the next
   agent a prompt whose only decision section was *Pending Decisions / Blockers* — open questions,

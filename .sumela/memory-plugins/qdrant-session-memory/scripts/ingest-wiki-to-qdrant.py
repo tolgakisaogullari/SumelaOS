@@ -56,6 +56,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.memory_ingest import (
     get_repo_root, get_extra_ingest_dirs, chunk_text, get_embedding,
+    # This walk includes wiki/session-summaries/, the same prose session-ingest.py redacts.
+    # Redacting on only one of the two paths meant a secret masked in `chat_history` was
+    # still embedded verbatim into `wiki_pages` on the next sync — and the summary path's
+    # report told the user the index was clean.
+    redact_secrets, flag_possible_secrets,
     deterministic_id, print_report, resolve_collection_arg, project_slug,
     qdrant_client_preflight, EMBED_MAX_WORKERS, ollama_preflight,
 )
@@ -65,7 +70,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def report_success(pages_ingested: int, chunk_count: int, qdrant_ok: bool,
-                   pages_skipped: int = 0, upsert_failed: int = 0, delete_failed: int = 0):
+                   pages_skipped: int = 0, upsert_failed: int = 0, delete_failed: int = 0, redacted_pages=None,
+                   possible_pages=None):
     clean = qdrant_ok and not pages_skipped and not upsert_failed and not delete_failed
     lines = [
         f"Status: {'SUCCESS' if clean else 'PARTIAL'}",
@@ -82,6 +88,24 @@ def report_success(pages_ingested: int, chunk_count: int, qdrant_ok: bool,
         lines.append(f"Pages left STALE (delete failed, upsert skipped): {delete_failed}")
     if pages_skipped or upsert_failed or delete_failed:
         lines.append("Action: re-run this ingest; these pages are NOT up to date in the index.")
+    if redacted_pages:
+        total = sum(n for _, n in redacted_pages)
+        lines.append(f"SECRETS REDACTED BEFORE INDEXING: {total} value(s) across {len(redacted_pages)} page(s)")
+        for page, n in redacted_pages[:5]:
+            lines.append(f"  {page} ({n})")
+        if len(redacted_pages) > 5:
+            lines.append(f"  ... and {len(redacted_pages) - 5} more")
+        lines.append("  The index is masked; the MARKDOWN on disk still holds the raw values and")
+        lines.append("  is git-tracked. Scrub those pages — that copy is what gets committed.")
+    if possible_pages:
+        total = sum(n for _, n in possible_pages)
+        lines.append(f"POSSIBLE CREDENTIALS — NOT modified: {total} line(s) across {len(possible_pages)} page(s)")
+        for page, n in possible_pages[:5]:
+            lines.append(f"  {page} ({n})")
+        if len(possible_pages) > 5:
+            lines.append(f"  ... and {len(possible_pages) - 5} more")
+        lines.append("  A 'key: value' shape is not separable from prose, so these are reported")
+        lines.append("  rather than rewritten. Review them before committing.")
     print_report("WIKI INGEST REPORT", lines)
 
 
@@ -241,6 +265,8 @@ def main():
 
     # Collect all chunks first for parallel embedding
     all_jobs = []  # (page_path, page_title, fm, chunk_index, chunk_text, total_chunks)
+    redacted_pages = []  # (page_path, n) — reported below; never silently swallowed
+    possible_pages = []  # (page_path, n) — credential-shaped assignments; reported, NOT rewritten
     for md_path, page_path in doc_files:
         page_title = md_path.stem
 
@@ -248,6 +274,13 @@ def main():
             content = f.read()
 
         fm, body = extract_frontmatter(content)
+        # Flag BEFORE redacting: a collapsed PEM block would otherwise shift what is counted.
+        page_possible = flag_possible_secrets(body)
+        body, page_redacted = redact_secrets(body)
+        if page_redacted:
+            redacted_pages.append((page_path, len(page_redacted)))
+        if page_possible:
+            possible_pages.append((page_path, len(page_possible)))
         chunks = chunk_text(body)
         if not chunks:
             continue
@@ -377,7 +410,8 @@ def main():
     # ensure_collection) and leaves pages stale — that is 2, not "could not run".
     ran = qdrant_ok or bool(upsert_failed) or bool(delete_failed)
     report_success(pages_ingested, total_chunks, qdrant_ok, len(failed_pages),
-                   len(upsert_failed), len(delete_failed))
+                   len(upsert_failed), len(delete_failed), redacted_pages=redacted_pages,
+                   possible_pages=possible_pages)
     # 0 = fully refreshed · 2 = ran, some pages stale · 1 = could not run.
     # See the code-ingest twin for why 2 is separate from 1.
     if failed_pages or upsert_failed or delete_failed:

@@ -78,7 +78,11 @@ decision_id: AD-12        # required for a STANDALONE one-decision page; OMITTED
                           # `architecture-decisions.md` CONTAINER page, which holds many
                           # `## AD-XX` sections whose ids/status are per-entry (see Section 8)
 decision_status: accepted # accepted | superseded | deprecated. Same exemption as decision_id:
-                          # on the container page each entry states `**Status:**` inline instead
+                          # on the container page each entry states `**Status:**` inline instead.
+                          # MIGRATION: both fields were unconditionally required before v0.18, so an
+                          # upgrading install's existing architecture-decisions.md still carries them
+                          # and is now non-conforming — delete the two lines from that page. Folded
+                          # into the one-time migration in `using-second-brain` operation 5.
 superseded_by: AD-15      # optional — if superseded
 ---
 
@@ -375,7 +379,7 @@ Does this source contradict the existing wiki? How was it resolved?
 
 The per-session work record. Written at the end of a task (`finishing-a-development-branch`) AND on a context-pressure handoff (`context-handoff`), via the canonical procedure in `using-second-brain` `<session_summary_protocol>`. It is ingested into Qdrant `chat_history`, so its frontmatter is what makes "which developer did what last week, in which domain" queryable.
 
-**This must be substantive, not lip-service.** Record the actual decisions (with rationale), the concrete work (commits + changed files), the spec/plan paths if the task produced them, and the experience notes a follow-on session would otherwise rediscover the hard way — so a future session (or teammate) can reconstruct what happened and why. A pointer-only stub defeats the memory.
+**This must be substantive, not lip-service.** Record the actual decisions (with rationale), the task ground rules still in force, the concrete work (commits + changed files), the spec/plan paths if the task produced them, and the experience notes a follow-on session would otherwise rediscover the hard way — so a future session (or teammate) can reconstruct what happened and why. A pointer-only stub defeats the memory.
 
 Copy this frontmatter verbatim and fill the values — do NOT keep inline `# comments` in it (omit optional lines you don't use rather than commenting them). Write `domains` in the canonical `<domain_scopes>` casing (e.g. `Card`, not `card`) so `--domain` queries match (the filter is exact):
 
@@ -416,6 +420,15 @@ date_updated: YYYY-MM-DD
 
 ## Open Questions / Blockers
 - Question / blocker for next session (or "none")
+
+## Task Ground Rules
+<!-- Constraints that hold for the WHOLE task, not just this session: scope exclusions,
+     off-limits areas, work deferred to another team. These are the most common kind of
+     decision and the most damaging to lose — a dropped rule looks like an agent confidently
+     doing work it was told not to do. Carry every rule that still holds into the NEXT
+     session's summary and prune the rest. They retire when the task does; one that turns out
+     to hold beyond it belongs in architecture-decisions.md instead. Write "none" if none. -->
+- Constraint — why, and what to do instead
 
 ## Notes for the Next Session
 <!-- Hard-won EXPERIENCE: what the next session would otherwise waste time rediscovering.

@@ -20,6 +20,8 @@ qdrant-storage/
 .sumela/_migration/
 .sumela/**/__pycache__/
 AGENTS.md.bak*
+scripts/update.sh.bak
+scripts/update.ps1.bak
 # Re-include Second-Brain artifacts (specs/plans MUST stay tracked): common host
 # .gitignores — e.g. the standard VisualStudio/.NET template's `artifacts/` build-output
 # pattern — match ANY directory named "artifacts", silently swallowing

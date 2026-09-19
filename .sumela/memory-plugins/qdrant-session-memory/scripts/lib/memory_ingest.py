@@ -370,6 +370,153 @@ if EMBED_MAX_TOKENS >= EMBED_NUM_BATCH:
     EMBED_MAX_TOKENS = EMBED_NUM_BATCH * 9 // 10
 
 
+# --------------------------------------------------------------------------
+# Secret redaction for PROSE that gets indexed.
+#
+# ingest-code-to-qdrant.py has SECRET_PATTERNS, but that is a FILENAME skip-list
+# (.env, *.key, …) — it cannot help a session summary, which is prose that may quote
+# a connection string inline. The summary path had no equivalent guard at all, and
+# `context-handoff` now explicitly invites "commands that do not work in this repo"
+# and "tooling quirks" into it. That text lands in a git-TRACKED file AND in a vector
+# index that later sessions surface verbatim, so a pasted DSN becomes permanent and
+# searchable. Redact before chunking, and report the count — never silently.
+#
+# Deliberately conservative: these match secret-SHAPED values, not every possible
+# secret. This lowers the blast radius of an accidental paste; it is not a DLP system,
+# and the instruction-level rule ("reference a secret by name, never by value") stays
+# the primary control.
+# HIGH-CONFIDENCE patterns only. These shapes are not ambiguous in prose, so masking them
+# cannot destroy meaning. The `key = value` shape is deliberately NOT here — see
+# POSSIBLE_SECRET_ASSIGNMENT below.
+SECRET_VALUE_PATTERNS = (
+    # scheme://user:password@host — bounded by URI grammar rather than by guessing which
+    # characters a password may hold. The authority ends at the first '/', '?', '#' or
+    # whitespace, and userinfo ends at the LAST '@' inside it, which is what the negative
+    # lookahead pins. That makes a password containing '@', '=' or ',' work (P@ssw0rd! is
+    # common) while the match still cannot run past the authority into the sentence.
+    #
+    # A password holding a TEMPLATE marker is not a secret: source code is full of
+    # f"postgres://{user}:{pwd}@{host}/{db}" and "https://%s:%s@%s/db" % (...), and masking
+    # those produced a "SECRETS REDACTED" line on every ordinary repo while making the indexed
+    # chunk no longer match the file. Skip { } $ < > outright, and % only when it is NOT a
+    # percent-ENCODING (%40 is how a real password writes '@'; %s is a format placeholder).
+    # The password itself must be non-empty: smtp://user:@host is a blank credential, not a
+    # secret, and reporting it raised a scrub alarm for nothing.
+    (re.compile(r"\b([a-zA-Z][a-zA-Z0-9+.\-]*://[^\s/?#@:]*:)"
+                r"(?![^\s/?#]*[{}$<>])(?![^\s/?#]*%(?![0-9A-Fa-f]{2}))"
+                r"([^\s/?#]+)@(?![^\s/?#]*@)"),
+     "dsn-password"),
+    # JWTs — self-delimiting, no prose risk.
+    (re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\b"), "jwt"),
+    # AWS access key ids — likewise self-delimiting.
+    (re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"), "aws-key-id"),
+    # PEM private key blocks. The body must be PEM LINES — a known PEM header, a base64 line,
+    # or a blank line — each of which may be indented or blockquoted, because that is how a
+    # key lands in a markdown summary (list item, fenced block, '> ' quote). Allowing free
+    # text here instead would let prose between two separately MENTIONED markers match.
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[ \t]*\n"
+                r"(?:[ \t>]*(?:Proc-Type|DEK-Info|Comment|Bag Attributes)[^\n]*\n"
+                r"|[ \t>]*[A-Za-z0-9+/=]+[ \t]*\n"
+                r"|[ \t>]*\n){0,200}"
+                r"[ \t>]*-----END [A-Z ]*PRIVATE KEY-----"), "private-key"),
+)
+
+# `api_key: <something>` in prose is NOT reliably separable from ordinary writing:
+# "password: see the vault entry", "token: handled-by-the-auth2-middleware",
+# "client_secret: rotated-2024-01-15" and "private_key: ~/.ssh/id_ed25519" are all sentences
+# a summary SHOULD contain. Every shape test that caught the real secrets also caught some of
+# these, and a false positive is worse than a miss here: redaction is destructive and the
+# chunk is the only thing the next session can query. So this class is REPORTED, never
+# rewritten — the human decides.
+POSSIBLE_SECRET_ASSIGNMENT = re.compile(
+    # A prose summary writes these in markdown: "- **Token:** ghp_x", "- `API_KEY`: sk-x",
+    # "- API key: sk-live-x". The prefix therefore allows markdown emphasis and code ticks,
+    # the keyword allows a SPACE ("api key"), and a closing tick/asterisk may sit between the
+    # name and the separator. A suffix must still start with "_" or "-" so that "tokenizer:"
+    # and "passwords:" stay out.
+    r"(?i)(?:^|[\s\"'\[{(,*`])[A-Za-z0-9_.\-]*"
+    r"(?:api[\s_-]?key|secret|token|password|passwd|pwd|access[\s_-]?key|"
+    r"client[\s_-]?secret|private[\s_-]?key)"
+    r"(?:[_-][A-Za-z0-9]+)*[`*\]]*\s*[:=]\s*\S")
+
+
+MAX_REDACT_LINE = 4000
+
+
+def redact_secrets(text: str) -> "tuple[str, list[str]]":
+    """Return (redacted_text, kinds_found) for the unambiguous shapes only.
+
+    Keeps the surrounding prose readable — only the VALUE is replaced, so
+    "psql postgres://app:hunter2@db" becomes "psql postgres://app:[REDACTED:dsn-password]@db"
+    and the note still teaches the next session what the command was.
+    """
+    found = []
+
+    def _mark(kind):
+        def _sub(m):
+            found.append(kind)
+            if m.re.groups == 2:
+                # Keep group 1 (the prefix/label) and everything the match consumed AFTER
+                # the secret value, so separators survive: a DSN stays readable as
+                # postgres://app:[REDACTED:dsn-password]@db rather than losing its ':' and '@'.
+                tail = m.string[m.end(2):m.end(0)]
+                return f"{m.group(1)}[REDACTED:{kind}]{tail}"
+            return f"[REDACTED:{kind}]"
+        return _sub
+
+    # The PEM pattern is multi-line, so it runs on the whole text; the others are single-line
+    # and run per line so a pathological line can be skipped rather than scanned quadratically.
+    pem = [(p, k) for p, k in SECRET_VALUE_PATTERNS if k == "private-key"]
+    line_level = [(p, k) for p, k in SECRET_VALUE_PATTERNS if k != "private-key"]
+
+    for pattern, kind in pem:
+        text = pattern.sub(_mark(kind), text)
+
+    out = []
+    for line in text.split("\n"):
+        # A real credential never lives on a 4000-character line; a minified bundle does, and
+        # the authority scan is quadratic in line length. Skipping is the honest trade — but it
+        # is RECORDED, because a silent skip made the report read as "nothing found" for a line
+        # that was never looked at.
+        if len(line) <= MAX_REDACT_LINE:
+            for pattern, kind in line_level:
+                line = pattern.sub(_mark(kind), line)
+        else:
+            found.append("unscanned-long-line")
+        out.append(line)
+    return "\n".join(out), found
+
+
+def flag_possible_secrets(text: str) -> List[str]:
+    """Locations that ASSIGN something to a secret-ish name. Reported, never modified.
+
+    Returns "line <n>: <NAME>=..." — the NAME and line number only, NEVER the value. The
+    report this feeds is tee'd into .sumela/.memory-sync.log by the git hooks, so echoing the
+    matched line would copy the suspected secret into a second persistent plaintext file:
+    the guard would become another leak. A hit is not proof of a secret; it is a prompt to
+    look at that line before the file is committed.
+    """
+    hits = []
+    for n, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("[REDACTED:"):
+            continue
+        # Same cap and same reason as redact_secrets: this pattern is also superlinear in line
+        # length, and both callers run from a git hook where a stall is a hung pull.
+        if len(stripped) > MAX_REDACT_LINE:
+            hits.append(f"line {n}: (line too long to scan — {len(stripped)} chars)")
+            continue
+        m = POSSIBLE_SECRET_ASSIGNMENT.search(stripped)
+        if not m:
+            continue
+        # Keep only up to the separator, so the value never appears in the output.
+        head = m.group(0)
+        cut = max(head.rfind("="), head.rfind(":"))
+        name = head[:cut + 1].strip() if cut >= 0 else head.strip()
+        hits.append(f"line {n}: {name}...")
+    return hits
+
+
 def estimate_tokens(text: str) -> int:
     """HARD upper bound on the token count. Counts UTF-8 BYTES, not characters.
 

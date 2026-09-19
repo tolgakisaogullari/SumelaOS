@@ -49,6 +49,8 @@ docs/second-brain/wiki/
 # Brownfield migration quarantine + AGENTS.md backup (may hold legacy secrets — never commit)
 .sumela/_migration/
 AGENTS.md.bak*
+scripts/update.sh.bak
+scripts/update.ps1.bak
 
 # Common secret files (never commit; see .sumela/rules/security_protocol.md)
 .env

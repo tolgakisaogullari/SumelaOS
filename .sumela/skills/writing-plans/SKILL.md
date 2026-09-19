@@ -18,6 +18,15 @@ Execute these steps strictly in order. DO NOT announce the skill unless specific
 
 2. INITIALIZE PLAN DOCUMENT:
    - Save path: `docs/second-brain/artifacts/plans/YYYY-MM-DD-<feature-name>.md`
+   - **CAPTURE TASK GROUND RULES.** If scoping this task produced any constraint that holds for the
+     WHOLE task — what is explicitly out of scope, which areas are off-limits, what is deferred to
+     another team or ticket — write them under a `## Task Ground Rules` heading in the plan. This is
+     where they are usually agreed, and a constraint that lives only in the planning conversation is
+     lost the moment the session ends. `executing-plans` reads this section before writing code and
+     `context-handoff` carries it across sessions; it is a DESIGNATED APPEND BLOCK, so later
+     sessions may add to it without violating the write-once rule for the plan body. Phrase each as
+     a constraint plus its reason, not a label: *"Do not touch `src/corporate/**` — out of scope for
+     this task; open a ticket for the Corporate team"*, not *"Corporate out of scope"*.
    - **WRITE-TOOL RULE:** Create the plan with the IDE's file-write tool (NOT shell redirection / heredoc), so the IDE's change tracker registers it.
    - **VISIBILITY CHECK (MANDATORY, immediately after saving):** Run `git check-ignore -q <save-path>` and decide on the EXIT CODE only: exit 1 = visible → PASS (exit 1 is success, NOT a command error); exit 0 = ignored → remediate. Do NOT decide from `-v` output alone — a `-v` match whose pattern starts with `!` means the file IS visible. On exit 0: run `-v` to name the culprit (common cause: a generic `artifacts/` build-output pattern), append `!docs/second-brain/artifacts/` and `!docs/second-brain/artifacts/**` at the END of the `.gitignore` in the SumelaOS install root (the directory containing `docs/second-brain/`), re-run the `-q` check, and tell the user what you fixed. If the lines already existed, re-append them at the END anyway (duplicates are harmless; last match wins). If STILL ignored (an excluded parent like `docs/` — negation cannot pierce it), STOP and warn the user: the plan is invisible to `git status` and the IDE's Changes view; ask how to resolve.
    - MUST include this exact header:

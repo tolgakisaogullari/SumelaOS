@@ -127,6 +127,14 @@ if command -v python3 >/dev/null 2>&1; then
   else
     bad "decision-heading parity test failed"; sed 's/^/    /' "$WORK/decision_parity.log" | tail -15
   fi
+  # Regression guard: a session summary is prose that can quote a DSN inline, lands in a
+  # git-tracked file AND a vector index, and had no secret filter at all; and DECISION_HEADERS
+  # needs a full-line match, so '## Key decisions' extracted nothing while reporting SUCCESS.
+  if python3 "$REPO_ROOT/tests/test_session_ingest_guards.py" >"$WORK/ingest_guards.log" 2>&1; then
+    ok "session-ingest guards (secret redaction, near-miss headings, root CORE file)"
+  else
+    bad "session-ingest guards test failed"; sed 's/^/    /' "$WORK/ingest_guards.log" | tail -20
+  fi
   # Extra-ingest-dirs config resolution + path validation (env/conf precedence,
   # reject absolute/escape/glob/symlink, skip-missing, dedupe).
   if python3 "$REPO_ROOT/tests/test_extra_ingest_dirs.py" >"$WORK/extra_ingest.log" 2>&1; then

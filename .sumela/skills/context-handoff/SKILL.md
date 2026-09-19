@@ -21,12 +21,8 @@ EAGER — loaded at session start. Context monitoring must be active from the fi
 </activation>
 
 <commands>
-## Named commands used by this skill
-
-**`{IMP_PENDING_COUNT}`** — the pending `/evolve` suggestion count. Run the form for your shell.
-Glob `IMP-*.md` only, NEVER the whole directory: `_improvement-queue/README.md` contains a
-`status: pending` example that would inflate the count. Do NOT read the files themselves.
-
+**`{IMP_PENDING_COUNT}`** — pending `/evolve` count. Glob `IMP-*.md` only, never the whole dir
+(`README.md` holds a `status: pending` example that would inflate it); never read the files.
 - bash: `grep -l "^status: pending" docs/second-brain/wiki/_improvement-queue/IMP-*.md 2>/dev/null | wc -l`
 - PowerShell: `@(Get-ChildItem docs/second-brain/wiki/_improvement-queue/IMP-*.md -EA SilentlyContinue | Select-String "^status: pending").Count`
 </commands>
@@ -73,14 +69,28 @@ written, route EVERY decision made this session to a durable home. **This is wha
 carried-forward set cumulative:** each session files its decisions where the NEXT session already
 looks, instead of leaving them in a per-session file nobody reopens.
 
-For each decision apply the boundary test from `using-second-brain` operation 5 (DECISION CAPTURE):
-*"If a new developer joined the team without an agent, would this decision still apply to them?"*
+Ask TWO questions, in this order. The first sorts by how long the decision lives; only the
+long-lived ones need the second.
 
-| Answer | Durable home | How it gets there |
+**Q1 — How long does this hold?** Most decisions answer "for this task", not "forever". That is
+the common case, not an edge case: *"we are not touching the corporate side in this task"*,
+*"we never edit another domain's code — we open a ticket for that team instead"*, *"skip the
+migration, we do it in the follow-up"*. None of these is a project truth, and all of them must
+survive every session of the task or the next agent quietly violates them.
+
+**Q2 — (only if it holds beyond this task)** The boundary test from `using-second-brain`
+operation 5: *"If a new developer joined the team without an agent, would this still apply?"*
+
+| Scope | Lives for | Durable home |
 |---|---|---|
-| **YES** — project-level (technology choice, pattern, contract/API shape, layer boundary) | `wiki/architecture-decisions.md` as `AD-XX` | Route to `using-second-brain` operation 5. It owns AD numbering and the full write set (`_INDEX`, `_SEARCH_INDEX`, `_LOG`). |
-| **NO** — about how the AGENT works (a rule, skill, workflow change, or a standing user preference) | `_improvement-queue/IMP-*.md` | The `decision` / `preference` signal path in `sumela-prompt.md` `<signal_capture>`; reviewed via `/evolve`. |
-| **Neither** — tactical, scoped to this task | The session summary's `## Decisions Made` | No further routing needed. |
+| **Task-scoped — the usual case.** A constraint, exclusion or working agreement for THIS piece of work: what is out of scope, which areas are off-limits, what gets deferred to another team or ticket. | Every session of this task, then retires | **`## Task Ground Rules`** — in the plan artifact when one exists, in the session summary always, and carried in every handoff prompt until lifted. See `<task_ground_rules>`. |
+| **Project-level.** Technology choice, pattern, contract/API shape, layer boundary — something a developer without an agent would still follow. | Until superseded | `wiki/architecture-decisions.md` as `AD-XX`. Route to `using-second-brain` operation 5: it owns AD numbering and the full write set (`_INDEX`, `_SEARCH_INDEX`, `_LOG`). |
+| **About how the AGENT works.** A rule, skill or workflow change, or a standing user preference. | Until `/evolve` reviews it | `_improvement-queue/IMP-*.md` via the `decision`/`preference` signal path in `sumela-prompt.md` `<signal_capture>`. |
+| **Genuinely session-local.** A throwaway choice with no consequence past today. | This session | The session summary's `## Decisions Made`. Nothing further. |
+
+**When in doubt between task-scoped and session-local, choose task-scoped.** The cost of carrying
+one line too many is a longer prompt; the cost of dropping one is an agent that edits a domain it
+was told to leave alone.
 
 **Do NOT write an AD entry from this skill.** Two guarantees depend on that:
 - DECISION CAPTURE asks *"Would you like me to save this decision to the wiki?"* and NEVER
@@ -89,22 +99,55 @@ For each decision apply the boundary test from `using-second-brain` operation 5 
   no lock. Handoff is the most worktree-exposed moment in the system, so two parallel handoffs can
   allocate the same `AD-XX`.
 
-If the user declines, or context is too tight to run the capture, record the decision as an
-**AD candidate** line in the handoff prompt. `finishing-a-development-branch` also writes ADs and
-runs at a calmer moment; the next session can promote it there.
-
-Triage is a classification, not a write — it is cheap. Only the buckets that earn a write get one,
-and only with the consent their own workflow requires.
+An unwritten project-level decision needs the RIGHT marker, because `finishing-a-development-branch`
+promotes one of them without asking again:
+- **Context was too tight** to ask → `AD candidate (deferred)`. Promotable; the user was never asked.
+- **The user DECLINED** → `AD declined (<date>)`. **NEVER promotable.** Carry it so the next session
+  knows it was considered and refused; only a fresh operation 5 ask can record it. Collapsing the two
+  would narrow *"NEVER auto-capture without approval"* into "not **this session**".
 </decision_triage>
+
+<task_ground_rules>
+## Task Ground Rules — the constraints that must outlive every session of this task
+
+A ground rule is a decision that shapes HOW this task is done rather than what the project is:
+scope exclusions, off-limits areas, deferrals to another team. They are the most common kind of
+decision and the most damaging to lose, because losing one does not look like a gap — it looks
+like an agent confidently doing work it was told not to do.
+
+**Write each one where it cannot be lost, in all three places that apply:**
+
+1. **The plan artifact**, when the task has one. Append under a `## Task Ground Rules` heading.
+   This is the task's own home and the one artifact that outlives the prompt chain.
+   `using-second-brain` declares `artifacts/` write-once; `## Task Ground Rules` is a DESIGNATED
+   APPEND BLOCK, exactly like Protocol B's `[CHECKPOINT]` block. The plan's *body* — the intent,
+   the steps, the acceptance criteria — stays immutable. Never rewrite a step to encode a rule.
+2. **The session summary**, always, under its own `## Task Ground Rules` heading. This is the
+   durable, searchable copy and the one that survives a prompt the user never pasted.
+3. **The handoff prompt**, in `### Task Ground Rules`, positioned right after the Continue Point
+   because it is a constraint the next agent must read before acting, not reference material.
+
+**Carry forward and PRUNE at every handoff.** Copy each rule that still holds into the new
+summary and the new prompt. Drop one when the task moved past it, when the user lifts it, or when
+it was only ever about a step that is now finished — and say so once, in the prompt, so the next
+agent knows the constraint was retired deliberately rather than forgotten:
+`~~no corporate-side work~~ — lifted {date}: that scope moved into this task`.
+
+**They retire with the task.** `finishing-a-development-branch` does not carry them anywhere: a
+rule that turns out to hold beyond this task was never task-scoped, and belongs in
+`architecture-decisions.md` through operation 5's normal ask.
+
+**Phrase each one as a constraint, with its reason.** *"Do not touch `src/corporate/**` — that
+scope is explicitly out of this task; open a ticket for the Corporate team instead"* is usable.
+*"Corporate is out of scope"* is not: the next agent cannot tell what it forbids.
+</task_ground_rules>
 
 <minimum_viable_handoff>
 ## Minimum Viable Handoff — what to drop when context runs out
 
 This skill fires when context is nearly exhausted, so its own steps can fail to complete. If you
-cannot finish everything, **drop from the top of this list and work down.** The order is
-irreplaceability: the last item exists nowhere else on disk, everything above it can be rebuilt,
-re-derived or re-run later. Note that the first three to go are the newest and most expensive parts
-of this skill — that is deliberate, they buy the least.
+cannot finish everything, **drop from the top and work down** — the order is irreplaceability, and
+the first to go are deliberately the newest and most expensive parts of this skill.
 
 **Drop FIRST:**
 1. The Standing Decisions pointer — but only after confirming `architecture-decisions.md` is linked
@@ -113,26 +156,34 @@ of this skill — that is deliberate, they buy the least.
    `_LOG` tail and the IMP count); only some phase skills do, and only later. If the page is
    orphaned, keep the pointer and fix the link instead.
 2. `/evolve` review — degrade to the pending count (already the documented behaviour).
-3. Decision triage's AD routing — degrade to an "AD candidate" line (see `<decision_triage>`).
+3. Decision triage's AD routing — degrade to an `AD candidate (deferred)` line (see
+   `<decision_triage>`). A decision the user DECLINED is never degraded this way — it is recorded
+   as `AD declined` and stays unpromotable.
 4. `session-ingest.py` — droppable, but NOT free. No hook re-ingests a locally authored summary:
    `post-merge` only covers what an incoming range brought in, and `post-commit` exits unless HEAD
    is a merge commit. So skipping this leaves the markdown in git but ABSENT from your local
    `chat_history` — the next session's Tier-1 query will not find it until someone re-runs the
    script (or a teammate pulls the committed file).
-5. `_SEARCH_INDEX.md` / `_INDEX.md` rows — a later lint pass recovers these.
+5. `_SEARCH_INDEX.md` / `_INDEX.md` rows — recoverable ONLY by a user-invoked lint
+   (`using-second-brain` operation 3), which will NOT flag this: its parity check compares the two
+   indexes against each other, so dropping BOTH rows leaves them in agreement. It also never
+   auto-runs and never auto-fixes. And because this ladder drops from the top down, item 4 is
+   already gone by the time you reach here — so Tier-1 `chat_history` AND Tier-3 keyword search are
+   both blind to the very record this handoff exists to leave. Write the rows if you possibly can.
 6. The session summary markdown with a real `## Decisions Made` block — everything downstream reads
    it. Degrade to a terse-but-honest summary long before dropping it entirely.
 
 **NEVER DROP — this is the whole point of the handoff:**
 7. The Protocol B `[CHECKPOINT]` block in the plan file, the 🔴 Continue Point, the branch name, and
    `git status --short`. Without these the next session cannot resume at all.
+8. `### Task Ground Rules`. These are constraints, not context: dropping one does not leave a
+   visible gap, it produces an agent that confidently does work it was told not to do — editing
+   another team's domain, or building scope the user explicitly excluded. They are short. Keep
+   them even when you keep nothing else.
 
-Agent Notes do NOT appear on this ladder: they are written into the session summary's
-`## Notes for the Next Session`, so item 6 covers them. Never let them exist only in the
-copy-pasted prompt — an unpasted prompt loses them, and they exist nowhere else.
-
-If you drop item 4 or anything below it, say so explicitly under `### Handoff Completeness` in the
-prompt rather than letting the next agent discover the gap.
+Agent Notes are not listed separately: they live in the summary's `## Notes for the Next Session`,
+so item 6 covers them — never let them exist only in the copy-pasted prompt. If you drop item 4 or
+anything below it, say so under `### Handoff Completeness` rather than letting it be discovered.
 </minimum_viable_handoff>
 
 <protocol_a>
@@ -150,7 +201,7 @@ Use when: The current task is fully finished and verified.
 - If a real loggable operation occurred, append the matching entry to `_LOG.md` (`code-commit`, `decision`, `evolve`, `migration`, etc.). Do not create a `_LOG.md` entry solely because a handoff prompt was generated.
 - **Critical:** The next session's eager-load reads `active-project-context.md` first, then index/search surfaces. Stale active state is dangerous; unnecessary active-context churn is also dangerous.
 
-**Step 2 — Decision Triage (MANDATORY):**
+**Step 2 — Decision Triage (MANDATORY — degradable ONLY per `<minimum_viable_handoff>`):**
 - Execute `<decision_triage>` for every decision made this session. It runs BEFORE the `/evolve`
   count and BEFORE the summary: triage may file new `IMP-*.md` signals, so counting first would
   report a clean queue moments before it stops being clean.
@@ -163,7 +214,7 @@ Use when: The current task is fully finished and verified.
 - If user says **sonra**: note the pending count in the handoff prompt.
 - **Timing constraint:** If /evolve review would consume too much remaining context, skip it and note it in handoff prompt. Never sacrifice handoff quality for evolve completeness.
 
-**Step 4 — Session Summary (MANDATORY):**
+**Step 4 — Session Summary (MANDATORY — degradable ONLY per `<minimum_viable_handoff>`):**
 - Create a session summary file following `using-second-brain` `<session_summary_protocol>` (canonical; see `<session_summary_protocol>` below for the context-handoff-specific trigger note).
 - This persists the session's conversational context as a searchable wiki page.
 - The handoff prompt will reference this summary file.
@@ -205,13 +256,13 @@ Use when: You are mid-task and context is running low.
 - If this is a maintenance/audit checkpoint rather than active sprint execution, preserve the checkpoint in the plan/session summary and `_SEARCH_INDEX.md`; do not invent sprint state.
 - Append an entry to `_LOG.md` only if a real loggable operation occurred. Staging alone is not a `code-commit`.
 
-**Step 4 — Decision Triage (MANDATORY):**
+**Step 4 — Decision Triage (MANDATORY — degradable ONLY per `<minimum_viable_handoff>`):**
 - Same as Protocol A Step 2.
 
 **Step 5 — Evolve Check:**
 - Same as Protocol A Step 3.
 
-**Step 6 — Session Summary (MANDATORY):**
+**Step 6 — Session Summary (MANDATORY — degradable ONLY per `<minimum_viable_handoff>`):**
 - Same as Protocol A Step 4. Create session summary following `using-second-brain` `<session_summary_protocol>` (canonical).
    - Immediately after creating the summary, execute the applicable `<session_memory_ingestion>` steps: always index the session summary, and run code-graph/wiki memory maintenance only when the session changed code or other memory-sync inputs. **Relay the structured report output to the user in the project's configured language**.
 
@@ -225,7 +276,7 @@ Use when: You are mid-task and context is running low.
 The session-summary write+ingest procedure is CANONICAL in `using-second-brain` `<session_summary_protocol>` (single source of truth — shared with `finishing-a-development-branch` so the two triggers never drift). READ and FOLLOW it; do NOT re-specify the fields/steps here.
 
 What is specific to context-handoff:
-- **When:** ALWAYS during context-handoff (Protocol A Step 4, Protocol B Step 6); also when the user explicitly asks to save a session mid-session.
+- **When:** ALWAYS during context-handoff (Protocol A Step 4, Protocol B Step 6) — degradable only per `<minimum_viable_handoff>` item 6, and never silently: a degraded summary is declared under `### Handoff Completeness`. Also when the user explicitly asks to save a session mid-session.
 - The canonical protocol stamps the queryable frontmatter (`developer` from `git config user.name`, `domains` from `.sumela/local.md`, `spec_artifact`/`plan_artifact`, `session_date`, `session_topics`), writes `wiki/session-summaries/YYYY-MM-DD-<topic>.md` per the `_SCHEMA.md` Session Summary Page Template, updates `_SEARCH_INDEX.md`/`_INDEX.md`, and ingests into Qdrant `chat_history`.
 - Capture substantive detail (decisions + rationale, concrete work + commits/files, artifact links) — a pointer-only stub defeats the memory. A handoff summary is mid-task context; be detailed enough that the NEXT session resumes exactly where you stopped.
 </session_summary_protocol>
@@ -323,16 +374,28 @@ Present the filled template inside a fenced code block so the user can copy-past
 > **[CHECKPOINT {DATE}]:** {What was done.}  
 > **Next step:** {Exactly where to continue.}
 
+### Task Ground Rules — in force for this task
+{Constraints that hold for the WHOLE task, not just this session: what is out of scope, which
+ areas are off-limits, what is deferred to another team or ticket. Copy every rule from the
+ previous handoff that still holds, drop the ones the work has passed, and add any agreed this
+ session. Each line is a constraint plus its reason. Write "None." only if there genuinely are
+ none — that is rarer than it looks.}
+- {Constraint} — {why, and what to do instead}
+{Retired this handoff, noted once so the next agent knows it was lifted deliberately:}
+- ~~{lifted rule}~~ — lifted {DATE}: {why}
+
 ### Decisions — This Session
 {Every decision MADE this session, with its rationale and the durable home triage assigned it.
  Copy from the session summary's `## Decisions Made`. Write "None." if there were none.}
-- {What was decided} — {why}. → `AD-12` | `IMP-20260918-retry-policy` | AD candidate (not yet filed) | session-scoped
+- {What was decided} — {why}. → `AD-12` | `IMP-20260918-retry-policy` | `AD candidate (deferred)` | `AD declined (2026-09-18)` | session-scoped
 
 ### Decisions — Standing (carried forward)
 > Earlier sessions decided these and they still hold. Do not re-litigate them; if one now looks
 > wrong, supersede it explicitly rather than quietly doing something else.
-- **Architecture:** `docs/second-brain/wiki/architecture-decisions.md` — read the `## AD-XX` entries
-  whose **Status** is `accepted` before proposing any architecture. ({N} entries | page not created yet)
+- **Architecture:** `docs/second-brain/wiki/architecture-decisions.md` — read the `## AD-XX` entries that
+  are NOT marked `superseded` or `deprecated` before proposing any architecture. (Read it as an
+  allow-by-default: a page written before v0.18 has no per-entry **Status** line at all, and filtering
+  for `accepted` would report dozens of live decisions as none.) ({N} entries | page not created yet)
 - **Agent workflow:** {N} pending in `_improvement-queue/` — review with `/evolve`.
 {Do NOT paste AD bodies here. That page is the authority and the ONLY surface that can express
  `superseded_by`; a pasted copy goes stale and will present a reversed decision as current.}
@@ -350,6 +413,7 @@ Present the filled template inside a fenced code block so the user can copy-past
  useful. Drop the ones the work has since resolved or disproved — this list is pruned every
  handoff, not appended to forever. That pruning is what keeps experience accumulating without the
  prompt growing without bound.}
+{**Never write a credential, token, connection string, PIN or customer PII into this section** — reference a secret by NAME and LOCATION, never by value (`the staging DSN in 1Password`, not the DSN). This file is git-tracked and is embedded into Qdrant `chat_history`, which later sessions surface verbatim, so a pasted value is permanent and searchable. `session-ingest.py` redacts secret-SHAPED values before indexing and reports what it caught, but that is a backstop for accidents, not a licence: the redactor only sees shapes it knows, and the markdown on disk keeps whatever was typed.}
 
 ### Pending Decisions / Blockers
 {Decisions NOT yet made — open questions the next agent must resolve or raise with the user — and
@@ -380,13 +444,21 @@ Present the filled template inside a fenced code block so the user can copy-past
 - Checkpoint → exact file/method/line reference, not vague direction.
 - **Decisions — This Session** → one line per decision, each ending in the home `<decision_triage>`
   assigned it. A decision with no home means triage was not run.
-- **Decisions — Standing** → a POINTER plus counts, never a copy. Count only the `## AD-<number>`
-  headings under that page's `## Decisions` section — the Entry-shape example above it is a literal
-  `## AD-NN:` placeholder, so an unscoped count reports 1 entry on an empty page. If the page does
-  not exist yet, write "page not created yet" rather than omitting the line, so the next agent knows
-  the surface is empty and not merely unlinked.
+- **Decisions — Standing** → a POINTER plus counts, never a copy. Count the `## AD-<number>` headings:
+  under the page's `## Decisions` section when it has one (the Entry-shape example above that section is
+  a literal `## AD-NN:` placeholder, so an unscoped count would report 1 entry on an empty page), or
+  across the WHOLE page when there is no `## Decisions` section — that is a pre-0.18 page, and its
+  entries are real. A page with `## AD-` entries but no `## Decisions` section needs the one-time
+  migration in `using-second-brain` operation 5; say so on this line instead of reporting zero. If the
+  page does not exist at all, write "page not created yet" rather than omitting the line, so the next
+  agent knows the surface is empty and not merely unlinked.
 - **Pending vs This Session** → the discriminator is whether the decision was MADE, not whether it
   is final. Made-but-revisitable goes in "This Session" with a note; not-yet-made goes in "Pending".
+- **Task Ground Rules** → the single most important section to get right; see `<task_ground_rules>`.
+  Write the same list into the session summary's `## Task Ground Rules` and, when the task has a
+  plan artifact, append it there too. Carry forward and PRUNE — an unpruned list stops being read,
+  and a dropped rule is an agent doing work it was told not to do. If you retire one, say so on the
+  line rather than deleting it silently.
 - **Agent Notes** → write the SAME list into the session summary's `## Notes for the Next Session`
   before filling it in here. The prompt is a copy the user may never paste; the summary is the
   durable one, and it is what a later session finds by search. Do NOT file these as `/evolve`

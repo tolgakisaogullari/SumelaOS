@@ -61,6 +61,11 @@ from lib.memory_ingest import (
     get_repo_root, chunk_text, get_embedding, deterministic_id, print_report,
     resolve_collection_arg, project_slug, qdrant_client_preflight, EMBED_MAX_WORKERS,
     ollama_preflight, EMBED_DIM,
+    # SECRET_PATTERNS above is a FILENAME skip-list: it keeps .env and *.pem out entirely,
+    # but says nothing about a DSN or JWT hardcoded inside an ordinary source file. That
+    # content is embedded like any other, so the same value-level redaction the prose paths
+    # use applies here too.
+    redact_secrets,
 )
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -68,7 +73,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def report_success(files_ingested: int, chunk_count: int, qdrant_ok: bool, mode: str,
-                   files_skipped: int = 0, upsert_failed: int = 0, delete_failed: int = 0):
+                   files_skipped: int = 0, upsert_failed: int = 0, delete_failed: int = 0,
+                   redacted_files=None):
     clean = qdrant_ok and not files_skipped and not upsert_failed and not delete_failed
     lines = [
         f"Status: {'SUCCESS' if clean else 'PARTIAL'}",
@@ -87,6 +93,14 @@ def report_success(files_ingested: int, chunk_count: int, qdrant_ok: bool, mode:
         lines.append(f"Files left STALE (delete failed, upsert skipped): {delete_failed}")
     if files_skipped or upsert_failed or delete_failed:
         lines.append("Action: re-run this ingest; these files are NOT up to date in the index.")
+    if redacted_files:
+        total = sum(n for _, n in redacted_files)
+        lines.append(f"SECRETS REDACTED BEFORE INDEXING: {total} value(s) across {len(redacted_files)} file(s)")
+        for f, n in redacted_files[:5]:
+            lines.append(f"  {f} ({n})")
+        if len(redacted_files) > 5:
+            lines.append(f"  ... and {len(redacted_files) - 5} more")
+        lines.append("  The index is masked; the SOURCE on disk still holds the raw values.")
     print_report("CODE INGEST REPORT", lines)
 
 
@@ -350,6 +364,7 @@ def main():
 
     # Collect all chunks first for parallel embedding
     all_jobs = []  # (rel_path, file_type, chunk_index, chunk_text, total_chunks)
+    redacted_files = []  # (rel_path, n) — reported below; never silently swallowed
     for code_path in code_files:
         if should_skip_file(code_path):
             continue
@@ -366,6 +381,10 @@ def main():
 
         if not content.strip():
             continue
+
+        content, file_redacted = redact_secrets(content)
+        if file_redacted:
+            redacted_files.append((rel_path, len(file_redacted)))
 
         chunks = chunk_text(content)
         if not chunks:
@@ -515,7 +534,7 @@ def main():
     # reached. Only a run that neither wrote nor destroyed anything is still 1.
     ran = qdrant_ok or bool(upsert_failed) or bool(delete_failed)
     report_success(files_ingested, total_chunks, qdrant_ok, mode,
-                   len(failed_files), len(upsert_failed), len(delete_failed))
+                   len(failed_files), len(upsert_failed), len(delete_failed), redacted_files=redacted_files)
     # Exit space is three-valued on purpose. Collapsing "ran, but N entries are stale"
     # into the same 1 as "could not run at all" made setup-memory.sh tell the operator
     # seeding was skipped when 99 of 100 files had in fact landed.

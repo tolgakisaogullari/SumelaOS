@@ -60,6 +60,10 @@ from lib.memory_ingest import (
     # apply to EVERY path. Private copies here and in query-qdrant.py were the reason a
     # fix to the lib alone would have left the summary and query paths still crashing.
     chunk_text, get_embedding, ollama_preflight,
+    # A session summary is prose that may quote a DSN or a token inline, and it lands in a
+    # git-TRACKED file AND a vector index later sessions surface verbatim. The code path has
+    # a filename skip-list; this is the prose equivalent for the summary path.
+    redact_secrets, flag_possible_secrets,
 )
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -76,8 +80,35 @@ def print_report(summary_lines: list):
 
 
 def report_success(session_id: str, chunk_count: int, qdrant_ok: bool, decisions_n: int, files_n: int,
-                   developer: str = "unknown", domains: list = None):
-    print_report([
+                   developer: str = "unknown", domains: list = None, redacted: list = None,
+                   unmatched_headings: list = None, summary_path: str = "",
+                   possible_secrets: list = None):
+    extra = []
+    if redacted:
+        kinds = ", ".join(sorted(set(redacted)))
+        extra.append(f"SECRETS REDACTED BEFORE INDEXING: {len(redacted)} ({kinds})")
+        extra.append(f"  Masked in what {'was' if qdrant_ok else 'would have been'} indexed, but")
+        extra.append(f"  {summary_path or 'the summary'} on disk still contains the RAW values and is")
+        extra.append("  git-tracked. Scrub the file — that copy is the one that gets committed,")
+        extra.append("  and any later re-ingest of it starts from the raw text again.")
+    if possible_secrets:
+        extra.append(f"POSSIBLE CREDENTIALS — NOT modified, review these {len(possible_secrets)} line(s):")
+        for line in possible_secrets[:5]:
+            extra.append(f"  {line}")
+        if len(possible_secrets) > 5:
+            extra.append(f"  ... and {len(possible_secrets) - 5} more")
+        extra.append("  Names and line numbers only — the values are deliberately not echoed,")
+        extra.append("  because this report is tee'd into .sumela/.memory-sync.log. A 'key: value'")
+        extra.append("  shape is not separable from ordinary prose, so these are reported rather")
+        extra.append("  than rewritten: masking a sentence would corrupt the only copy the next")
+        extra.append("  session can query. Check these lines before you commit the file.")
+    if unmatched_headings:
+        extra.append("DECISION HEADINGS NOT PARSED: " + ", ".join(unmatched_headings))
+        extra.append("  These look like decision sections but do not match the expected")
+        extra.append("  '## Decisions Made' / '## Decisions' heading, so nothing was extracted")
+        extra.append(f"  FROM THEM ({decisions_n} decision(s) were extracted from elsewhere in this")
+        extra.append("  summary). Rename the heading, or those decisions stay unsearchable.")
+    print_report(extra + [
         f"Status: {'SUCCESS' if qdrant_ok else 'PARTIAL'}",
         f"Session ID: {session_id}",
         f"Developer: {developer}",
@@ -156,8 +187,34 @@ def extract_frontmatter(content: str) -> dict:
     return fm
 
 
+def _strip_fenced(content: str) -> str:
+    """Blank out fenced code blocks, keeping line count so line numbers stay usable.
+
+    A `## Decisions Made` inside a fence is an EXAMPLE — `_SCHEMA.md`'s own session-summary
+    template is exactly that. Without this, a summary that quotes the template supplies the
+    whole `decisions` payload from boilerplate while the report shows a healthy count.
+    """
+    # An UNCLOSED fence would otherwise blank everything after it — a truncated pasted
+    # transcript above the decisions section made extract_decisions return [] with a SUCCESS
+    # report. If the fences are unbalanced the document is not reliably fenced, so strip nothing.
+    if sum(1 for ln in content.splitlines()
+           if ln.lstrip().startswith("```") or ln.lstrip().startswith("~~~")) % 2 != 0:
+        return content
+
+    out, in_fence = [], False
+    for line in content.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            out.append("")
+            continue
+        out.append("" if in_fence else line)
+    return "\n".join(out)
+
+
 def extract_decisions(content: str) -> List[str]:
-    """Find a Decisions section and pull out bullet points."""
+    """Find a Decisions section and pull out bullet points (fenced examples ignored)."""
+    content = _strip_fenced(content)
     for pattern in DECISION_HEADERS:
         m = pattern.search(content)
         if not m:
@@ -169,6 +226,33 @@ def extract_decisions(content: str) -> List[str]:
         flat = [a or b for a, b in bullets if (a or b)]
         return [d.strip() for d in flat if d.strip()]
     return []
+
+
+DECISION_WORD = re.compile(r"(?i)\bdecisions?\b")
+
+
+def find_unparsed_decision_headings(content: str) -> List[str]:
+    """Headings that look like a decision section but did not match DECISION_HEADERS.
+
+    `## Key decisions`, `## Scope decisions`, `## Decisions (sprint 12)` are all English,
+    all obviously decision sections, and all invisible to the anchored patterns above —
+    extract_decisions() returns [] and the run still reports SUCCESS. Loosening the regex
+    would undercut the "keep the heading verbatim" contract the schema and its parity test
+    pin, so instead make the silence audible: name the near-miss at ingest time, where the
+    author can still fix it, rather than leaving it to surface as an empty query months later.
+    """
+    misses = []
+    # Reuse the same stripper: it carries the unbalanced-fence guard, so an unclosed fence
+    # cannot make `in_fence` stick and silence every warning after it.
+    for line in _strip_fenced(content).splitlines():
+        if not line.startswith("## ") or line.startswith("###"):
+            continue                      # H2 only: ### Pending Decisions is a sub-section, not a miss
+        if not DECISION_WORD.search(line):
+            continue
+        if any(pat.match(line) for pat in DECISION_HEADERS):
+            continue
+        misses.append(line.strip())
+    return misses
 
 
 def extract_affected_files(text: str) -> List[str]:
@@ -240,15 +324,38 @@ def main():
     # splitext (not .replace) so filenames containing ".md" mid-name aren't mangled.
     session_id = os.path.splitext(os.path.basename(summary_path))[0]
 
+    # Redact FIRST. Everything below is derived from `text` — the chunks that get embedded,
+    # but also the `decisions` payload field and the affected-file list — and an earlier
+    # ordering redacted only the chunks, so a secret quoted inside a `## Decisions Made`
+    # bullet still reached Qdrant verbatim while the report claimed the index was clean.
+    # Redaction masks values in place; it removes no heading and no bullet, so extraction
+    # counts exactly what it would have counted before.
+    # Flag on the ORIGINAL text: redaction can collapse a multi-line PEM block into a single
+    # token, after which every reported line number points at the wrong line of the file the
+    # report is asking the user to open. Values are never echoed either way.
+    possible = flag_possible_secrets(text)
+    text, redacted = redact_secrets(text)
+
     decisions = extract_decisions(text)
     affected_files = extract_affected_files(text)
+    unmatched = find_unparsed_decision_headings(text)
+
+    if redacted:
+        print(f"[session-ingest] Redacted {len(redacted)} secret-shaped value(s) before indexing.")
+    if possible:
+        print(f"[session-ingest] WARNING: {len(possible)} line(s) look like credential assignments "
+              "(reported, NOT modified).")
+    if unmatched:
+        print(f"[session-ingest] WARNING: decision-like heading(s) not parsed: {', '.join(unmatched)}")
 
     chunks = chunk_text(text)
     if not chunks:
         # Bail BEFORE the delete below: an empty summary would otherwise wipe the prior
         # session's points and upsert nothing in their place.
         print("[session-ingest] Summary body is empty — nothing to ingest, index unchanged.")
-        report_success(session_id, 0, False, len(decisions), len(affected_files))
+        report_success(session_id, 0, False, len(decisions), len(affected_files),
+                       redacted=redacted, unmatched_headings=unmatched, summary_path=summary_path,
+                       possible_secrets=possible)
         sys.exit(0)
     print(f"[session-ingest] Chunked into {len(chunks)} chunks.")
     print(f"[session-ingest] Decisions extracted: {len(decisions)}")
@@ -262,7 +369,10 @@ def main():
     if backend_error:
         print(f"[session-ingest] {backend_error}")
         report_success(session_id, len(chunks), False, len(decisions), len(affected_files),
-                       developer=developer, domains=domains)
+                       developer=developer, domains=domains, redacted=redacted,
+                       unmatched_headings=unmatched, summary_path=summary_path,
+                       possible_secrets=possible)
+
         sys.exit(1)
 
     qdrant_ok = False
@@ -316,7 +426,10 @@ def main():
         print("[session-ingest] Fallback: markdown summary already exists; will retry on next run.")
 
     report_success(session_id, len(chunks), qdrant_ok, len(decisions), len(affected_files),
-                   developer=developer, domains=domains)
+                   developer=developer, domains=domains, redacted=redacted,
+                   unmatched_headings=unmatched, summary_path=summary_path,
+                       possible_secrets=possible)
+
     # Exit code must MATCH the report: this used to always exit 0, so a failed embed or a
     # failed upsert printed "WARNING" and still told the caller it had succeeded — the
     # silent "memory did not update" the field report described. There is no exit-2

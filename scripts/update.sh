@@ -186,6 +186,12 @@ CORE_FILES=(
   # BELOW this file. init-sumela copies it to a LIVE rule, so an edit here only
   # reaches an existing install if it is named explicitly.
   ".sumela/rules/operational_excellence_maintenance.md.template"
+  # The same trap one directory up: .sumela/ itself is not a CORE_DIR, so anything shipped at
+  # its ROOT reaches fresh installs only. This template is framework-authored (init-sumela
+  # renders it into the OVERLAY RULE_REGISTRY.md) and it carried the anti-fork guidance added
+  # in v0.9.0 — which therefore never reached a single upgrading install. The RENDERED
+  # RULE_REGISTRY.md stays OVERLAY and is still never overwritten.
+  ".sumela/RULE_REGISTRY.md.template"
 )
 CORE_DIRS=(
   ".sumela/skills"
@@ -255,14 +261,123 @@ echo "${BOLD}=== SumelaOS core update: ${LOCAL_VER} → ${SRC_VER} ===${RESET}"
 echo "  New core files:      $n_new"
 echo "  Changed core files:  $n_changed"
 [ "$schema_changed" = true ] && echo "  Derived (live _SCHEMA): 1 (from refreshed template)"
-[ "$n_def" -gt 0 ] && echo "  Updater self-changed: $n_def (re-run after this to pick up; not auto-applied)"
+[ "$n_def" -gt 0 ] && echo "  Updater self-changed: $n_def (installed during this run; re-run with --force to finish)"
 echo "  Overlay (AGENTS.md, RULE/SKILL_REGISTRY, stack rules, wiki, governance/CI): left untouched"
+
+prior_vendored() {
+  # Paths a PREVIOUS PASS OF THIS SAME UPGRADE vendored — nothing else.
+  #
+  # The two-pass flow (updater-only pass, then the forced re-run) must not lose scripts/update.*
+  # from the record. But carrying every past record forward unconditionally is worse than losing
+  # it: a file vendored once would satisfy the self-modification guard forever, so a later
+  # hand-edit of e.g. security_protocol.md would be announced as a verified upgrade. Version
+  # numbers cannot tell the two cases apart either — both passes of one upgrade can share a
+  # version, and two upgrades can too. So the FIRST pass marks the record explicitly, and only a
+  # record carrying that mark is merged. The mark is cleared by the pass that consumes it.
+  local rec="$ROOT/.sumela/.last-update.json"
+  [ -f "$rec" ] || return 0
+  grep -q '"pending_rerun": true' "$rec" 2>/dev/null || return 0
+  sed -n 's/^    "\(.*\)".*$/\1/p' "$rec"
+}
+
+write_provenance() {   # $1 = version, $2 = pending_rerun (true|false), rest = paths
+  [ "$DRY_RUN" = true ] && return 0
+  # Read the prior list BEFORE opening the redirect: `> $rec` truncates at redirect time,
+  # i.e. before the brace group's body runs, so reading it inside would always see nothing.
+  _ver="$1"; _pending="$2"; shift 2
+  _prior="$(prior_vendored)"
+  {
+    printf '{\n'
+    printf '  "version": "%s",\n' "$_ver"
+    printf '  "updated_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf '  "pending_rerun": %s,\n' "$_pending"
+    printf '  "files": [\n'
+    printf '%s\n' "$@" ${_prior:+$_prior} | sort -u | while IFS= read -r _p; do
+      [ -n "$_p" ] && printf '    "%s"\n' "$_p"
+    done | sed '$!s/$/,/'
+    printf '  ]\n}\n'
+  } > "$ROOT/.sumela/.last-update.json" 2>/dev/null || true
+  unset _prior _ver _pending
+}
+
+# Install the new updater over the old one. An updater only knows the CORE list IT shipped
+# with, so when scripts/update.{sh,ps1} change upstream this run may have silently skipped
+# files that became CORE after this copy was written — that is how
+# operational_excellence_maintenance.md.template stayed frozen through a 0.15 -> 0.17 upgrade.
+# Echoes each installed path so the caller can fold them into the provenance record.
+install_self() {
+  [ "$n_def" -gt 0 ] || return 0
+  [ "$DRY_RUN" = true ] && return 0
+  # "[s]kip all" is a statement about vendored overwrites in general; silently replacing a
+  # fork's patched updater would contradict it. Honour the same answer here.
+  case "${mode:-a}" in s|S) return 0 ;; esac
+  # ...and so is reviewing each file and declining all of them.
+  if [ "${n_changed:-0}" -gt 0 ] && [ -z "${applied_changed:-}" ]; then return 0; fi
+  for _self in $SELF_DEFER; do
+    [ -f "$SRC/$_self" ] || continue
+    # Only the ones that actually differ — otherwise an unchanged twin gets a .bak and is
+    # recorded as vendored when nothing about it changed.
+    cmp -s "$SRC/$_self" "$ROOT/$_self" 2>/dev/null && continue
+    _tmp="$ROOT/$_self.sumela-new.$$"
+    # Keep the outgoing copy: this is the one file the user cannot diff during the run.
+    [ -f "$ROOT/$_self" ] && cp "$ROOT/$_self" "$ROOT/$_self.bak" 2>/dev/null || true
+    if cp "$SRC/$_self" "$_tmp" 2>/dev/null && mv -f "$_tmp" "$ROOT/$_self" 2>/dev/null; then
+      printf '%s\n' "$_self"
+    else
+      rm -f "$_tmp" 2>/dev/null || true
+      # A '!' prefix marks a failure. Swallowing it meant installing update.ps1 but not
+      # update.sh read as success: VERSION stamped, old updater stranded, log claiming
+      # "the NEW scripts/update.sh has been installed".
+      printf '!%s\n' "$_self"
+    fi
+  done
+  unset _self _tmp
+}
 
 if [ "$n_new" -eq 0 ] && [ "$n_changed" -eq 0 ] && [ "$schema_changed" != true ]; then
   ok "No core file changes to apply."
-  [ "$n_def" -gt 0 ] && warn "Only the updater itself changed upstream — re-copy scripts/update.* manually."
-  # Still advance the version stamp so the gate is satisfied next time.
-  [ "$DRY_RUN" != true ] && printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
+  if [ "$n_def" -gt 0 ]; then
+    # Updater-only release. This used to exit here telling the user to copy the files by
+    # hand — and the version stamp below then made a re-run report "Already on core version",
+    # stranding the old updater permanently. Install it here instead; nothing else changed,
+    # so no re-run is needed.
+    _installed="$(install_self)"
+    if [ -n "$_installed" ]; then
+      ok "Updater refreshed: $(printf '%s' "$_installed" | tr '\n' ' ')"
+      # Record it, or the self-modification guard sees changed scripts/ paths that no record
+      # explains and classifies this vendored upgrade as developer-authored.
+      # Stamp the version still in .sumela/VERSION, not SRC_VER: this branch deliberately
+      # leaves VERSION alone, and the guard requires record.version == VERSION to validate.
+      write_provenance "$LOCAL_VER" true $_installed
+      # Deliberately do NOT stamp VERSION here. "No core changes" was computed from the OLD
+      # updater's CORE list, which is the thing we just replaced because it cannot be trusted
+      # to be complete — a release that changes the updater AND adds a root-level CORE entry
+      # would lose that file forever if we declared the install current. Leaving the stamp
+      # behind makes the next plain re-run do a real pass with the NEW updater.
+      warn "Version NOT stamped: the new updater must re-check the file set it knows about."
+      warn "  RE-RUN NOW to finish:  bash scripts/update.sh"
+      [ "$DRY_RUN" != true ] && rm -f "$ROOT/.sumela/.update-check"
+      exit 0
+    elif [ "$DRY_RUN" != true ]; then
+      # The copy failed (permissions, read-only checkout, disk). Stamping VERSION here would
+      # declare the install current and strand the old updater permanently, silently.
+      warn "Could not install the new updater. Version NOT stamped — fix the cause and re-run."
+      warn "  Expected to replace: $SELF_DEFER"
+      exit 1
+    fi
+    unset _installed
+  fi
+  # Nothing changed at all — advance the version stamp so the gate is satisfied next time.
+  if [ "$DRY_RUN" != true ]; then
+    # Re-stamp any record an earlier updater-only pass left at the OLD version: advancing
+    # VERSION without it would break `record.version == VERSION` and make the vendored
+    # scripts/update.* read as developer-authored on the next review.
+    _carry="$(prior_vendored)"
+    printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
+    [ -n "$_carry" ] && write_provenance "$SRC_VER" false $_carry
+    unset _carry
+    rm -f "$ROOT/.sumela/.update-check"
+  fi
   exit 0
 fi
 
@@ -281,6 +396,7 @@ for f in ${new_list[@]+"${new_list[@]}"}; do apply_file "$f"; ok "added  $f"; do
 
 # Changed core files — ask once how to handle them.
 n_skipped=0
+applied_changed=""   # only these go into the provenance record
 if [ "$n_changed" -gt 0 ]; then
   mode="a"
   if [ "$ASSUME_YES" != true ]; then
@@ -295,8 +411,8 @@ if [ "$n_changed" -gt 0 ]; then
         echo ""; echo "${BOLD}--- $f ---${RESET}"
         diff -u "$ROOT/$f" "$SRC/$f" | sed 's/^/  /' || true
         echo "Update this file? [y/N]:"; read -r yn
-        case "$yn" in y|Y) apply_file "$f"; ok "updated $f" ;; *) echo "  skip   $f"; n_skipped=$((n_skipped+1)) ;; esac ;;
-      *) apply_file "$f"; ok "updated $f" ;;
+        case "$yn" in y|Y) apply_file "$f"; applied_changed="$applied_changed $f"; ok "updated $f" ;; *) echo "  skip   $f"; n_skipped=$((n_skipped+1)) ;; esac ;;
+      *) apply_file "$f"; applied_changed="$applied_changed $f"; ok "updated $f" ;;
     esac
   done
 fi
@@ -349,8 +465,35 @@ if [ -f "$ROOT/scripts/sync-shared-rules.py" ] && command -v python3 >/dev/null 
 fi
 
 # --- Finalize ----------------------------------------------------------------
-printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
+# Install the new updater BEFORE the version stamp and before the record below. Before the
+# STAMP because a failed install must not be locked in behind the version gate — the same
+# reason the updater-only branch above refuses to stamp. Before the RECORD because those
+# paths are vendored content too, and `requesting-code-review`'s self-modification guard
+# treats any changed path ABSENT from the record as developer-authored, which would force a
+# Deep-tier review and a false self-modification banner on the very next review.
+SELF_RESULT="$(install_self)"
+SELF_INSTALLED="$(printf '%s\n' "$SELF_RESULT" | grep -v '^!' || true)"
+SELF_UNINSTALLED="$(printf '%s\n' "$SELF_RESULT" | grep '^!' | sed 's/^!//' || true)"
 
+if [ "$n_def" -gt 0 ] && [ -n "${SELF_UNINSTALLED:-}" ] && \
+   ! { [ "${mode:-a}" = "s" ] || [ "${mode:-a}" = "S" ] || \
+       { [ "${n_changed:-0}" -gt 0 ] && [ -z "${applied_changed:-}" ]; }; }; then
+  # A real failure, not a declined install: leave VERSION alone so a re-run retries. The
+  # file changes this run applied are already on disk and re-applying them is idempotent.
+  warn "Could not install: $(printf '%s' "$SELF_UNINSTALLED" | tr '\n' ' ')"
+  warn "  VERSION left at ${LOCAL_VER} so a re-run retries."
+  RECORD_VER="$LOCAL_VER"
+else
+  printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
+  RECORD_VER="$SRC_VER"
+fi
+# The update-check cache still holds the version we were BEFORE this run, so the next pull
+# would announce an upgrade that already happened. Delete rather than rewrite: _lib.sh owns
+# the "<epoch>\t<remote_ver>" format and re-probes whenever the file is missing.
+rm -f "$ROOT/.sumela/.update-check"
+
+# Record what THIS run vendored, plus anything a pending first pass left (see prior_vendored,
+# which keys on the record's own pending_rerun marker rather than on version numbers).
 # Record that THIS run vendored these files. `requesting-code-review`'s
 # self-modification guard has to tell a framework upgrade (vendored content the
 # developer did not write) from a hand-edited rule, and it cannot do that from the
@@ -358,22 +501,11 @@ printf '%s\n' "$SRC_VER" > "$ROOT/.sumela/VERSION"
 # security_protocol.md. Without a record the guard has no executable test — $SRC is a
 # local here and CLONE_TMP is trapped away on exit, so nothing survives to compare
 # against. Per-developer state; gitignored alongside the other runtime artifacts.
-if [ "$DRY_RUN" != true ]; then
-  {
-    printf '{\n'
-    printf '  "version": "%s",\n' "$SRC_VER"
-    printf '  "updated_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '  "files": [\n'
-    _first=1
-    for _f in ${new_list[@]+"${new_list[@]}"} ${changed_list[@]+"${changed_list[@]}"}; do
-      [ "$_first" = 1 ] || printf ',\n'
-      printf '    "%s"' "$_f"; _first=0
-    done
-    [ "$_first" = 1 ] || printf '\n'
-    printf '  ]\n}\n'
-  } > "$ROOT/.sumela/.last-update.json" 2>/dev/null || true
-  unset _first _f
-fi
+_derived=""
+[ "${do_schema:-false}" = true ] && _derived="$SCHEMA_LIVE"
+write_provenance "$RECORD_VER" false ${new_list[@]+"${new_list[@]}"} ${applied_changed:-} \
+                 ${_derived:+"$_derived"} ${SELF_INSTALLED:+$SELF_INSTALLED}
+unset _derived
 chmod +x "$ROOT/.sumela/git-hooks/pre-commit" "$ROOT/.sumela/git-hooks/post-merge" "$ROOT/.sumela/git-hooks/post-checkout" "$ROOT/.sumela/git-hooks/post-commit" 2>/dev/null || true
 
 echo ""
@@ -395,5 +527,28 @@ if [ -f "$ROOT/.sumela/RULE_REGISTRY.md" ] && ! grep -qE '^<domain_scopes>$' "$R
   warn "Business-domain support arrived in this core, but your RULE_REGISTRY.md has no <domain_scopes> section yet."
   warn "  To enable domains: add the <domain_scopes> block (see RULE_REGISTRY.md.template) — fastest via /onboardSumela or /evolve. Until then domains are simply inactive (no breakage)."
 fi
-[ "$n_def" -gt 0 ] && warn "The updater itself changed upstream — re-run 'bash scripts/update.sh' to pick up the new version."
+if [ "$n_def" -gt 0 ] && [ -n "${SELF_UNINSTALLED:-}" ]; then
+  case "${mode:-a}" in
+    s|S) warn "The updater also changed upstream; left in place because you chose [s]kip all."
+         warn "  Apply it when you want to:  bash scripts/update.sh --force" ;;
+    r|R) if [ "${n_changed:-0}" -gt 0 ] && [ -z "${applied_changed:-}" ]; then
+           warn "The updater also changed upstream; left in place because you declined every file."
+           warn "  Apply it when you want to:  bash scripts/update.sh --force"
+         else
+           warn "The updater changed upstream but could NOT be installed — replace scripts/update.sh"
+           warn "  by hand from the source clone, then re-run:  bash scripts/update.sh --force"
+         fi ;;
+    *)   warn "The updater changed upstream but could NOT be installed — replace scripts/update.sh"
+         warn "  by hand from the source clone, then re-run:  bash scripts/update.sh --force" ;;
+  esac
+elif [ "$n_def" -gt 0 ]; then
+  # Already installed above (before the provenance record). Say so loudly — one line at the
+  # end of a long log was not enough to get anyone to re-run it.
+  warn "The updater itself changed upstream. The NEW scripts/update.sh has been installed."
+  warn "  This run was executed by the OLD one, which cannot know about files that became"
+  warn "  CORE in a release between your previous version and ${SRC_VER}."
+  warn "  RE-RUN NOW to finish the upgrade:  bash scripts/update.sh --force"
+  warn "  (--force is required: this run already stamped VERSION, so a plain re-run would"
+  warn "   stop at the version gate without applying anything.)"
+fi
 echo "Review changes with 'git diff' before committing."

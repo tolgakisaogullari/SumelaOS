@@ -7,7 +7,7 @@ description: "Use when starting a session, ingesting a raw source, finishing a b
 The Second Brain is stored in `docs/second-brain/` (or your chosen Obsidian vault). It has three distinct layers (Karpathy pattern):
 
 1. `raw_sources/`: IMMUTABLE. User-provided articles, logs, PDFs, meeting notes. You MUST READ from here but NEVER modify these files.
-2. `artifacts/`: IMMUTABLE (write-once). LLM-generated plans (`artifacts/plans/`) and specs (`artifacts/specs/`). Created by `writing-plans` and `brainstorming` skills. Once written, NEVER modified.
+2. `artifacts/`: IMMUTABLE (write-once). LLM-generated plans (`artifacts/plans/`) and specs (`artifacts/specs/`). Created by `writing-plans` and `brainstorming` skills. The BODY — intent, steps, acceptance criteria — is never modified: it is the record of what was agreed, and editing it destroys the ability to tell plan from outcome. Two DESIGNATED APPEND BLOCKS are the only exception, both written by `context-handoff` and both additive: `> **[CHECKPOINT …]**` (where the work stopped) and `## Task Ground Rules` (constraints that hold for the whole task). Appending to those is not a modification; rewriting a step to encode either one is.
 3. `wiki/`: LIVE SYNTHESIS. A structured, interlinked directory of markdown files. You own this layer entirely. You create, update, and maintain cross-references here. This is where knowledge compounds.
 
 Schema (Configuration): Format rules live in `wiki/_SCHEMA.md`. Behavioral rules live in `.sumela/SKILL_REGISTRY.md` and this skill file.
@@ -97,7 +97,7 @@ When the user asks you to interact with the Second Brain, execute one of these s
    - ASK the user: *"Would you like me to save this decision to the wiki?"* — NEVER auto-capture without approval.
    - If approved:
      - Read `wiki/architecture-decisions.md` to find the latest AD-XX number, then repair whichever of these
-       is missing (check BOTH — an upgraded install typically has one without the other):
+       applies (check ALL THREE — an upgraded install typically matches exactly one):
        - **Page absent** → create it from `docs/second-brain/template/wiki/architecture-decisions.md.template`,
          substituting the project name and today's date for its `{{project_name}}`/`{{date_created}}`
          placeholders, ADD its `_INDEX.md` Decision Records link and its `_SEARCH_INDEX.md` row in the same
@@ -106,6 +106,23 @@ When the user asks you to interact with the Second Brain, execute one of these s
        - **Page present but unlinked** → add its `_INDEX.md` Decision Records link and its `_SEARCH_INDEX.md`
          row. An install that upgraded into this page keeps its own index files, so the page lands orphaned:
          Tier-3 keyword search cannot reach it and `context-handoff`'s standing-decisions pointer dangles.
+       - **Page present but in the PRE-0.18 shape** — it has `## AD-` entries but no `## Decisions` section,
+         no `## Conventions` heading and no per-entry `**Status:**` line. This is the common case on any
+         project that kept a hand-made decision record, and it is the one the installer deliberately does
+         not touch (dropping the template in would clobber real ADs). MIGRATE it, once:
+         1. Insert the template's `## Conventions` + **Entry shape** + `## Decisions` scaffold ABOVE the
+            first existing `## AD-` entry. Every existing entry stays BYTE-IDENTICAL below it — this is a
+            wrapper, not a rewrite. Never renumber, reword or reorder an existing decision.
+         2. Delete `decision_id` and `decision_status` from the page frontmatter if present. They were
+            required before this version; on a CONTAINER page holding many entries they are now omitted,
+            because id and status are per-entry (see `_SCHEMA.md`). A page-level `decision_status: accepted`
+            over dozens of independently-statused entries is actively misleading.
+         3. Do NOT backfill a `**Status:**` line into the existing entries — that would be guessing at
+            decisions you did not make. Readers treat an entry with no Status as still in force; only
+            `superseded` / `deprecated` are explicit.
+         Without this branch the whole standing-decisions feature silently no-ops on exactly the projects
+         that have the most decisions to carry: the count finds no `## Decisions` section, the filter finds
+         no Status line, and the next session proposes architecture as if the page were empty.
      - Append a new AD entry using the **Entry shape** block documented at the top of `architecture-decisions.md`
        (`## AD-XX` heading, then `**Status:** accepted` / `**Date:**` / `**Superseded by:** —`, then
        Decision → Context → Alternatives → Outcome). Do NOT copy `_SCHEMA.md`'s single-decision-page
@@ -156,7 +173,7 @@ Persists the session's conversational context as a structured, queryable wiki pa
 
 ### When invoked
 - **Task/branch completion** — `finishing-a-development-branch` Step 7 (so EVERY finished task leaves a record, even with no handoff).
-- **Context-pressure handoff** — `context-handoff` Protocol A Step 4 / Protocol B Step 6 (its `<decision_triage>` runs one step earlier, so each decision's durable home is already assigned when the summary is written).
+- **Context-pressure handoff** — `context-handoff` Protocol A Step 4 / Protocol B Step 6 (its `<decision_triage>` runs one step earlier, so each decision's durable home is already assigned when the summary is written). Degradable only per that skill's `<minimum_viable_handoff>` item 6, and the degradation must be declared in the handoff prompt.
 - **Explicit** — user asks to "save the session".
 If a summary for the same task already exists for today, UPDATE/supersede it (do not create a near-duplicate); idempotent re-ingest makes re-running safe.
 
@@ -168,7 +185,7 @@ Resolve and write into the `session-summary` frontmatter (format = `_SCHEMA.md` 
 - `session_date` ← today (ISO); `session_topics` ← 2-5 topics.
 
 ### Content (substantive — NOT lip-service)
-Fill every applicable section of the template with real detail: Topics; **Decisions Made with their rationale**; **Work Completed** (concrete changes + commit hash(es) + files); Artifacts (spec/plan links); Open Questions/Blockers; **Notes for the Next Session** (hard-won experience — dead ends, tooling quirks, how this user works — the session-to-session experience channel, which is NOT the `/evolve` queue: a pending signal is inert until `/evolve` runs and the next session sees only its count); Related Wiki Pages. A pointer-only stub defeats the memory — capture enough that the work is reconstructable. Keep the `## Decisions Made` heading verbatim and IN ENGLISH even in a non-English project — it has two consumers: `session-ingest.py` parses it into the Qdrant `decisions` payload, and `context-handoff` `<decision_triage>` reads it to route each decision to its durable home. A translated heading yields zero decisions on both paths, silently. The prose under it follows the project's documentation language.
+Fill every applicable section of the template with real detail: Topics; **Decisions Made with their rationale**; **Work Completed** (concrete changes + commit hash(es) + files); Artifacts (spec/plan links); Open Questions/Blockers; **Task Ground Rules** (constraints in force for the WHOLE task — scope exclusions, off-limits areas, deferrals; carried forward and pruned every session, since a dropped one becomes an agent doing work it was told not to do); **Notes for the Next Session** (hard-won experience — dead ends, tooling quirks, how this user works — the session-to-session experience channel, which is NOT the `/evolve` queue: a pending signal is inert until `/evolve` runs and the next session sees only its count); Related Wiki Pages. **Never write a credential, token, connection string, PIN or customer PII into the summary** — reference a secret by NAME and LOCATION, never by value (`the staging DSN in 1Password`, not the DSN). This file is git-tracked and is embedded into Qdrant `chat_history`, which later sessions surface verbatim, so a pasted value is permanent and searchable. `session-ingest.py` redacts secret-SHAPED values before indexing and reports what it caught, but that is a backstop for accidents, not a licence: the redactor only sees shapes it knows, and the markdown on disk keeps whatever was typed. A pointer-only stub defeats the memory — capture enough that the work is reconstructable. Keep the `## Decisions Made` heading verbatim and IN ENGLISH even in a non-English project — it has two consumers: `session-ingest.py` parses it into the Qdrant `decisions` payload, and `context-handoff` `<decision_triage>` reads it to route each decision to its durable home. A translated heading yields zero decisions on both paths, silently. The prose under it follows the project's documentation language.
 
 ### Steps
 1. Read `_SCHEMA.md` Session Summary Page Template (if not already in context).

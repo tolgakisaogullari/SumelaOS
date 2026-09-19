@@ -38,8 +38,10 @@ per-entry and live in each entry's **Status** line. Link one as `[[architecture-
 - **Never delete or rewrite a decision.** Reversing one means setting the old entry's **Status** to
   `superseded`, pointing its **Superseded by** at the new AD, and appending the new entry. History
   stays readable; only the status changes.
-- **Status values:** `accepted` | `superseded` | `deprecated`. Readers act on `accepted` entries
-  only; the others are kept so the reasoning trail survives.
+- **Status values:** `accepted` | `superseded` | `deprecated`. Readers act on every entry that is
+  NOT marked `superseded` or `deprecated` — allow-by-default, because a page written before this
+  convention has no **Status** line at all and filtering for `accepted` would hide every decision
+  on it. The non-accepted ones are kept so the reasoning trail survives.
 - After adding an entry, update `_SEARCH_INDEX.md`'s `architecture-decisions` row Key Terms with the
   new ID, and append a `decision` entry to `_LOG.md`. Full format in `_SCHEMA.md`.
 
