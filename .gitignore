@@ -40,6 +40,10 @@ docs/second-brain/wiki/
 .sumela/.update-check
 .sumela/.last-update.json
 .sumela/.retrieval-cache.json
+# Per-developer runtime directories (the wiki tool, the updater, handoff prompts)
+.sumela/.wiki/
+.sumela/.upgrade/
+.sumela/.handoff/
 # Code-review panel reports (per-developer evidence; quote the reviewed code)
 .sumela/reviews/
 

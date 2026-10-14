@@ -22,3 +22,12 @@ docs/second-brain/wiki/_LOG.md merge=union
 # The managed-.gitignore single source is matched line-for-line by setup/update on
 # both shells — pin it to LF so a Windows checkout can't introduce CRLF mismatches.
 scripts/lib/sumela-gitignore.list text eol=lf
+
+# Line endings for this repository's scripts, hooks and templates. Git for Windows
+# defaults to core.autocrlf=true, which checks text out with CRLF: bash then trips on
+# the `\r` in a script or an extension-less hook, and a template copied into a project
+# no longer matches its source byte for byte. Pinned to LF on every platform.
+# (tests/test_env_tables.sh checks these with `git check-attr eol`.)
+*.sh text eol=lf
+.sumela/git-hooks/* text eol=lf
+docs/second-brain/template/** text eol=lf

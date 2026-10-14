@@ -10,6 +10,11 @@
 .sumela/.update-check
 .sumela/.last-update.json
 .sumela/.retrieval-cache.json
+# Per-developer runtime directories (v0.20.0+): the wiki tool's caches, the updater's
+# plan, merge and undo files, and the latest handoff prompt. Never commit them.
+.sumela/.wiki/
+.sumela/.upgrade/
+.sumela/.handoff/
 # Code-review panel reports (per-developer evidence; quote the reviewed code, so they
 # inherit the diff's sensitivity — never commit)
 .sumela/reviews/

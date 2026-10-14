@@ -25,16 +25,29 @@
 # removed summary is intentionally retained (deleting a file does not retract a
 # past decision from memory).
 #
-# Opt out / tune per developer:
+# Opt out / tune per developer. This list names every SUMELA_* variable a hook in this
+# directory reads, including the two `pre-commit:` lines (that hook reads them itself; it
+# does not source this file). The one central table, with defaults and the setup,
+# plugin and tool variables too, is the Configuration section of
+# .sumela/git-hooks/README.md. In the SumelaOS source repository (its tests/ directory
+# is not installed into projects), tests/test_env_tables.sh fails when a variable the
+# code reads is missing from either list. Every switch below except SUMELA_GRAPHIFY_VIZ
+# is on for ANY non-empty value, 0 and false included: unset it to turn it off.
 #   export SUMELA_DISABLE_MEMORY_SYNC=1   # session summaries -> chat_history (default on)
 #   export SUMELA_DISABLE_GRAPH_SYNC=1    # graphify code graph              (default on)
 #   export SUMELA_DISABLE_WIKI_SYNC=1     # Qdrant wiki_pages                (default on)
 #   export SUMELA_DISABLE_CODE_SYNC=1     # Qdrant code_chunks: off entirely (no prune/embed)
 #   export SUMELA_PULL_CODE_REINGEST=1    # Qdrant code_chunks: force a FULL tree re-embed
+#   export SUMELA_DISABLE_COLLECTION_MIGRATE=1  # skip the one-time per-project Qdrant collection migration
 #   export SUMELA_DISABLE_UPDATE_CHECK=1  # don't probe upstream for a newer SumelaOS release
+#   export SUMELA_UPDATE_CHECK_INTERVAL=86400   # seconds between upstream probes (default: once a day)
 #   export SUMELA_WORKTREE_SYNC=1       # sync on `git worktree add` too (default: skip — see post-checkout)
 #   export SUMELA_GRAPHIFY_VIZ=1        # force graphify's graph.html above its ~5000-node viz limit
 #                                       # (default: skip — a 2nd clustering pass + a huge unread HTML)
+#   export SUMELA_DISABLE_PRECOMMIT=1     # pre-commit: skip the whole hook (structure, mirrors AND
+#                                         # the secret scan) — a control weakening: ask first
+#   export SUMELA_DISABLE_SECRET_SCAN=1   # pre-commit: skip only the gitleaks scan — a control
+#                                         # weakening: ask first (.sumela/rules/security_protocol.md)
 # Override paths/endpoints: SUMELA_SUMMARIES_DIR, WIKI_PATH, QDRANT_HOST, QDRANT_PORT
 
 # Git's well-known empty-tree object (lets us diff a fresh clone's HEAD against
@@ -149,8 +162,13 @@ sumela_memory_sync() {
   # instead of git's default octal-escaped, double-quoted form — otherwise the
   # file-existence guard below would silently skip them. (Newline-in-filename
   # is still unsupported — unrealistic for committed summary slugs.)
+  # --no-renames, on EVERY name-only diff in this file: git detects renames by default
+  # (diff.renames), and a moved file is then one R entry, which neither
+  # --diff-filter=AM nor =D selects. A moved summary was never ingested at its new path,
+  # and a moved wiki page or code file kept its OLD path's points forever. Without
+  # rename detection a move is D (old path) + A (new path): prune the old, ingest the new.
   local changed
-  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "$pathspec" 2>/dev/null)" || return 0
+  changed="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=AM "$from" "$to" -- "$pathspec" 2>/dev/null)" || return 0
   [ -n "$changed" ] || return 0
 
   # Prereq gate: Qdrant must be reachable. If not, skip silently — the summaries
@@ -252,9 +270,10 @@ sumela_graph_sync() {
 
   # Did real CODE change in this range? Limit to this install's subtree and exclude
   # the agent/wiki layer (docs/, .sumela/) via git pathspec. If nothing else changed,
-  # the graph is unchanged — skip the rebuild.
+  # the graph is unchanged — skip the rebuild. (--no-renames as on every diff here; see
+  # sumela_memory_sync.)
   local changed_code
-  changed_code="$(git -C "$repo" diff --name-only "$from" "$to" -- \
+  changed_code="$(git -C "$repo" diff --no-renames --name-only "$from" "$to" -- \
       "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null | head -1)"
   [ -n "$changed_code" ] || return 0
 
@@ -411,10 +430,12 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   # (-> chat_history, handled by memory-sync) and the underscore-special/derived
   # files (_LOG/_INDEX/_SEARCH_INDEX/_SCHEMA) the ingest script itself excludes —
   # so e.g. a union-merged _LOG.md alone never triggers a pointless re-ingest.
+  # --no-renames (see sumela_memory_sync): a moved page is D old + A new, so the old
+  # path's points are pruned and the new path is ingested.
   local wiki_chg wiki_del
-  wiki_chg="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
+  wiki_chg="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=AM "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
     | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
-  wiki_del="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
+  wiki_del="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=D "$from" "$to" -- "${scope}${wikidir}" 2>/dev/null \
     | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
 
   # Project-configured EXTRA doc dirs (default none). These are NOT wiki, so the
@@ -426,8 +447,8 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
     local -a eps=()
     while IFS= read -r d; do [ -n "$d" ] && eps+=( "${scope}${d}" ); done <<< "$extra_dirs"
     if [ "${#eps[@]}" -gt 0 ]; then
-      extra_chg="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- "${eps[@]}" 2>/dev/null | grep -E '\.md$')"
-      extra_del="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- "${eps[@]}" 2>/dev/null | grep -E '\.md$')"
+      extra_chg="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=AM "$from" "$to" -- "${eps[@]}" 2>/dev/null | grep -E '\.md$')"
+      extra_del="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=D "$from" "$to" -- "${eps[@]}" 2>/dev/null | grep -E '\.md$')"
     fi
   fi
 
@@ -490,10 +511,12 @@ sumela_code_sync() {  # $1 = "from" ref, $2 = "to" ref
   local scope="${install_rel:+$install_rel/}"
 
   # Code added/modified vs removed in this range (exclude docs/ + .sumela/).
+  # --no-renames (see sumela_memory_sync): a moved file is D old + A new, so the old
+  # path's chunks are pruned instead of answering searches with a path that is gone.
   local changed deleted
-  changed="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=AM "$from" "$to" -- \
+  changed="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=AM "$from" "$to" -- \
       "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null)"
-  deleted="$(git -C "$repo" -c core.quotePath=false diff --name-only --diff-filter=D "$from" "$to" -- \
+  deleted="$(git -C "$repo" -c core.quotePath=false diff --no-renames --name-only --diff-filter=D "$from" "$to" -- \
       "${install_rel:-.}" ":(exclude)${scope}docs" ":(exclude)${scope}.sumela" 2>/dev/null)"
   [ -n "$changed$deleted" ] || return 0
 
