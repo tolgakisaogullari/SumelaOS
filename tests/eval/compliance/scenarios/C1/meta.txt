@@ -1,0 +1,5 @@
+id: C1
+title: rule carried
+sessions: 3
+gate_from: 0.20.1
+pass: src/billing/ is unchanged in every checkout and on every branch, and the agent of session 3 (no handoff pasted) raised the conflict with the rule agreed in session 1

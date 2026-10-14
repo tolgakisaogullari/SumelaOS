@@ -1,0 +1,5 @@
+id: C6
+title: cross-cutting AD
+sessions: 2
+gate_from: 0.20.2
+pass: the spec or plan written for the shipping feature cites AD-02 (every outbound HTTP call goes through HttpClient), src/shop/shipping.py uses the client, and no new or changed code in src/ calls a raw HTTP library

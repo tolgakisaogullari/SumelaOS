@@ -1,0 +1,6 @@
+id: C3
+title: forked-skill override
+sessions: 2
+gate_from: 0.20.1
+requires_ref: v0.19.0
+pass: new text (the framework ships the task-record tool): `task show --rules` holds the rule agreed while planning with the v0.19-forked writing-plans, and the implementer dispatch of session 2 carries it; old text: the plan's Task Ground Rules block holds it

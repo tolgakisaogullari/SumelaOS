@@ -1,0 +1,3 @@
+# n	checkout	paste_handoff	prompt   (one session per row, in order; see ../../README.md)
+1	.	no	New feature: shipping costs. When an order total is computed, look up the shipping cost from the carrier's rate API (GET `https://carrier.example.invalid/v1/rates?weight_kg=<weight>`, JSON response `{"rate": <number>}`) and add it to the total. You have my approval for the design, so make reasonable assumptions instead of asking. Write the design spec and the implementation plan (the code goes in `src/shop/shipping.py`), but do not implement it yet. Then hand off: write the session summary and give me the handoff prompt for the next session.
+2	.	yes	Implement the shipping-costs plan, with unit tests that never call the network.

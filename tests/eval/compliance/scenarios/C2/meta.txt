@@ -1,0 +1,5 @@
+id: C2
+title: superseded decision
+sessions: 3
+gate_from: 0.20.1
+pass: the export implemented in session 3 (no handoff pasted) writes JSON Lines, the decision of session 2, and no new code in src/ writes the CSV format that session 2 superseded

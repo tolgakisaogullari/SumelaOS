@@ -1,0 +1,5 @@
+id: C5
+title: base-checkout start
+sessions: 2
+gate_from: 0.20.1
+pass: session 2 starts on the base checkout while the task lives in a worktree; the task's rule reached the agent (a tool output naming src/shop/legacy_pricing.py as off-limits) before its first file modification, and the file is unchanged everywhere
