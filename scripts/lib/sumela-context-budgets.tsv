@@ -1,0 +1,33 @@
+# SumelaOS context budgets. One row per budget, TAB-separated, LF line endings.
+# Readers skip blank lines and lines that start with '#'. Every row has exactly 7 columns:
+#kind	key	bytes	lines	max_line	overridable	reason
+# - bytes, lines, max_line: the pinned maximum, or '-' when that column is not pinned.
+#   Sizes are counted with CRLF read as LF, so a Windows checkout measures the same.
+# - overridable: yes|no. 'no' means .sumela/context-budgets.local.tsv cannot change the row.
+#
+# Kinds checked by tests/test_eager_budget.py in the framework repository:
+#   eager-member <path>  a file every session reads before its first answer (the eager set)
+#   eager-const  <name>  bytes of command output the bootstrap adds to the eager set
+#   eager-total  *       the eager set: the eager-member files as measured, plus the eager-const rows
+#   file         <path>  a framework source file pinned on its own
+# Every pin is a ratchet. Lower it when the file shrinks: a pin more than 2,000 B above the
+# measured value fails as stale. Loosening one needs, once .sumela/VERSION moves past the
+# previous tag, a (vX.Y.Z) CHANGELOG bullet that contains "eager budget". Loosening is a raised
+# pin, a pin replaced by '-', a row turned overridable, or a dropped row, measured against the
+# previous tag's table (or, while that tag has none, against the commit that added this file).
+# The test does not check rows of other kinds.
+eager-member	CLAUDE.md.template	457	-	-	no	the Claude Code pointer (CLAUDE.md), loaded with every session
+eager-member	AGENTS.md.template	12172	-	-	no	AGENTS.md, the pointer every IDE loads before the contract
+eager-member	.sumela/sumela-prompt.md	35723	-	-	no	the runtime contract, loaded through the pointer chain
+eager-member	.sumela/SKILL_REGISTRY.md	12818	-	-	no	STEP 1 read
+eager-member	.sumela/RULE_REGISTRY.md.template	12880	-	-	no	STEP 1 read of .sumela/RULE_REGISTRY.md, rendered from this template
+eager-member	.sumela/local.md.example	1747	-	-	no	STEP 1 read of .sumela/local.md; the example stands in for the per-developer file
+eager-member	docs/second-brain/template/wiki/_INDEX.md.template	1328	-	-	no	STEP 2 read of the whole _INDEX.md, as a fresh install has it
+eager-member	docs/second-brain/template/wiki/active-project-context.md.template	2358	-	-	no	STEP 2 read of the whole active-project-context.md, as a fresh install has it
+eager-member	.sumela/skills/using-superpowers/SKILL.md	10345	-	-	no	STEP 3 eager skill
+eager-member	.sumela/skills/context-handoff/SKILL.md	36052	-	-	no	STEP 3 eager skill
+eager-member	.sumela/rules/engineering_philosophy.md	3246	-	-	no	STEP 4 universal rule
+eager-member	.sumela/rules/identity_and_behavior.md	5449	-	-	no	STEP 4 universal rule
+eager-const	log-tail+imp-count	66	-	-	no	STEP 2 command output on a fresh install: the _LOG.md tail (64 B) and the pending-signal count (2 B)
+eager-total	*	134641	-	-	no	the eager set measured on v0.19.0: the 12 eager-member files plus eager-const
+file	.sumela/sumela-prompt.md	35723	-	-	no	the contract on its own, apart from the eager set it belongs to

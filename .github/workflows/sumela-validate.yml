@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }          # the normative floor and eager budget need the previous tag
 
       - name: Validate SumelaOS structure (+ unfilled placeholders)
         run: bash scripts/validate-structure.sh --check-placeholders

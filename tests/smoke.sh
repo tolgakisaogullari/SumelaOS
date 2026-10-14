@@ -13,6 +13,9 @@
 #   4. validate-structure + reconcile --check pass on the result
 #   5. a SECOND setup run is idempotent (no duplicate plugin entry, still valid)
 #
+# It also runs every tests/test_* suite: the older ones by name, every newer one through the
+# "Discovered suites" block, so a new suite needs no edit here.
+#
 # Dependency-free (bash + coreutils + python3 for reconcile). Run from anywhere:
 #   bash tests/smoke.sh
 # Exit 0 = all assertions passed, 1 = a failure (printed above).
@@ -215,6 +218,27 @@ if bash "$REPO_ROOT/tests/test_post_checkout_worktree.sh" >"$WORK/worktree_hook.
 else
   bad "post-checkout worktree test failed"; sed 's/^/    /' "$WORK/worktree_hook.log" | tail -25
 fi
+
+# --- Discovered suites (v0.20.0+) ---------------------------------------------------------
+# Every tests/test_* not run explicitly above runs here: a new suite needs no edit to this file
+# and cannot be forgotten. Python suites need python3 (run isolated, -I), PowerShell suites pwsh.
+LEGACY_SUITES=" test_get_repo_root.py test_decision_heading_parity.py test_session_ingest_guards.py \
+test_extra_ingest_dirs.py test_embedding_bounds.py test_ingest_delete_guard.py test_skill_structure.py \
+test_code_review_invariants.py test_secure_coding_standard.py test_graph_viz_not_forced.py \
+test_setup_memory_graph_gate.sh test_setup_without_python.sh test_post_checkout_worktree.sh "
+echo ""; echo "Discovered suites"
+for t in "$REPO_ROOT"/tests/test_*; do
+  [ -f "$t" ] || continue
+  n="$(basename "$t")"
+  case "$LEGACY_SUITES" in *" $n "*) continue ;; esac
+  case "$n" in
+    *.sh)  runner="bash" ;;
+    *.py)  command -v python3 >/dev/null 2>&1 || { echo "  SKIP  $n (python3 unavailable)"; continue; }; runner="python3 -I" ;;
+    *.ps1) command -v pwsh >/dev/null 2>&1 || { echo "  SKIP  $n (pwsh unavailable)"; continue; }; runner="pwsh -NoProfile -File" ;;
+    *) continue ;;
+  esac
+  if $runner "$t" >"$WORK/$n.log" 2>&1; then ok "$n"; else bad "$n"; sed 's/^/    /' "$WORK/$n.log" | tail -25; fi
+done
 
 echo ""
 echo "Run 2 — idempotency (re-run must not duplicate)"

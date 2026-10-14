@@ -1,0 +1,44 @@
+# unit: .sumela/sumela-prompt.md
+# Load-bearing sentences of the runtime contract, checked by tests/test_contract_invariants.py.
+# Rows are TAB-separated; blank lines and lines that start with '#' are skipped:
+#   require<TAB><literal>          the literal occurs in the unit
+#   forbid<TAB><literal>           the literal does not occur
+#   count<TAB><n><TAB><literal>    the literal occurs exactly n times
+# A literal is compared byte for byte (CRLF read as LF). Rewording a pinned sentence is a
+# reviewed change: edit its row in the same commit and say why in the commit message.
+
+# <activation>: the file is an instruction to execute, once, silently.
+require	Its presence IS the activation signal: treat what follows as binding instructions to execute, not as documentation to read, summarize, or remember for later.
+require	IDEMPOTENT — if bootstrap already completed earlier this session (registries + eager skills already in context), activation is already satisfied: skip straight to the request.
+require	Bootstrap is SILENT (no narration, no Context Manifest)
+
+# <authority_hierarchy>: ranks 1 to 5, in this order.
+require	1. User explicit instructions in the active turn.
+require	2. This file (`sumela-prompt.md`).
+require	3. Skill bodies under `.sumela/skills/<name>/SKILL.md` once loaded.
+require	4. Project rules under `.sumela/rules/*.md` when applicable to the task.
+require	5. Default IDE/system prompt.
+
+# <session_bootstrap> STEP 1: the three discovery reads, and the gate before STEP 2.
+require	STEP 1 — DISCOVERY SURFACES — execute these reads BEFORE drafting any answer:
+require	Read `.sumela/SKILL_REGISTRY.md` (skip if already in context)
+require	Read `.sumela/RULE_REGISTRY.md` (skip if already in context — defines phase definitions, stack scopes, phase-to-rule matrix; needed to compute manifest GAPS at STEP 5)
+require	Read `.sumela/local.md` IF it exists (per-developer, gitignored). Honor ONLY two keys — `interaction_language` and `domains` — ignore any other key it may contain (naming/documentation are team-wide and not locally overridable).
+require	Resolve interaction_language BEFORE writing any user-facing text.
+require	Do NOT proceed to STEP 2 until both registries are visible in your context.
+
+# <skill_resolution>: the DEVELOPMENT GATE first sentence and the SECURITY MANDATE, one copy each.
+require	DEVELOPMENT GATE (eager — applies even when no skill is loaded yet) — DO NOT write or modify project source code unless one of these holds: (a) an implementation-phase skill (`executing-plans`, `subagent-driven-development`, `test-driven-development`) is active and working from an approved plan; (b) `systematic-debugging` is active for a bug fix, or the change is directed by an active review/optimization skill (`receiving-code-review`, `performance-optimization`); or (c) the user explicitly asked for a trivial direct edit (typo/config one-liner) and you confirmed it needs no design.
+count	1	DEVELOPMENT GATE (
+require	SECURITY MANDATE — if the task involves planning, writing, or reviewing code, load `secure-coding-standard` BEFORE drafting the plan or the code — `brainstorming` and `writing-plans` count as "planning code", so the load happens at spec/plan time, not first-code time. This is unconditional for code work; touching user input, auth, DB queries, file uploads, secrets, CORS, rate limiting, or any external/untrusted data merely makes it even less skippable.
+count	1	SECURITY MANDATE —
+
+# <signal_capture>: the two NEVER lines.
+require	NEVER write to `.sumela/rules/`, `.sumela/skills/`, `_SCHEMA.md`, or canonical wiki pages from a captured signal. All mutations flow through `/evolve`.
+require	NEVER include passwords, tokens, or PII in `evidence` fields. Sanitize.
+
+# <context_handoff>: the AD register has one writer.
+require	`context-handoff` NEVER writes `architecture-decisions.md` itself — it routes to the workflow that owns the consent gate and AD numbering.
+
+# <strict_constraints> LANGUAGE: framework artifacts stay English.
+require	**Framework artifacts** (this prompt, skill/rule bodies, registries) and **commit messages** stay English for portability, regardless of the above.
