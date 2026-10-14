@@ -7,6 +7,14 @@ name: SumelaOS Validate
 # that setup.sh renders + registers correctly and is idempotent on re-run and which
 # also drives the tests/ unit suites (including the post-checkout worktree test).
 #
+# The `windows` job parses every tracked *.ps1 under Windows PowerShell 5.1. It runs the
+# PowerShell suites (tests/test_*.ps1) under Windows PowerShell 5.1 and pwsh 7, and the bash
+# suites that touch tracked text under Git Bash with core.autocrlf=true. Then it sets the user
+# culture to tr-TR and runs the PowerShell suites and the Git Bash suites again, so every
+# process they start runs under tr-TR too. The runners are tests/run-ps-fixtures.ps1 and
+# tests/run-gitbash-fixtures.sh, both tested by tests/test_fixture_runners.sh. Each prints
+# "0 suites" and passes until its suites exist.
+#
 # Not on GitHub? See docs/second-brain/template/ADOPTION_GUIDE.md for a GitLab CI
 # / Azure Pipelines equivalent (both just run the same script).
 
@@ -37,27 +45,139 @@ jobs:
       - name: Shell script syntax check
         run: |
           set -e
-          for f in scripts/*.sh tests/*.sh; do
-            [ -f "$f" ] && bash -n "$f"
-          done
-          # Git hooks have no .sh extension; lint them explicitly if present.
-          for h in .sumela/git-hooks/_lib.sh .sumela/git-hooks/pre-commit \
-                   .sumela/git-hooks/post-merge .sumela/git-hooks/post-checkout \
-                   .sumela/git-hooks/post-commit; do
-            [ -f "$h" ] && bash -n "$h"
-          done
+          git ls-files -z '*.sh' | xargs -0 -n1 bash -n
+          for h in .sumela/git-hooks/pre-commit .sumela/git-hooks/post-merge \
+                   .sumela/git-hooks/post-checkout .sumela/git-hooks/post-commit; do bash -n "$h"; done
+          n="$(git ls-files '*.sh' | wc -l | tr -d ' ')"
+          [ "$n" -gt 0 ] || { echo "::error::git ls-files found no *.sh to check"; exit 1; }
+          echo "bash -n: $n tracked *.sh files and 4 extension-less hooks parse clean."
 
       - name: PowerShell script parse check
         shell: pwsh
         run: |
+          # Every tracked *.ps1. Not Get-ChildItem -Recurse: on Linux pwsh treats a dot-directory
+          # as hidden and, without -Force, never descends into .sumela/.
+          $files = @(git -c core.quotepath=off ls-files -- '*.ps1')
+          if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { Write-Host "::error::git ls-files found no *.ps1 to parse"; exit 1 }
           $bad = 0
-          Get-ChildItem -Recurse -Filter *.ps1 -ErrorAction SilentlyContinue | ForEach-Object {
+          foreach ($f in $files) {
             $tokens = $null; $errs = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errs)
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $f), [ref]$tokens, [ref]$errs)
             if ($errs) {
-              Write-Host "::error::Parse errors in $($_.FullName)"
+              Write-Host "::error::Parse errors in $f"
               $errs | ForEach-Object { Write-Host "  $($_.Extent.StartLineNumber): $($_.Message)" }
               $bad = 1
             }
           }
-          if ($bad) { exit 1 } else { Write-Host "PowerShell scripts parse clean." }
+          if ($bad) { exit 1 } else { Write-Host "PowerShell scripts parse clean ($($files.Count) tracked *.ps1 files)." }
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60                   # a hung suite must not hold the runner for the 6-hour default
+    steps:
+      - uses: actions/checkout@v4
+        id: checkout
+        with: { fetch-depth: 0 }
+
+      # Each step after the first also runs when an earlier one failed, so one push reports every
+      # environment. None runs after a failed checkout or a cancelled run, and the two tr-TR
+      # steps run only after the culture step has proved its setting.
+      - name: PowerShell script parse check (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          # Every tracked *.ps1, read the way Windows PowerShell 5.1 reads a script it runs: a file
+          # without a BOM as ANSI. A UTF-8 em dash in a string then ends that string early (code
+          # page 1252 reads its last byte, 0x94, as a closing double quote). PS7-only syntax fails too.
+          $files = @(git -c core.quotepath=off ls-files -- '*.ps1')
+          if ($LASTEXITCODE -ne 0 -or $files.Count -eq 0) { Write-Host "::error::git ls-files found no *.ps1 to parse"; exit 1 }
+          # Known failures at v0.19.0: BOM-less UTF-8 files with non-ASCII text in strings. Whoever
+          # makes one parse here (ASCII text, or a UTF-8 BOM) deletes its line. A listed file that
+          # parses fails this step, so the list only shrinks.
+          $known = @(
+            'scripts/setup-memory.ps1'
+            'scripts/setup.ps1'
+            'scripts/status.ps1'
+            'scripts/sync-mirrors.ps1'
+            'scripts/update.ps1'
+          )
+          $bad = 0
+          foreach ($f in $files) {
+            $tokens = $null; $errs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $f), [ref]$tokens, [ref]$errs)
+            $listed = $known -ccontains $f
+            if ($errs -and $listed) {
+              Write-Host "::warning::Known Windows PowerShell 5.1 parse failure in $f, line $($errs[0].Extent.StartLineNumber): $($errs[0].Message)"
+            } elseif ($errs) {
+              Write-Host "::error::Parse errors in $f under Windows PowerShell 5.1"
+              $errs | ForEach-Object { Write-Host "  $($_.Extent.StartLineNumber): $($_.Message)" }
+              $bad = 1
+            } elseif ($listed) {
+              Write-Host "::error::$f now parses under Windows PowerShell 5.1: delete its line from the known failures in this step"
+              $bad = 1
+            }
+          }
+          foreach ($k in $known) {
+            if (-not ($files -ccontains $k)) { Write-Host "::error::$k is a listed known failure but not a tracked *.ps1: delete its line"; $bad = 1 }
+          }
+          if ($bad) { exit 1 }
+          Write-Host ("Windows PowerShell {0}, ANSI code page {1}: {2} tracked *.ps1 files parse clean; {3} known failures (warnings above)." -f
+            $PSVersionTable.PSVersion, [System.Text.Encoding]::Default.CodePage, ($files.Count - $known.Count), $known.Count)
+
+      - name: PowerShell fixtures (Windows PowerShell 5.1)
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: powershell
+        run: powershell -NoProfile -File tests/run-ps-fixtures.ps1
+
+      - name: PowerShell fixtures (pwsh 7)
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/run-ps-fixtures.ps1
+
+      - name: Bash fixtures under Git Bash with CRLF checkouts       # Git for Windows' installer default
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: bash
+        run: |
+          case "$(uname -s)" in MINGW*|MSYS*) ;; *) echo "::error::This step needs Git Bash; uname -s is $(uname -s)"; exit 1 ;; esac
+          # This checkout itself used core.autocrlf=true. bash cannot run a script checked out with
+          # CRLF line endings, and .gitattributes pins scripts and hooks to LF: name any it missed.
+          crlf="$(git ls-files --eol -- '*.sh' '.sumela/git-hooks/' ':!*.md' | awk -F '\t' '$1 ~ /w\/(crlf|mixed)/ { print $2 }')"
+          if [ -n "$crlf" ]; then
+            echo "::error::Checked out with CRLF line endings, which bash cannot run. Pin them to LF in .gitattributes:"
+            printf '%s\n' "$crlf"
+            exit 1
+          fi
+          git config --global core.autocrlf true
+          bash tests/run-gitbash-fixtures.sh --require-crlf
+
+      - name: Set the user culture to tr-TR for the steps below      # "I".ToLower() is "ı" there
+        id: culture
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        shell: powershell
+        run: |
+          # A process takes the user culture when it starts. This step keeps its own culture, and
+          # every process started after it runs under tr-TR. Prove that on new processes of both hosts.
+          Set-Culture tr-TR
+          $bad = 0
+          foreach ($exe in @('powershell', 'pwsh')) {
+            $name = (& $exe -NoProfile -NonInteractive -Command '[System.Globalization.CultureInfo]::CurrentCulture.Name' | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or $name -cne 'tr-TR') {
+              Write-Host "::error::After Set-Culture tr-TR, a new $exe process runs under '$name'"
+              $bad = 1
+            } else { Write-Host "A new $exe process runs under $name." }
+          }
+          exit $bad
+
+      - name: PowerShell fixtures under the tr-TR culture
+        if: ${{ !cancelled() && steps.culture.outcome == 'success' }}
+        shell: pwsh
+        run: pwsh -NoProfile -File tests/run-ps-fixtures.ps1 -Culture tr-TR
+
+      - name: Bash fixtures under Git Bash, with the PowerShell processes they start under tr-TR   # twin parity
+        if: ${{ !cancelled() && steps.culture.outcome == 'success' }}
+        shell: bash
+        run: |
+          case "$(uname -s)" in MINGW*|MSYS*) ;; *) echo "::error::This step needs Git Bash; uname -s is $(uname -s)"; exit 1 ;; esac
+          name="$(pwsh -NoProfile -NonInteractive -Command '[System.Globalization.CultureInfo]::CurrentCulture.Name' | tr -d '\r')" || name="(pwsh failed)"
+          [ "$name" = tr-TR ] || { echo "::error::A pwsh process started from Git Bash runs under '$name', not tr-TR"; exit 1; }
+          git config --global core.autocrlf true
+          bash tests/run-gitbash-fixtures.sh --require-crlf
