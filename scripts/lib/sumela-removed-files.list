@@ -1,0 +1,23 @@
+# sumela-removed-files.list — CORE paths a release retires (v0.20.0+).
+#
+# scripts/update.sh (and its PowerShell twin) reads this file from the NEW release's tree, so a
+# release lists its own removals here, in the same commit that deletes the files.
+#
+# One row per retired path, three TAB-separated fields:
+#   <version>	<path>	<successor|->
+#     <version>    the release that removes <path> (X.Y.Z)
+#     <path>       the CORE path, relative to the install root
+#     <successor>  the CORE path that now carries its content, or "-" when none does
+#
+# An upgrade from the installed version I to the new version N acts on every row with
+# I < <version> <= N whose <path> the new release no longer ships:
+#   your copy is upstream's copy of I (unmodified)   remove: the file is deleted
+#   modified, successor "-"                          keep-removed: kept, recorded as removed-upstream
+#   modified, a successor named                      carry: kept; your hunks against I go to
+#                                                    .sumela/.upgrade/<path>.carry, to move into the
+#                                                    successor; you then keep or drop the orphan
+# Without a valid base for I nothing counts as unmodified, so nothing is removed.
+#
+# '#' comments and blank lines are ignored; a CR before a line end is ignored. A row whose path or
+# successor is not a CORE path (or holds a "." or ".." segment) is ignored, with a warning. Never
+# edit or delete a released row: an install upgrading across that release later still needs it.
