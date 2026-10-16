@@ -8,7 +8,9 @@ Usage:
 What it does:
     1. Walks docs/second-brain/wiki/ — plus any project-configured EXTRA doc dirs
        (EXTRA_INGEST_DIRS env / .sumela/ingest.conf, default none) — for .md files
-       (excluding special files), symlink-safe and deduped by resolved path.
+       (excluding special files, the improvement queue, and the task records and
+       focus files in the wiki root's _tasks/ and _team/ directories),
+       symlink-safe and deduped by resolved path.
     2. Parses YAML frontmatter (type, tags, date_updated).
     3. Chunks body by WORDS (512, 50 overlap), then hard-bounds each chunk by TOKENS —
        the two differ by up to 4x, see lib.memory_ingest.
@@ -164,18 +166,44 @@ EXCLUDED_FILES = {
 EXCLUDED_DIRS = {
     "_improvement-queue",
 }
+# Subdirectories pruned only DIRECTLY UNDER THE WIKI ROOT: the per-task records
+# (wiki/_tasks/) and the per-developer focus files (wiki/_team/) that the wiki tool
+# writes from v0.20.1. They hold one developer's working state, not curated project
+# knowledge, so they never enter wiki_pages. They are matched by path, not by name:
+# EXCLUDED_DIRS prunes a NAME at any depth, which would also drop a project's own pages
+# under, say, wiki/runbooks/team/ or wiki/runbooks/_team/. They are pruned wherever a walk
+# reaches the wiki root, so an extra dir that contains the wiki cannot bring them back, and
+# a file whose real path lies inside one is skipped, so neither can an extra dir configured
+# at or inside one. The pull hook's wiki filter (sumela_wiki_sync in
+# .sumela/git-hooks/_lib.sh) drops the same two paths, so a pull that touches only them
+# starts no re-ingest.
+EXCLUDED_ROOT_DIRS = {
+    "_tasks",
+    "_team",
+}
 
 
 def _walk_md(root: Path, excluded_files: set, excluded_dirs: set):
     """Yield .md Paths under root WITHOUT following directory symlinks and skipping
     any file whose real path escapes REPO_ROOT. This is the security backstop for
     extra dirs: even if `root` itself validated clean, a symlink committed INSIDE it
-    must not let the walk read files outside the repo."""
+    must not let the walk read files outside the repo.
+
+    EXCLUDED_ROOT_DIRS are pruned where `dirpath` is the wiki root, in every walk, and
+    a file whose real path lies inside one is skipped: a walk that starts at or inside
+    one (an extra dir configured there) never passes the wiki root."""
+    # The wiki walk starts at WIKI_DIR as configured; an extra dir is resolved, so a
+    # walk from one that contains the wiki arrives at the wiki's real path.
+    wiki_real = Path(os.path.realpath(WIKI_DIR))
+    wiki_roots = {WIKI_DIR, wiki_real}
+    excluded_real = {wiki_real / d for d in EXCLUDED_ROOT_DIRS}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        at_wiki_root = Path(dirpath) in wiki_roots
         # Prune excluded + symlinked subdirs in place (os.walk respects this).
         dirnames[:] = [
             d for d in dirnames
             if d not in excluded_dirs and d not in ALWAYS_SKIP_DIRS
+            and not (at_wiki_root and d in EXCLUDED_ROOT_DIRS)
             and not os.path.islink(os.path.join(dirpath, d))
         ]
         for fn in filenames:
@@ -187,6 +215,8 @@ def _walk_md(root: Path, excluded_files: set, excluded_dirs: set):
             rp = fp.resolve()
             if rp != REPO_ROOT and REPO_ROOT not in rp.parents:
                 continue
+            if any(x in rp.parents for x in excluded_real):
+                continue
             yield fp
 
 
@@ -197,13 +227,18 @@ def collect_doc_files():
     sources = []
     if WIKI_DIR.exists():
         sources.append((WIKI_DIR, EXCLUDED_FILES, EXCLUDED_DIRS))
+    # Both spellings of the wiki dir: extra dirs are resolved, WIKI_DIR may not be.
+    wiki_forms = (WIKI_DIR, Path(os.path.realpath(WIKI_DIR)))
     for d in EXTRA_DIRS:
-        # An extra dir that equals or contains the wiki is almost always a misconfig;
-        # dedupe handles correctness, but warn so the operator notices.
-        if d == WIKI_DIR or d in WIKI_DIR.parents:
-            print(f"[warn] extra ingest dir {d} overlaps the wiki dir — pages deduped, "
-                  f"but consider narrowing the config", file=sys.stderr)
-        sources.append((d, set(), set()))  # extra dirs: no wiki-specific excludes
+        # An extra dir that equals, contains or lies inside the wiki is almost always a
+        # misconfig; dedupe and the EXCLUDED_ROOT_DIRS guard handle correctness, but warn
+        # so the operator notices.
+        if any(d == x or d in x.parents or x in d.parents for x in wiki_forms):
+            print(f"[warn] extra ingest dir {d} overlaps the wiki dir — pages deduped and "
+                  f"_tasks/, _team/ still excluded, but consider narrowing the config",
+                  file=sys.stderr)
+        # Extra dirs: no wiki-specific excludes, except EXCLUDED_ROOT_DIRS (see _walk_md).
+        sources.append((d, set(), set()))
     jobs = []
     seen = set()
     for root, ef, ed in sources:

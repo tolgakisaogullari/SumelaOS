@@ -408,9 +408,9 @@ _sumela_extra_ingest_dirs() {  # $1 = install root
 # curated wiki pages (and any project-configured extra doc dirs) reflects teammates'
 # just-pulled updates. The tracked markdown is already current (git), but its LOCAL
 # embedding is not — this re-ingests it. Same contract: incremental (only when a
-# tracked doc changed — wiki session-summaries and underscore-special/derived files
-# are excluded), non-blocking, best-effort, and it writes ONLY to Qdrant (a local
-# cache), never the tracked tree.
+# tracked doc changed — wiki session-summaries, underscore-special/derived files and
+# the wiki root's _tasks/ and _team/ are excluded), non-blocking, best-effort, and it
+# writes ONLY to Qdrant (a local cache), never the tracked tree.
 sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   local from="$1" to="$2"
   [ -n "${SUMELA_DISABLE_WIKI_SYNC:-}" ] && return 0
@@ -425,11 +425,21 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   local install_rel; install_rel="$(git -C "$install" rev-parse --show-prefix 2>/dev/null)"; install_rel="${install_rel%/}"
   local scope="${install_rel:+$install_rel/}"
   local wikidir="${WIKI_PATH:-docs/second-brain/wiki}"
+  # Normalise the spelling the way git prints paths (no leading ./, no //), or the
+  # _tasks/ and _team/ prefix test below never matches. git reads the pathspec either way.
+  while :; do
+    case "$wikidir" in
+      ./*)  wikidir="${wikidir#./}" ;;
+      *//*) wikidir="${wikidir%%//*}/${wikidir#*//}" ;;
+      *)    break ;;
+    esac
+  done
 
   # Which CURATED wiki pages changed / were removed? Drop session-summaries
   # (-> chat_history, handled by memory-sync) and the underscore-special/derived
   # files (_LOG/_INDEX/_SEARCH_INDEX/_SCHEMA) the ingest script itself excludes —
   # so e.g. a union-merged _LOG.md alone never triggers a pointless re-ingest.
+  # (The wiki root's _tasks/ and _team/ are dropped from the union below.)
   # --no-renames (see sumela_memory_sync): a moved page is D old + A new, so the old
   # path's points are pruned and the new path is ingested.
   local wiki_chg wiki_del
@@ -439,8 +449,9 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
     | grep -vE '/session-summaries/' | grep -vE '/_[^/]*\.md$' | grep -E '\.md$')"
 
   # Project-configured EXTRA doc dirs (default none). These are NOT wiki, so the
-  # wiki-special filters above do NOT apply — every .md counts. Pathspecs go AFTER
-  # the `--`, so a dir name can never be read as a git option.
+  # wiki-special filters above do NOT apply — every .md counts, except the wiki
+  # root's _tasks/ and _team/ (see the union below). Pathspecs go AFTER the `--`,
+  # so a dir name can never be read as a git option.
   local extra_chg="" extra_del=""
   local extra_dirs; extra_dirs="$(_sumela_extra_ingest_dirs "$install")"
   if [ -n "$extra_dirs" ]; then
@@ -453,9 +464,18 @@ sumela_wiki_sync() {  # $1 = "from" ref, $2 = "to" ref
   fi
 
   # Union (sort -u also dedupes a file reachable from both wiki and an extra dir).
-  local changed deleted
-  changed="$(printf '%s\n%s\n' "$wiki_chg" "$extra_chg" | grep -E '\.md$' | sort -u)"
-  deleted="$(printf '%s\n%s\n' "$wiki_del" "$extra_del" | grep -E '\.md$' | sort -u)"
+  # Then drop the task records and focus files in the wiki root's _tasks/ and _team/
+  # (v0.20.1+), which the ingest never indexes, whichever diff reported them: an extra
+  # dir that contains the wiki would bring them back otherwise. Anchored at the wiki
+  # root, so a project's own runbooks/_team/ page still counts. A literal prefix test,
+  # not a regex: an install directory or WIKI_PATH holding regex characters (c++, (v2),
+  # a|b; BSD grep -E rejects the first) cannot break or widen it. git prints
+  # repo-root-relative paths, hence the ${scope}.
+  local changed deleted wiki_root="${scope}${wikidir%/}/"
+  changed="$(printf '%s\n%s\n' "$wiki_chg" "$extra_chg" | grep -E '\.md$' | LC_ALL=C sort -u \
+    | LC_ALL=C awk -v w="$wiki_root" 'index($0, w "_tasks/") != 1 && index($0, w "_team/") != 1')"
+  deleted="$(printf '%s\n%s\n' "$wiki_del" "$extra_del" | grep -E '\.md$' | LC_ALL=C sort -u \
+    | LC_ALL=C awk -v w="$wiki_root" 'index($0, w "_tasks/") != 1 && index($0, w "_team/") != 1')"
   [ -n "$changed$deleted" ] || return 0
 
   _sumela_qdrant_up || { echo "sumela: wiki_pages sync skipped (Qdrant not reachable)"; return 0; }
