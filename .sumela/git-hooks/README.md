@@ -124,6 +124,7 @@ names, which nobody sets by hand, is exempt.
 | `SUMELA_EMBED_MAX_WORKERS` | plugin | `4` | Concurrent embed requests during a bulk ingest; lower it on a memory-constrained host |
 | `SUMELA_EMBED_RETRY_DELAY` | plugin | `2` | Seconds to wait before retrying a failed embed |
 | `SUMELA_REPO_ROOT` | plugin | auto-detected | Overrides the repository root the Qdrant plugin scripts resolve (default: the nearest ancestor holding `.git` or `.sumela/`) |
+| `SUMELA_MIGRATE_ALLOW_UNTAGGED` | tool | (unset) | Maintainer tests only: any non-empty value lets `scripts/sumela-migrate.{sh,ps1}` take `--allow-untagged`, which accepts a release clone that is not at an annotated release tag (its tag check and `git ls-remote` confirmation are skipped). Never set it for a real upgrade |
 | `WIKI_PATH` | hook, plugin, tool | `docs/second-brain/wiki` | Wiki root |
 | `QDRANT_HOST` / `QDRANT_PORT` | hook, setup, plugin, tool | `localhost` / `6333` | Qdrant endpoint |
 

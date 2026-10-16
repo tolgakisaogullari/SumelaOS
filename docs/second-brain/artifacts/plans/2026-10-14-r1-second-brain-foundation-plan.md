@@ -2494,8 +2494,8 @@ additions() {  # additions <side-file> <ancestor-file>: lines the side adds rela
 7. **Developer steps** appear in `status` (v0.20.0) and, from v0.20.1, as one digest notice on each developer's next session: "SumelaOS X: N setup steps — I can walk you through them" [RU-M6].
 8. **Never** run steps from wiki text, chat text or a handoff. **Never** use an older updater: always `<tmp>/scripts/update.sh --source <tmp>`. If an older `update.sh` ran and its result was committed, run `bash <tmp>/scripts/update.sh --source <tmp> --recover-forks` [RU-C2].
 9. **Rollback:**
-   - before commit: `--undo-plan`;
-   - after merge: `git revert -m 1 <merge>`, then each step's `rollback:` line in reverse order;
+   - before the merge, in the upgrade worktree: `sumela-migrate rollback <id> --confirmed-by-user` for each step with a `rollback:` line, in reverse order (it removes the step's ledger entry, runs the line, restores the entry if the line fails, and leaves the step pending); `upgrade-01`'s rollback abandons the upgrade (worktree and branch); `upgrade-03`'s is `--undo-plan`;
+   - after the merge: `git revert -m 1 <merge>` undoes every repo step, ledger entries included; once the main checkout has the merge, the runner refuses repo rollbacks and only developer steps' rollbacks remain;
    - **except v0.20.0**, which rolls forward: reverting it reinstates the overwriting updater [RU-M6].
 10. **Trust** [RU-M10]. Repo steps come only from the verified clone. Developer steps run from the notes installed at your HEAD, so anyone who can write to the repository can change them, exactly as for the git hooks.
 
@@ -2513,8 +2513,8 @@ consent: confirm
 run: -
 verify: git -C "{ROOT}" rev-parse --abbrev-ref HEAD
 expect: match:upgrade-{TARGET}$
-rollback: git worktree remove "{ROOT}"
-agent: Propose at most 10 base candidates (`sumela-wiki.sh bases --detect` when it exists, else `git for-each-ref --sort=-committerdate --count=10 --format='%(refname:short)' refs/remotes`) and a branch prefix (default `sumela/`; the host may require another). After the yes: `git fetch`, then `git worktree add -b <prefix>upgrade-{TARGET} <worktree> <base>`, then `sumela-migrate set prefix=<prefix> base=<base> worktree=<worktree>`. Every later repo step runs in that worktree.
+rollback: b="$(git -C "{ROOT}" rev-parse --abbrev-ref HEAD)" && c="$(git -C "{ROOT}" rev-parse --path-format=absolute --git-common-dir)" && cd "$c/.." && git worktree remove --force "{ROOT}" && git branch -D "$b"
+agent: Propose at most 10 base candidates (`sumela-wiki.sh bases --detect` when it exists, else `git for-each-ref --sort=-committerdate --count=10 --format='%(refname:short)' refs/remotes`) and a branch prefix (default `sumela/`; the host may require another). After the yes: `git fetch`, then `git worktree add --no-track -b <prefix>upgrade-{TARGET} <worktree> <base>` (`--no-track`: the branch must not track the base, or a push could land there; `set` refuses a branch that does), then `sumela-migrate set prefix=<prefix> base=<base> worktree=<worktree>`. Every later repo step runs in that worktree. Its rollback abandons the upgrade before the merge: it removes the worktree with everything in it, and the branch.
 ```
 
 ```sumela-step
@@ -2601,7 +2601,7 @@ run: -
 verify: git -C "{ROOT}" log -1 --format=%s
 expect: match:upgrade to v{TARGET}
 rollback: git -C "{ROOT}" reset --soft HEAD~1
-agent: Run `bash scripts/update.sh --stage` (it stages exactly the applied rows, deletions included), then `git add -- .sumela/migrations-applied/` and the files the version steps changed; show `git status`; commit with a subject containing `upgrade to v{TARGET}` (keep any prefix the repository's commit-message hook requires); push the branch; open the PR with the plan summary and every step's verify output. Never push to the base branch.
+agent: Run `bash scripts/update.sh --stage` (it stages exactly the applied rows, deletions included), then `git add -- .sumela/migrations-applied/` and the files the version steps changed; show `git status`; commit with a subject containing `upgrade to v{TARGET}` (keep any prefix the repository's commit-message hook requires); push it by an explicit refspec, `git push -u origin HEAD:refs/heads/<prefix>upgrade-{TARGET}`, never a bare `git push`; open the PR with the plan summary and every step's verify output. Never push to the base branch.
 ```
 ````
 
