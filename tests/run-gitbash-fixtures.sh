@@ -10,8 +10,9 @@
 # tests this file.
 #
 # Suites, each that exists: tests/test_wiki_*.sh, tests/test_update_merge.sh,
-# tests/test_migrate_runner.sh, tests/test_migration_notes.sh. Each runs under this bash, with
-# the repository root as working directory and stdin from /dev/null, and passes when it exits 0.
+# tests/test_migrate_runner.sh, tests/test_migration_notes.sh, tests/test_registry_parity.sh.
+# Each runs under this bash, with the repository root as working directory and stdin from
+# /dev/null, and passes when it exits 0.
 #
 # Before any suite, a self-check sends two throwaway suites down the same path. One runs
 # "exit 3" and must fail with 3. The other must pass, and it reports how a repository it
@@ -68,7 +69,7 @@ print_tail() {
 }
 
 autocrlf="$(git -C "$REPO_ROOT" config --get core.autocrlf || echo unset)"
-echo "Bash fixtures (tests/test_wiki_*.sh, test_update_merge.sh, test_migrate_runner.sh, test_migration_notes.sh)"
+echo "Bash fixtures (tests/test_wiki_*.sh, test_update_merge.sh, test_migrate_runner.sh, test_migration_notes.sh, test_registry_parity.sh)"
 echo "  bash:          $BASH_VERSION ($(uname -s))"
 echo "  core.autocrlf: $autocrlf"
 
@@ -110,7 +111,7 @@ echo "  self-check:    ok (a failing suite gives exit 3, a passing one exit 0)"
 
 # --- The suites ------------------------------------------------------------------------------
 total=0 failed=0
-for pattern in 'test_wiki_*.sh' test_update_merge.sh test_migrate_runner.sh test_migration_notes.sh; do
+for pattern in 'test_wiki_*.sh' test_update_merge.sh test_migrate_runner.sh test_migration_notes.sh test_registry_parity.sh; do
   for suite in "$TESTS_DIR"/$pattern; do          # $pattern unquoted: it is a glob
     [ -f "$suite" ] || continue                   # a pattern that matched nothing stays literal
     name="${suite##*/}"

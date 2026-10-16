@@ -200,16 +200,18 @@ for loc in "en_US.UTF-8" "C"; do
   fi
 done
 
-# --- 2c-bis. The plugin-registry append has its own python-free branch --------
-# Both existing suites that pass --plugins run WITH python3, so this branch was never
-# entered: sabotaging it entirely left smoke.sh and this file fully green.
+# --- 2c-bis. The plugin-registry append runs without python3 ----------------------
+# Since v0.20.0 setup.sh has ONE plugin writer, sumela_registry_register_plugin in
+# scripts/lib/sumela-registry.sh (bash and awk only). Before it there were a python branch
+# and a python-free branch, and every suite that passed --plugins ran WITH python3, so the
+# python-free branch was never entered. This case keeps proving that the write works with
+# python3 absent, and that the registry comes out byte-identical with python3 and without.
 if command -v python3 >/dev/null 2>&1; then
   P_PLG_N="$WORK/plugins-nopy"; P_PLG_P="$WORK/plugins-py"
   # The shipped SKILL_REGISTRY.md already lists this plugin, so setup.sh takes its
-  # idempotent "already registered" path and PLUGIN_ENTRIES stays EMPTY — the append
-  # branch is never entered. Sabotaging it left this case green until the entry was
-  # removed first. Strip it so the branch actually runs, which is also the real
-  # first-install shape.
+  # idempotent "already registered" path and writes nothing: a broken writer would leave
+  # this case green. Strip the entry first so the writer actually runs, which is also the
+  # real first-install shape.
   _strip_plugin() {
     python3 - "$1" <<'STRIP'
 import re, sys, pathlib

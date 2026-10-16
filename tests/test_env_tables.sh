@@ -56,7 +56,6 @@ fi
 # script reads needs a central-table row (and, when a hook reads it, a _lib.sh header line).
 #   SUMELA_EMPTY_TREE      _lib.sh: git's empty-tree object id
 #   SUMELA_INSTALL_ROOT    _lib.sh: the install root, derived from the hook's own path
-#   SUMELA_REG_PLUGIN      setup-memory.sh -> its inline python: the plugin being registered
 #   SUMELA_RENDER_TRACE    setup.sh: template-render debug trace
 #   SUMELA_PY              setup.sh: python probe cache
 #   SUMELA_UPDATER_SCHEMA  the updater's provenance-record schema (v0.20.0+)
@@ -68,7 +67,7 @@ fi
 #   SUMELA_PATH SUMELA_DESC        R1-07: scripts/lib/sumela-registry.sh (description rewrite)
 #   SUMELA_H SUMELA_L SUMELA_B     R1-19: the wiki tool's lib/wiki-task.sh (section writes)
 #   SUMELA_RULE                    R1-30: scripts/sumela-claude-settings.sh (the allow rule)
-INTERNAL=" SUMELA_EMPTY_TREE SUMELA_INSTALL_ROOT SUMELA_REG_PLUGIN SUMELA_RENDER_TRACE SUMELA_PY \
+INTERNAL=" SUMELA_EMPTY_TREE SUMELA_INSTALL_ROOT SUMELA_RENDER_TRACE SUMELA_PY \
 SUMELA_UPDATER_SCHEMA SUMELA_MIGRATE_SRC SUMELA_MIGRATE_ROOT \
 SUMELA_PATH SUMELA_DESC SUMELA_H SUMELA_L SUMELA_B SUMELA_RULE "
 

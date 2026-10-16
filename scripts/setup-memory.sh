@@ -30,6 +30,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# This script's own lib/ (scripts/lib/), resolved before the cd below.
+SM_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib"
+
 # --- anchor to the nearest .sumela/ (works from any subdir) ---
 ROOT="$(pwd)"
 while [ "$ROOT" != "/" ] && [ ! -d "$ROOT/.sumela" ]; do ROOT="$(dirname "$ROOT")"; done
@@ -62,24 +65,29 @@ confirm() {
 
 # Register a memory plugin in SKILL_REGISTRY.md if its files are present but it
 # isn't registered yet — this is what makes `--plugins X` an "enable it (now or
-# later)" command, not just a runtime step.
+# later)" command, not just a runtime step. sumela_registry_register_plugin
+# (scripts/lib/sumela-registry.sh, shared with setup.sh) copies the plugin's frontmatter
+# description verbatim (the routing surface; scripts/sumela-registry-parity.sh checks
+# it) through a temp file and a rename, every other byte of the registry kept, and
+# records the write in the provenance record.
 register_plugin() {  # $1 = plugin name
-  local p="$1" reg=".sumela/SKILL_REGISTRY.md"
-  [ -f "$reg" ] || return 0
-  grep -q "<name>$p</name>" "$reg" 2>/dev/null && return 0   # already registered
-  if SUMELA_REG_PLUGIN="$p" python3 - "$reg" <<'PY'
-import os, sys
-p = os.environ["SUMELA_REG_PLUGIN"]; path = sys.argv[1]
-entry = ('\n<skill activation="lazy">\n<name>%s</name>\n'
-         '<description>Memory plugin — see `.sumela/memory-plugins/%s/SKILL.md` for routing and prerequisites.</description>\n'
-         '<path>.sumela/memory-plugins/%s/SKILL.md</path>\n</skill>\n') % (p, p, p)
-s = open(path, encoding="utf-8").read()
-tag = "</available_skills>"
-if tag not in s:
-    sys.exit(1)
-open(path, "w", encoding="utf-8").write(s.replace(tag, entry + "\n" + tag, 1))
-PY
-  then ok "Registered $p in SKILL_REGISTRY.md"; else todo "register $p in SKILL_REGISTRY.md by hand"; fi
+  local p="$1" rc=0
+  if [ ! -f "$SM_LIB_DIR/sumela-registry.sh" ]; then
+    if [ -f .sumela/SKILL_REGISTRY.md ]; then todo "register $p in SKILL_REGISTRY.md by hand (scripts/lib/sumela-registry.sh is missing)"; fi
+    return 0
+  fi
+  # shellcheck source=lib/sumela-registry.sh
+  . "$SM_LIB_DIR/sumela-registry.sh"
+  sumela_registry_register_plugin "$ROOT" "$p" || rc=$?
+  case "$rc" in
+    0) ok "Registered $p in SKILL_REGISTRY.md" ;;
+    5|6) ;;                          # already registered, or no registry: nothing to register
+    2) todo "register $p in SKILL_REGISTRY.md by hand (.sumela/memory-plugins/$p/SKILL.md is missing)" ;;
+    3) todo "register $p in SKILL_REGISTRY.md by hand (its SKILL.md has no one-line frontmatter description)" ;;
+    7) ok "Registered $p in SKILL_REGISTRY.md"
+       info "the provenance record (.sumela/.last-update.json) was not updated (see the message above)" ;;
+    *) todo "register $p in SKILL_REGISTRY.md by hand" ;;
+  esac
 }
 
 qdrant_up(){ command -v curl >/dev/null 2>&1 && curl -fsS --max-time 2 "http://${QHOST}:${QPORT}/readyz" >/dev/null 2>&1; }

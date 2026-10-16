@@ -87,6 +87,8 @@ done
 cleanup() {
   echo ""
   warn "Setup interrupted. Partial files may exist — re-run to overwrite."
+  # A registry write interrupted between its temp file and the rename (scripts/lib/sumela-registry.sh).
+  rm -f ".sumela/SKILL_REGISTRY.md.sumela-tmp.$$"
   exit 130
 }
 trap cleanup INT
@@ -1043,67 +1045,39 @@ fi
 # =============================================================================
 # 7. REGISTER MEMORY PLUGINS
 # =============================================================================
+# One writer for every plugin registration: sumela_registry_register_plugin
+# (scripts/lib/sumela-registry.sh, shared with setup-memory.sh) copies the plugin's
+# frontmatter description verbatim (the registry <description> is the dispatcher's routing
+# surface; scripts/sumela-registry-parity.sh checks it) with bash and awk only (python3 is
+# not guaranteed here), through a temp file and a rename, keeping every other byte of the
+# registry; it re-reads the entry and records the write in the provenance record.
 if [ ${#PLUGINS[@]} -gt 0 ]; then
   info "Registering memory plugins in SKILL_REGISTRY.md..."
-
-  PLUGIN_ENTRIES=""
-  for plugin in ${PLUGINS[@]+"${PLUGINS[@]}"}; do
-    plugin=$(echo "$plugin" | tr -d ' ')
-    if [ ! -f ".sumela/memory-plugins/$plugin/SKILL.md" ]; then
-      warn "Plugin SKILL.md not found: .sumela/memory-plugins/$plugin/SKILL.md"
-    elif grep -q "<name>$plugin</name>" .sumela/SKILL_REGISTRY.md; then
-      # Idempotent: the shipped registry may already list this plugin.
-      info "Plugin already registered: $plugin — skipping"
-    else
-      PLUGIN_ENTRIES="${PLUGIN_ENTRIES}
-<skill activation=\"lazy\">
-<name>$plugin</name>
-<description>Memory plugin — see \`.sumela/memory-plugins/$plugin/SKILL.md\` for routing and prerequisites.</description>
-<path>.sumela/memory-plugins/$plugin/SKILL.md</path>
-</skill>
-"
-      ok "Registered plugin: $plugin"
-    fi
-  done
-
-  # Insert plugin entries before the closing </available_skills> tag.
-  # BSD awk on macOS rejects multi-line `-v` variables ("awk: newline in string"),
-  # hence python or bash parameter substitution rather than awk/sed. python3 is no
-  # longer guaranteed here (render_template stopped requiring it), so this degrades
-  # the same way: a plugin selection implies python for the plugin ITSELF, but the
-  # install must not die half-written just because the interpreter is missing.
-  if [ -n "$PLUGIN_ENTRIES" ]; then
-    export TMPL_PLUGIN_ENTRIES="$PLUGIN_ENTRIES"
-    if ! have_python; then
-      _reg=".sumela/SKILL_REGISTRY.md"
-      _tag="</available_skills>"
-      _content="$(cat "$_reg")"
-      case "$_content" in
-        *"$_tag"*)
-          _content="${_content/"$_tag"/$PLUGIN_ENTRIES
-$_tag}"
-          printf '%s\n' "$_content" > "$_reg"
-          ok "Plugins appended to SKILL_REGISTRY.md" ;;
-        *)  warn "</available_skills> tag not found; plugins not appended" ;;
+  if [ ! -f "$SCRIPT_DIR/lib/sumela-registry.sh" ]; then
+    warn "scripts/lib/sumela-registry.sh missing — memory plugins not registered (re-run bootstrap)"
+  elif [ ! -f .sumela/SKILL_REGISTRY.md ]; then
+    warn ".sumela/SKILL_REGISTRY.md not found — memory plugins not registered"
+  else
+    # shellcheck source=lib/sumela-registry.sh
+    . "$SCRIPT_DIR/lib/sumela-registry.sh"
+    for plugin in ${PLUGINS[@]+"${PLUGINS[@]}"}; do
+      plugin=$(echo "$plugin" | tr -d ' ')
+      if [ ! -f ".sumela/memory-plugins/$plugin/SKILL.md" ]; then
+        warn "Plugin SKILL.md not found: .sumela/memory-plugins/$plugin/SKILL.md"
+        continue
+      fi
+      _rc=0; sumela_registry_register_plugin "$PWD" "$plugin" || _rc=$?
+      case "$_rc" in
+        0) ok "Registered plugin: $plugin" ;;
+        5) info "Plugin already registered: $plugin — skipping" ;;      # the shipped registry may list it
+        3) warn "Plugin $plugin not registered: its SKILL.md has no one-line frontmatter description" ;;
+        4) warn "Plugin $plugin not registered: its name or description cannot be held by the registry (<, >, </description> or </skill>)" ;;
+        7) ok "Registered plugin: $plugin"
+           warn "Plugin $plugin: the provenance record (.sumela/.last-update.json) was not updated (see the message above)" ;;
+        *) warn "Plugin $plugin not registered in .sumela/SKILL_REGISTRY.md (see the message above)" ;;
       esac
-      unset _reg _tag _content
-    else
-    python3 -c "
-import os, sys
-path = '.sumela/SKILL_REGISTRY.md'
-entries = os.environ['TMPL_PLUGIN_ENTRIES']
-with open(path, 'r') as f:
-    content = f.read()
-tag = '</available_skills>'
-if tag in content:
-    content = content.replace(tag, entries + '\n' + tag, 1)
-    with open(path, 'w') as f:
-        f.write(content)
-else:
-    sys.stderr.write('WARN: </available_skills> tag not found; plugins not appended\n')
-"
-    ok "Plugins appended to SKILL_REGISTRY.md"
-    fi
+    done
+    unset _rc
   fi
 fi
 

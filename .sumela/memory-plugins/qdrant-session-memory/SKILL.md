@@ -1,6 +1,6 @@
 ---
 name: qdrant-session-memory
-description: "Use when answering questions about past decisions, prior sessions, or 'why' questions — semantic search over Qdrant session history. Activates Tier-1 routing."
+description: "Use when answering questions about past decisions, prior sessions, or 'why' questions — semantic search over Qdrant session history. Also use for code and wiki ingestion into Qdrant. Activates Tier-1 routing."
 ---
 
 # Tier-1: Qdrant Session Memory

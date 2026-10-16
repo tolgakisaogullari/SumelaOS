@@ -10,6 +10,9 @@
 .sumela/.update-check
 .sumela/.last-update.json
 .sumela/.retrieval-cache.json
+# A framework tool's interrupted write (the registry sync, the provenance record) leaves
+# <file>.sumela-tmp.<pid> beside its target: never commit one.
+.sumela/*.sumela-tmp.*
 # Per-developer runtime directories (v0.20.0+): the wiki tool's caches, the updater's
 # plan, merge and undo files, and the latest handoff prompt. Never commit them.
 .sumela/.wiki/

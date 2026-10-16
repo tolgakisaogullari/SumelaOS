@@ -127,6 +127,50 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# 2b. Skill descriptions match their frontmatter (v0.20.0+). A registry <description> is
+#     the dispatcher's routing surface and must equal its SKILL.md frontmatter description
+#     byte for byte (scripts/sumela-registry-parity.sh). FAIL in the framework source repo
+#     (the README skill-count marker of section 9 exists); elsewhere WARN, naming the fixer:
+#     a consumer's pre-commit blocks on any FAIL, and drift that predates the consented sync
+#     must not block commits. The fixer is --sync for DRIFT and ATTENTION rows; an UNPARSEABLE
+#     row (an entry the check cannot read) needs the hand fix it names, and never passes.
+# -----------------------------------------------------------------------------
+if [ -f ".sumela/SKILL_REGISTRY.md" ]; then
+  PARITY_SOURCE=false
+  if [ -f README.md ] && grep -q 'sumela:skill-count' README.md; then PARITY_SOURCE=true; fi
+  if [ ! -f scripts/sumela-registry-parity.sh ]; then
+    if [ "$PARITY_SOURCE" = true ]; then fail "Skill descriptions match their frontmatter — scripts/sumela-registry-parity.sh not found"
+    else warn "Skill descriptions match their frontmatter — scripts/sumela-registry-parity.sh not found, not checked"; fi
+  else
+    PARITY_RC=0
+    PARITY_OUT="$(bash scripts/sumela-registry-parity.sh --check 2>&1)" || PARITY_RC=$?
+    PARITY_N="$(printf '%s\n' "$PARITY_OUT" | LC_ALL=C grep -cE '^(DRIFT|ATTENTION|UNPARSEABLE) ' || true)"
+    PARITY_CHECKED="$(printf '%s\n' "$PARITY_OUT" | LC_ALL=C sed -n 's/^sumela-registry-parity: \([0-9][0-9]*\) checked.*/\1/p')"
+    if [ "$PARITY_RC" -eq 0 ]; then
+      pass "Skill descriptions match their frontmatter (${PARITY_CHECKED:-0} checked)"
+    else
+      if [ "$PARITY_RC" -eq 3 ]; then
+        # --sync fixes DRIFT and ATTENTION rows; an UNPARSEABLE row needs the hand fix it names.
+        PARITY_U="$(printf '%s\n' "$PARITY_OUT" | LC_ALL=C grep -c '^UNPARSEABLE ' || true)"
+        if [ "$PARITY_N" -gt "$PARITY_U" ]; then
+          PARITY_FIX="fix: bash scripts/sumela-registry-parity.sh --sync"
+          [ "$PARITY_U" -eq 0 ] || PARITY_FIX="$PARITY_FIX; $PARITY_U unparseable: fix those by hand, as each row says"
+          if [ "$PARITY_SOURCE" = true ]; then fail "Skill descriptions match their frontmatter — $PARITY_N drifted ($PARITY_FIX)"
+          else warn "registry descriptions drifted ($PARITY_N) — $PARITY_FIX"; fi
+        else
+          if [ "$PARITY_SOURCE" = true ]; then fail "Skill descriptions match their frontmatter — $PARITY_N unparseable (fix them by hand, as each row says; --sync never rewrites them)"
+          else warn "registry descriptions unparseable ($PARITY_N) — fix them by hand, as each row says; --sync never rewrites them"; fi
+        fi
+      else
+        if [ "$PARITY_SOURCE" = true ]; then fail "Skill descriptions match their frontmatter — the parity check failed (exit $PARITY_RC)"
+        else warn "Skill descriptions match their frontmatter — the parity check failed (exit $PARITY_RC), not checked"; fi
+      fi
+      printf '%s\n' "$PARITY_OUT" | sed 's/^/       /'
+    fi
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # 3. Universal rules
 # -----------------------------------------------------------------------------
 REQUIRED_RULES=(

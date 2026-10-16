@@ -46,11 +46,11 @@
 
 .PARAMETER Domains
     Team mode only: comma-separated business-domain taxonomy (e.g. "Card,Payments").
-    Optional — domains can be added later via /onboardSumela or /evolve.
+    Optional - domains can be added later via /onboardSumela or /evolve.
 
 .PARAMETER HooksOnly
     Wire core.hooksPath ONLY (no config generation). Used by /onboardSumela for a
-    teammate's clone — never regenerates tracked team config.
+    teammate's clone - never regenerates tracked team config.
 
 .PARAMETER Ci
     Opt in to creating the GitHub Actions validation workflow (default: off).
@@ -82,15 +82,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Text this script writes into generated files keeps its em dash (U+2014), byte for byte the
+# same as setup.sh writes, while this source stays ASCII: Windows PowerShell 5.1 reads a
+# script without a BOM as ANSI.
+$EmDash = [string][char]0x2014
+
 # --- Colors ---
 function Write-Info  { param([string]$msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Write-Ok    { param([string]$msg) Write-Host "[OK]   $msg" -ForegroundColor Green }
 function Write-Warn  { param([string]$msg) Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Write-Err   { param([string]$msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
-# --- Git hook wiring (core.hooksPath) — used by the full install AND by -HooksOnly ---
+# --- Git hook wiring (core.hooksPath) - used by the full install AND by -HooksOnly ---
 $HooksWired = $false
-# Helpers for the multi-install (monorepo) dispatcher — core.hooksPath holds ONE path,
+# Helpers for the multi-install (monorepo) dispatcher - core.hooksPath holds ONE path,
 # so a second SumelaOS install in the same repo is handled by a root dispatcher that
 # fans each git event out to every registered install (see .sumela/git-hooks/_dispatch.sh).
 function Register-SumelaInstall($gitRoot, $installRel) {   # $installRel "" => repo root
@@ -110,7 +115,7 @@ function Setup-SumelaDispatch($gitRoot, $installAbs) {     # copy _dispatch.sh a
 }
 # Wire core.hooksPath for THIS install (unset / already-this-install / existing-dispatcher /
 # other-SumelaOS-install / non-SumelaOS cases). Sets $script:HooksWired. NEVER regenerates
-# config — safe for -HooksOnly (teammate onboarding) as well as the full install flow.
+# config - safe for -HooksOnly (teammate onboarding) as well as the full install flow.
 function Wire-GitHooks {
     if (Test-Path ".sumela/git-hooks") {
         Write-Info "Wiring git hooks (pre-commit validation + memory sync)..."
@@ -128,7 +133,7 @@ function Wire-GitHooks {
             if ((-not $existingHooksPath) -or ($existingHooksPath -eq $hooksRel)) {
                 & git config core.hooksPath $hooksRel
                 $script:HooksWired = $true
-                Write-Ok "Git hooks enabled (core.hooksPath = $hooksRel) — pre-commit validation active (bypass: git commit --no-verify)"
+                Write-Ok "Git hooks enabled (core.hooksPath = $hooksRel) - pre-commit validation active (bypass: git commit --no-verify)"
             }
             elseif ($existingHooksPath -eq ".sumela-hooks" -or $existingHooksPath -like "*/.sumela-hooks") {
                 Setup-SumelaDispatch $gitRoot $installAbs   # refresh dispatcher scripts
@@ -137,23 +142,23 @@ function Wire-GitHooks {
                 Write-Ok "Registered this install with the existing SumelaOS hook dispatcher (.sumela-hooks/)."
             }
             elseif ($existingHooksPath -like "*.sumela/git-hooks") {
-                # Another SumelaOS install owns core.hooksPath → promote to a dispatcher running BOTH.
+                # Another SumelaOS install owns core.hooksPath -> promote to a dispatcher running BOTH.
                 $otherRel = $existingHooksPath -replace '/?\.sumela/git-hooks$', ''
                 Setup-SumelaDispatch $gitRoot $installAbs
                 Register-SumelaInstall $gitRoot $otherRel
                 Register-SumelaInstall $gitRoot $installRel
                 & git config core.hooksPath ".sumela-hooks"
                 $script:HooksWired = $true
-                Write-Ok "Multiple SumelaOS installs detected — installed a hook dispatcher at .sumela-hooks/ that runs all of them."
+                Write-Ok "Multiple SumelaOS installs detected - installed a hook dispatcher at .sumela-hooks/ that runs all of them."
                 Write-Info "Commit .sumela-hooks/ so teammates share the dispatcher (each runs setup once to wire core.hooksPath)."
             }
             else {
-                Write-Warn "core.hooksPath already set to '$existingHooksPath' (non-SumelaOS) — not overriding."
+                Write-Warn "core.hooksPath already set to '$existingHooksPath' (non-SumelaOS) - not overriding."
                 Write-Warn "To enable SumelaOS hooks, merge .sumela/git-hooks/{pre-commit,post-merge,post-checkout,post-commit} into '$existingHooksPath', or unset it and re-run setup."
             }
         }
         else {
-            Write-Warn "Not a git repository — skipping git hook setup."
+            Write-Warn "Not a git repository - skipping git hook setup."
             Write-Warn "After 'git init', run setup again (it wires core.hooksPath automatically)."
         }
     }
@@ -277,7 +282,7 @@ else {
     $CodeLanguage = $NamingLanguage
 
     Write-Host ""
-    # AI and infra stacks coming soon — not yet available
+    # AI and infra stacks coming soon - not yet available
     $StackArray = Read-MultiSelect "Select tech stacks:" @("backend", "frontend", "mobile")
 
     Write-Host ""
@@ -293,13 +298,13 @@ else {
 
     Write-Host ""
     Write-Host "Governance mode controls how /evolve applies changes to the agent-control surface (rules/skills/prompt/schema):"
-    Write-Host "  solo — apply directly (one developer owns the config)"
-    Write-Host "  team — route through a pull request so a code owner reviews before it becomes everyone's standard"
+    Write-Host "  solo - apply directly (one developer owns the config)"
+    Write-Host "  team - route through a pull request so a code owner reviews before it becomes everyone's standard"
     $Governance = Read-WithDefault "Governance mode (solo/team)" "solo"
 
     Write-Host ""
     Write-Host "Optional: a GitHub Actions workflow that runs the structure validation on push/PR."
-    Write-Host "(Skip if you use GitLab/Azure/no CI — see ADOPTION_GUIDE for those.)"
+    Write-Host "(Skip if you use GitLab/Azure/no CI - see ADOPTION_GUIDE for those.)"
     if (Read-YesNo "Add the GitHub Actions CI workflow?" "n") { $Ci = $true }
 }
 
@@ -320,10 +325,10 @@ function Get-Slug {
     # decompose (dotless i, eszett, slashed/stroked letters) are mapped first so they are
     # not dropped. Mirrors bash slugify(). ASCII input yields the same slug as a plain replace.
     param([string]$s)
-    # Chained String.Replace (ordinal, case-sensitive) — NOT a hashtable: PowerShell
+    # Chained String.Replace (ordinal, case-sensitive) - NOT a hashtable: PowerShell
     # hashtable keys are case-insensitive, so paired-case entries would collide. Single
     # line on purpose: trailing-dot method-chain continuation isn't valid in PS 5.1.
-    $s = $s.Replace('ı','i').Replace('ß','ss').Replace('ø','o').Replace('Ø','o').Replace('ł','l').Replace('Ł','l').Replace('đ','d').Replace('Đ','d')
+    $s = $s.Replace([string][char]0x0131,'i').Replace([string][char]0x00DF,'ss').Replace([string][char]0x00F8,'o').Replace([string][char]0x00D8,'o').Replace([string][char]0x0142,'l').Replace([string][char]0x0141,'l').Replace([string][char]0x0111,'d').Replace([string][char]0x0110,'d')
     $d = $s.Normalize([Text.NormalizationForm]::FormD)
     $sb = New-Object System.Text.StringBuilder
     foreach ($ch in $d.ToCharArray()) {
@@ -346,7 +351,7 @@ if ($Governance -eq "team") {
         Write-Host ""
         Write-Host "Does your team organize work by business domain (e.g. Card, Payments, Onboarding)?"
         Write-Host "Each one gets a rule file the agent loads for developers who work in that domain."
-        Write-Host "Leave blank to skip — domains can be added later via /onboardSumela or /evolve."
+        Write-Host "Leave blank to skip - domains can be added later via /onboardSumela or /evolve."
         $domainCsv = Read-WithDefault "Domains (comma-separated)" ""
         $DomainArray = if ($domainCsv) { $domainCsv -split "," } else { @() }
     }
@@ -464,7 +469,7 @@ if ($StackArray -notcontains "backend") {
 # Project-specific security
 $ProjectSecurity = ""
 if ($StackArray -contains "backend") {
-    $ProjectSecurity = "`n- Skill path: ``.sumela/rules/backend_standards.md`` — backend-specific security patterns."
+    $ProjectSecurity = "`n- Skill path: ``.sumela/rules/backend_standards.md`` $EmDash backend-specific security patterns."
 }
 
 # Non-destructive guard: setup.ps1 is the deterministic (greenfield-oriented) path and
@@ -474,7 +479,7 @@ if ((Test-Path "AGENTS.md") -and -not (Select-String -Path "AGENTS.md" -Pattern 
     $agentsBak = "AGENTS.md.bak"
     if (Test-Path $agentsBak) { $agentsBak = "AGENTS.md.bak.$(Get-Date -Format yyyyMMddHHmmss)" }
     Copy-Item "AGENTS.md" $agentsBak -Force
-    Write-Warn "Existing AGENTS.md detected — backed up to $agentsBak (gitignored). For a proper merge of your existing config, use the /initSumela agent flow (brownfield merge) instead of setup.ps1."
+    Write-Warn "Existing AGENTS.md detected - backed up to $agentsBak (gitignored). For a proper merge of your existing config, use the /initSumela agent flow (brownfield merge) instead of setup.ps1."
 }
 
 # Perform replacements
@@ -528,7 +533,7 @@ foreach ($stack in $StackArray) {
 
 <rule activation="stack-conditional" applies_phases="planning,implementation,verification,code_review,debugging" stack="$stack">
 <name>$ruleName</name>
-<description>Use when the task scope includes $stack — $ruleDesc.</description>
+<description>Use when the task scope includes $stack $EmDash $ruleDesc.</description>
 <path>.sumela/rules/$ruleName.md</path>
 </rule>
 "@
@@ -549,12 +554,12 @@ foreach ($dom in $DomainArray) {
 
 <rule activation="domain-conditional" applies_phases="all" domain="$dom">
 <name>$domName</name>
-<description>Use when the task scope includes the $dom domain — business rules, vocabulary, invariants, and conventions specific to $dom (applies across all stacks).</description>
+<description>Use when the task scope includes the $dom domain $EmDash business rules, vocabulary, invariants, and conventions specific to $dom (applies across all stacks).</description>
 <path>.sumela/rules/domains/$domSlug.md</path>
 </rule>
 "@
 }
-$DomainScopesStr = if ($DomainScopes.Count) { $DomainScopes -join "`n" } else { "| ``(none)`` | No domains configured — add via /onboardSumela or /evolve |" }
+$DomainScopesStr = if ($DomainScopes.Count) { $DomainScopes -join "`n" } else { "| ``(none)`` | No domains configured $EmDash add via /onboardSumela or /evolve |" }
 
 # Build phase matrix (5 columns: Phase | Universal | Phase-conditional | Stack-conditional | Domain-conditional)
 $PhaseMatrix = @"
@@ -604,11 +609,11 @@ foreach ($stack in $StackArray) {
             Write-Ok "Copied $dst"
         }
         else {
-            Write-Warn "Template not found: $src — skipping"
+            Write-Warn "Template not found: $src - skipping"
         }
     }
     else {
-        Write-Warn "No rule template for stack '$stack' — skipping"
+        Write-Warn "No rule template for stack '$stack' - skipping"
     }
 }
 
@@ -622,11 +627,11 @@ if (Test-Path $OpSrc) {
     Write-Ok "Copied $OpDst"
 }
 else {
-    Write-Warn "Template not found: $OpSrc — skipping"
+    Write-Warn "Template not found: $OpSrc - skipping"
 }
 
 # Copy domain rule templates (team-mode taxonomy). One .empty file per domain; NEVER
-# clobber an existing (possibly customized) domain rule — generation is idempotent.
+# clobber an existing (possibly customized) domain rule - generation is idempotent.
 $DomainTmpl = ".sumela/rules/templates/domain_standards.md.empty"
 foreach ($dom in $DomainArray) {
     $dom = $dom.Trim()
@@ -647,7 +652,7 @@ foreach ($dom in $DomainArray) {
         Write-Ok "Copied $dst"
     }
     else {
-        Write-Warn "Template not found: $DomainTmpl — skipping"
+        Write-Warn "Template not found: $DomainTmpl - skipping"
     }
 }
 
@@ -665,7 +670,7 @@ if (Test-Path ".sumela/rules/domains") {
             $qdir = ".sumela/_migration/domains-$DateCreated"
             New-Item -ItemType Directory -Force -Path $qdir | Out-Null
             Move-Item $f.FullName (Join-Path $qdir $f.Name) -Force
-            Write-Warn "Domain '$($f.BaseName)' is no longer in the taxonomy — quarantined to $qdir/ (gitignored). If unintended, move it back and re-add the domain."
+            Write-Warn "Domain '$($f.BaseName)' is no longer in the taxonomy - quarantined to $qdir/ (gitignored). If unintended, move it back and re-add the domain."
         }
     }
 }
@@ -700,11 +705,11 @@ foreach ($ide in $IDEArray) {
             Write-Ok "Generated $dst"
         }
         else {
-            Write-Warn "Template not found: $tmpl — skipping"
+            Write-Warn "Template not found: $tmpl - skipping"
         }
     }
     else {
-        Write-Warn "Unknown IDE: $ide — skipping"
+        Write-Warn "Unknown IDE: $ide - skipping"
     }
 }
 
@@ -737,7 +742,7 @@ $WikiTemplates = @(
     @{ Src = "_improvement-queue/README.md"; Dst = "_improvement-queue/README.md" }
 )
 
-# See setup.sh: decide per page by asking whether the indexes already link it — linked means
+# See setup.sh: decide per page by asking whether the indexes already link it - linked means
 # the page must exist (or the link dangles); unlinked means writing it would orphan it.
 $WikiPagesWritten = 0
 $WikiPagesKept = 0
@@ -756,17 +761,17 @@ foreach ($entry in $WikiTemplates) {
     $dst = "docs/second-brain/wiki/$($entry.Dst)"
     $needsLink = $LinkedOnCreate -contains $entry.Dst
     if (-not (Test-Path $src)) {
-        Write-Warn "Template not found: $src — skipping"
+        Write-Warn "Template not found: $src - skipping"
     }
     elseif ((-not (Test-Path $dst)) -and $needsLink -and (-not (Test-WikiPageLinked $entry.Dst))) {
-        Write-Ok "Skipped $dst (indexes do not link it — the first AD write creates page + rows together)"
+        Write-Ok "Skipped $dst (indexes do not link it - the first AD write creates page + rows together)"
     }
     elseif ((Test-Path $dst) -and ($entry.Dst -ne "_SCHEMA.md") -and ($entry.Dst -ne "_improvement-queue/README.md")) {
         # See setup.sh: wiki pages accumulate (sprint state, the AD record, the _LOG
         # ledger) and setup is re-runnable, so never overwrite an existing one.
         # _SCHEMA.md is framework-derived and is the single exception.
         $WikiPagesKept++
-        Write-Ok "Kept $dst (already present — not overwritten)"
+        Write-Ok "Kept $dst (already present - not overwritten)"
     }
     else {
         $content = Get-Content $src -Raw
@@ -788,34 +793,34 @@ if ((Test-Path .gitattributes) -and (Select-String -Path .gitattributes -SimpleM
 }
 else {
     if (Test-Path .gitattributes) { Add-Content .gitattributes "" }
-    Add-Content .gitattributes "# SumelaOS — append-only ledger: concurrent log appends combine instead of conflicting"
+    Add-Content .gitattributes "# SumelaOS $EmDash append-only ledger: concurrent log appends combine instead of conflicting"
     Add-Content .gitattributes $gitAttrLine
     Write-Ok ".gitattributes union-merge rule added"
 }
 
 # =============================================================================
-# 6c. CONFIGURE .gitignore (per-developer / runtime artifacts — never commit)
+# 6c. CONFIGURE .gitignore (per-developer / runtime artifacts - never commit)
 # =============================================================================
 Write-Info "Ensuring .gitignore covers per-developer / runtime artifacts..."
-$gitignoreMarker = "# SumelaOS — per-developer / runtime artifacts"
+$gitignoreMarker = "# SumelaOS $EmDash per-developer / runtime artifacts"
 # The managed pattern list is the SINGLE SOURCE shared with update.ps1's reconcile
 # (scripts/lib/sumela-gitignore.list), so new entries can't reach fresh installs while
 # silently missing on the upgrade path.
 $giListFile = Join-Path $PSScriptRoot "lib/sumela-gitignore.list"
 if (-not (Test-Path $giListFile)) {
-    Write-Warn "scripts/lib/sumela-gitignore.list missing — skipping .gitignore artifact seeding"
+    Write-Warn "scripts/lib/sumela-gitignore.list missing - skipping .gitignore artifact seeding"
 }
 else {
     $giPatterns = Get-Content $giListFile | Where-Object { $_ -notmatch '^\s*(#|$)' } | ForEach-Object { $_.Trim() }
     # First-time: grouped, marked block. Guard on the stable marker so re-runs and the
     # framework repo's own .gitignore don't duplicate it.
     if (-not ((Test-Path .gitignore) -and (Select-String -Path .gitignore -SimpleMatch -Pattern $gitignoreMarker -Quiet))) {
-        if ((Test-Path .gitignore) -and ((Get-Item .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
+        if ((Test-Path .gitignore) -and ((Get-Item -Force .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
         Add-Content .gitignore "$gitignoreMarker (never commit)"
         foreach ($ln in $giPatterns) { Add-Content .gitignore $ln }
         Write-Ok ".gitignore SumelaOS block added"
     }
-    # Backfill any managed pattern missing — covers upgraded projects whose block
+    # Backfill any managed pattern missing - covers upgraded projects whose block
     # predates newer entries. Whole-line, case-sensitive match (-ccontains) so it is
     # idempotent and never duplicates; never touches the user's own lines.
     $added = 0
@@ -826,14 +831,14 @@ else {
     if ($added -gt 0) { Write-Ok ".gitignore backfilled (+$added managed entries)" } else { Write-Ok ".gitignore already covers per-developer artifacts" }
 }
 
-# Secret-file baseline — never commit credentials. Idempotent via its own marker
+# Secret-file baseline - never commit credentials. Idempotent via its own marker
 # (not a single content line) so all patterns land even when the project already
 # ignored `.env`. The pre-commit hook adds a gitleaks scan on top if it's installed.
-$secretMarker = "# SumelaOS — common secret files"
+$secretMarker = "# SumelaOS $EmDash common secret files"
 if ((Test-Path .gitignore) -and (Select-String -Path .gitignore -SimpleMatch -Pattern $secretMarker -Quiet)) {
     Write-Ok ".gitignore already covers secret files"
 } else {
-    if ((Test-Path .gitignore) -and ((Get-Item .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
+    if ((Test-Path .gitignore) -and ((Get-Item -Force .gitignore).Length -gt 0)) { Add-Content .gitignore "" }
     Add-Content .gitignore "$secretMarker (never commit; see .sumela/rules/security_protocol.md)"
     Add-Content .gitignore ".env"
     Add-Content .gitignore ".env.*"
@@ -851,48 +856,48 @@ if ((Test-Path .gitignore) -and (Select-String -Path .gitignore -SimpleMatch -Pa
 # =============================================================================
 # 7. REGISTER MEMORY PLUGINS
 # =============================================================================
+# One writer for every plugin registration: Register-SumelaRegistryPlugin
+# (scripts/lib/sumela-registry.ps1, shared with setup-memory.ps1) copies the plugin's
+# frontmatter description verbatim (the registry <description> is the dispatcher's routing
+# surface; scripts/sumela-registry-parity.ps1 checks it), reading and writing the registry
+# as bytes through [IO.File] and keeping every other byte, then records the write in the
+# provenance record. Windows PowerShell 5.1's Get-Content reads UTF-8 without a BOM as ANSI
+# and its Set-Content writes ANSI, which turns every non-ASCII description into permanent
+# drift [RU-M1].
 if ($PluginArray.Count -gt 0) {
     Write-Info "Registering memory plugins in SKILL_REGISTRY.md..."
-
-    # Read the registry once so we can guard against re-registering (idempotent:
-    # the shipped registry may already list a plugin, and a re-run must not append
-    # a duplicate <skill> block — parity with setup.sh's grep guard).
-    $registryText = if (Test-Path ".sumela/SKILL_REGISTRY.md") { Get-Content ".sumela/SKILL_REGISTRY.md" -Raw } else { "" }
-    $PluginEntries = ""
-    foreach ($plugin in $PluginArray) {
-        $plugin = $plugin.Trim()
-        $skillPath = ".sumela/memory-plugins/$plugin/SKILL.md"
-        if (-not (Test-Path $skillPath)) {
-            Write-Warn "Plugin SKILL.md not found: $skillPath"
-        }
-        elseif ($registryText -match "<name>$([regex]::Escape($plugin))</name>") {
-            Write-Info "Plugin already registered: $plugin — skipping"
-        }
-        else {
-            $PluginEntries += @"
-
-<skill activation="lazy">
-<name>$plugin</name>
-<description>Memory plugin — see ``.sumela/memory-plugins/$plugin/SKILL.md`` for routing and prerequisites.</description>
-<path>.sumela/memory-plugins/$plugin/SKILL.md</path>
-</skill>
-"@
-            Write-Ok "Registered plugin: $plugin"
-        }
+    $regLib = Join-Path $PSScriptRoot "lib/sumela-registry.ps1"
+    if (-not (Test-Path $regLib)) {
+        Write-Warn "scripts/lib/sumela-registry.ps1 missing - memory plugins not registered (re-run bootstrap)"
     }
-
-    if ($PluginEntries) {
-        $content = Get-Content ".sumela/SKILL_REGISTRY.md" -Raw
-        $content = $content -replace '(</available_skills>)', "$PluginEntries`n`$1"
-        $content | Set-Content ".sumela/SKILL_REGISTRY.md" -NoNewline
-        Write-Ok "Plugins appended to SKILL_REGISTRY.md"
+    elseif (-not (Test-Path ".sumela/SKILL_REGISTRY.md")) {
+        Write-Warn ".sumela/SKILL_REGISTRY.md not found - memory plugins not registered"
+    }
+    else {
+        . $regLib
+        $installRoot = (Get-Location -PSProvider FileSystem).ProviderPath
+        foreach ($plugin in $PluginArray) {
+            $plugin = $plugin.Trim()
+            $skillPath = ".sumela/memory-plugins/$plugin/SKILL.md"
+            if (-not (Test-Path $skillPath)) { Write-Warn "Plugin SKILL.md not found: $skillPath"; continue }
+            $res = Register-SumelaRegistryPlugin -Root $installRoot -Name $plugin
+            if ($res.Code -eq 0) { Write-Ok "Registered plugin: $plugin" }
+            elseif ($res.Code -eq 5) { Write-Info "Plugin already registered: $plugin - skipping" }   # the shipped registry may list it
+            elseif ($res.Code -eq 3) { Write-Warn "Plugin $plugin not registered: its SKILL.md has no one-line frontmatter description" }
+            elseif ($res.Code -eq 4) { Write-Warn "Plugin $plugin not registered: its name or description cannot be held by the registry ($($res.Message))" }
+            elseif ($res.Code -eq 7) {
+                Write-Ok "Registered plugin: $plugin"
+                Write-Warn "Plugin ${plugin}: the provenance record (.sumela/.last-update.json) was not updated: $($res.Message)"
+            }
+            else { Write-Warn "Plugin $plugin not registered in .sumela/SKILL_REGISTRY.md: $($res.Message)" }
+        }
     }
 }
 
 # =============================================================================
 # 7b-memory. BRING UP THE MEMORY RUNTIME (auto-safe + confirm-invasive)
 # =============================================================================
-# Copying plugin files isn't enough — setup-memory.ps1 auto-installs the cheap deps
+# Copying plugin files isn't enough - setup-memory.ps1 auto-installs the cheap deps
 # (pip) and confirms-and-runs the invasive ones (start Qdrant via Docker, pull the
 # Ollama model, install the graphify CLI), leaving no manual homework.
 if ($PluginArray.Count -gt 0 -and (Test-Path "scripts/setup-memory.ps1") -and (-not $env:SUMELA_SKIP_MEMORY_SETUP)) {
@@ -906,14 +911,14 @@ if ($PluginArray.Count -gt 0 -and (Test-Path "scripts/setup-memory.ps1") -and (-
 }
 
 # =============================================================================
-# 7c. INSTALL GIT HOOKS (core.hooksPath — pre-commit validation + memory sync)
+# 7c. INSTALL GIT HOOKS (core.hooksPath - pre-commit validation + memory sync)
 # =============================================================================
 # Wired whenever the project is a git repo. Logic lives in Wire-GitHooks near the
 # top (shared with the -HooksOnly path).
 Wire-GitHooks
 
 # =============================================================================
-# 7d. GOVERNANCE — CODEOWNERS for the agent-control surface (team mode only)
+# 7d. GOVERNANCE - CODEOWNERS for the agent-control surface (team mode only)
 # =============================================================================
 if ($Governance -eq "team") {
     Write-Info "Ensuring CODEOWNERS covers the agent-control surface (team mode)..."
@@ -924,8 +929,8 @@ if ($Governance -eq "team") {
     }
     else {
         if (-not (Test-Path ".github")) { New-Item -ItemType Directory -Path ".github" -Force | Out-Null }
-        if ((Test-Path $codeownersFile) -and ((Get-Item $codeownersFile).Length -gt 0)) { Add-Content $codeownersFile "" }
-        Add-Content $codeownersFile "$codeownersMarker — changes here alter every developer's agent."
+        if ((Test-Path $codeownersFile) -and ((Get-Item -Force $codeownersFile).Length -gt 0)) { Add-Content $codeownersFile "" }
+        Add-Content $codeownersFile "$codeownersMarker $EmDash changes here alter every developer's agent."
         Add-Content $codeownersFile "# Replace @OWNER with your team/maintainer handle (e.g. @org/maintainers)."
         Add-Content $codeownersFile "/AGENTS.md                          @OWNER"
         Add-Content $codeownersFile "/.sumela/rules/                     @OWNER"
@@ -935,12 +940,12 @@ if ($Governance -eq "team") {
         Add-Content $codeownersFile "/.sumela/SKILL_REGISTRY.md          @OWNER"
         Add-Content $codeownersFile "/.sumela/git-hooks/                 @OWNER"
         Add-Content $codeownersFile "/docs/second-brain/wiki/_SCHEMA.md  @OWNER"
-        Write-Ok "CODEOWNERS updated ($codeownersFile) — replace @OWNER with your handle"
+        Write-Ok "CODEOWNERS updated ($codeownersFile) - replace @OWNER with your handle"
     }
 }
 
 # =============================================================================
-# 7e. CI WORKFLOW — run validate-structure on push/PR (opt-in: -Ci / prompt)
+# 7e. CI WORKFLOW - run validate-structure on push/PR (opt-in: -Ci / prompt)
 # =============================================================================
 if ($WithCi) {
     $ciFile = ".github/workflows/sumela-validate.yml"
@@ -954,7 +959,7 @@ if ($WithCi) {
 name: SumelaOS Validate
 
 # Enforces the SumelaOS structure contract on every push / PR. Mirrors
-# scripts/validate-structure.sh — the same check the pre-commit hook runs locally.
+# scripts/validate-structure.sh - the same check the pre-commit hook runs locally.
 # Not on GitHub? See docs/second-brain/ADOPTION_GUIDE.md for a GitLab / Azure equivalent.
 
 on:
@@ -995,12 +1000,12 @@ jobs:
           if ($bad) { exit 1 } else { Write-Host "PowerShell scripts parse clean." }
 '@
         Set-Content -Path $ciFile -Value $ciContent
-        Write-Ok "CI workflow added — GitHub Actions; delete it if you use other CI (GitLab/Azure: see ADOPTION_GUIDE)"
+        Write-Ok "CI workflow added - GitHub Actions; delete it if you use other CI (GitLab/Azure: see ADOPTION_GUIDE)"
     }
 }
 
 # =============================================================================
-# 7f. SYNC ORG-SHARED RULES (monorepo — no-op unless .sumela-shared/rules/ exists)
+# 7f. SYNC ORG-SHARED RULES (monorepo - no-op unless .sumela-shared/rules/ exists)
 # =============================================================================
 $syncShared = "scripts/sync-shared-rules.py"
 if ((Test-Path $syncShared) -and (Get-Command python3 -ErrorAction SilentlyContinue)) {
@@ -1037,12 +1042,12 @@ if ($bashAvailable) {
     }
     else {
         Write-Host ""
-        Write-Warn "Validation had failures — review output above"
+        Write-Warn "Validation had failures - review output above"
         $ValidationFailed = $true
     }
 }
 else {
-    Write-Warn "bash not available — skipping validation. Run manually: bash scripts/validate-structure.sh --check-placeholders --post-setup"
+    Write-Warn "bash not available - skipping validation. Run manually: bash scripts/validate-structure.sh --check-placeholders --post-setup"
 }
 
 # =============================================================================
@@ -1071,19 +1076,19 @@ if ($WikiPagesKept -gt 0) {
 if ($IDEArray.Count) { Write-Host "    - IDE pointer files" }
 if ($PluginArray.Count) { Write-Host "    - SKILL_REGISTRY.md (plugins appended)" }
 if ($HooksWired) { Write-Host "    - git hooks wired (core.hooksPath = .sumela/git-hooks; pre-commit validation)" }
-if ($Governance -eq "team") { Write-Host "    - .github/CODEOWNERS (agent-control surface — replace @OWNER)" }
+if ($Governance -eq "team") { Write-Host "    - .github/CODEOWNERS (agent-control surface - replace @OWNER)" }
 if ($WithCi) { Write-Host "    - .github/workflows/sumela-validate.yml (CI structure check)" }
 Write-Host ""
 Write-Host "  Next steps:"
-Write-Host "    1. Edit AGENTS.md — fill in project-specific commands and conventions"
-Write-Host "    2. Edit .sumela/rules/*.md — customize stack standards"
-Write-Host "    3. Edit docs/second-brain/wiki/active-project-context.md — add current sprint"
-Write-Host "    4. Review .sumela/RULE_REGISTRY.md — adjust stack scopes if needed"
+Write-Host "    1. Edit AGENTS.md - fill in project-specific commands and conventions"
+Write-Host "    2. Edit .sumela/rules/*.md - customize stack standards"
+Write-Host "    3. Edit docs/second-brain/wiki/active-project-context.md - add current sprint"
+Write-Host "    4. Review .sumela/RULE_REGISTRY.md - adjust stack scopes if needed"
 if ($PluginArray.Count) { Write-Host "    5. Install plugin dependencies: pip install -r .sumela/memory-plugins/*/requirements.txt" }
 Write-Host ""
 
 # Exit non-zero if our own validation failed (don't let "Setup Complete" mask a broken project).
 if ($ValidationFailed) {
-    Write-Err "Setup finished but structure validation FAILED — fix the issues listed above before committing (the pre-commit hook will otherwise block you)."
+    Write-Err "Setup finished but structure validation FAILED - fix the issues listed above before committing (the pre-commit hook will otherwise block you)."
     exit 1
 }

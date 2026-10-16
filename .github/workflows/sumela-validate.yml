@@ -94,8 +94,6 @@ jobs:
           # makes one parse here (ASCII text, or a UTF-8 BOM) deletes its line. A listed file that
           # parses fails this step, so the list only shrinks.
           $known = @(
-            'scripts/setup-memory.ps1'
-            'scripts/setup.ps1'
             'scripts/status.ps1'
             'scripts/sync-mirrors.ps1'
             'scripts/update.ps1'
