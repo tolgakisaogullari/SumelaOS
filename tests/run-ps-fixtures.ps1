@@ -28,12 +28,25 @@
     suite starts, the runner stops with exit 2 in CI (CI=true) and prints a warning elsewhere.
     Any other self-check failure stops the run with exit 2 instead of passing.
 
+    What a failing suite printed (its standard output, then "[stderr]" and its standard error)
+    is shown in two parts, so a failure far from the end of a long log is never lost. First
+    every failure line before the last 60 lines, each with the 6 lines after it, as one excerpt
+    of at most 400 lines (a cut says how many lines it left out). Then the last 60 lines. A
+    failure line starts with FAIL or FAILED, or holds Exception, Traceback, fatal:, error:,
+    [stderr] or a bash "line N:" error; a line that starts with PASS or SKIP never is one.
+    "[line N]" gives a block's place in the full log. git's line-ending warnings ("LF will be
+    replaced by CRLF") are left out of what is shown and counted on one line. The suite itself
+    sees its output unchanged. tests/run-gitbash-fixtures.sh prints the same.
+
+    SUMELA_FIXTURE_LOG_DIR=<dir> saves the full log of each failing suite as <dir>/<suite>.log
+    (UTF-8; the CI job uploads that directory).
+
     Usage:  powershell -NoProfile -File tests/run-ps-fixtures.ps1 [-Culture <name>]
             pwsh -NoProfile -File tests/run-ps-fixtures.ps1 [-Culture <name>]
 
 .NOTES
     Exit 0 = every suite passed, or none exists yet ("0 suites").
-    Exit 1 = a suite failed (the tail of its output is printed).
+    Exit 1 = a suite failed (its failure lines and the tail of its output are printed).
     Exit 2 = a usage error (including a missing or empty -Culture value), an unknown culture, or
              a failed self-check.
     Keep this file ASCII-only: Windows PowerShell 5.1 reads a script without a BOM as ANSI.
@@ -50,8 +63,19 @@ $utf8 = New-Object System.Text.UTF8Encoding $false
 # suites share with this process, and a suite must set its own, as every entry point does.
 
 $tailLines = 60
+$contextLines = 6     # lines shown after each failure line
+$excerptCap = 400     # lines of failure excerpt shown per suite, before its tail
 $drainMs = 10000      # how long to wait for a suite's output once its process has exited
 $usage = 'usage: run-ps-fixtures.ps1 [-Culture <name>]'
+
+# How a failing suite's output is read (see Write-Excerpt): case-sensitive, culture-invariant.
+$rxOptions = [System.Text.RegularExpressions.RegexOptions]::CultureInvariant
+$rxFail = New-Object System.Text.RegularExpressions.Regex -ArgumentList '\A[ \t]*FAIL(ED)?([^A-Za-z0-9_]|\z)', $rxOptions
+$rxVerdictOk = New-Object System.Text.RegularExpressions.Regex -ArgumentList '\A[ \t]*(PASS|SKIP)([^A-Za-z0-9_]|\z)', $rxOptions
+$rxFailure = New-Object System.Text.RegularExpressions.Regex -ArgumentList ('Exception|Traceback|\[stderr\]|' +
+    '[Ff][Aa][Tt][Aa][Ll]:|[Ee][Rr][Rr][Oo][Rr]:|: line [0-9]+: '), $rxOptions
+$rxEolWarning = New-Object System.Text.RegularExpressions.Regex -ArgumentList ('warning: .*(LF will be replaced by CRLF|CRLF will be replaced by LF)|' +
+    '\A[ \t]*The file will have its original line endings in your working directory[ \t]*\z'), $rxOptions
 
 function Exit-Usage([string]$Message) {
     [Console]::Error.WriteLine('run-ps-fixtures: ' + $Message)
@@ -87,6 +111,10 @@ $testsDir = $PSScriptRoot
 $repoRoot = Split-Path -Parent $testsDir
 $onWindows = ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT)
 $inCI = [string]::Equals([string]$env:CI, 'true', [System.StringComparison]::OrdinalIgnoreCase)
+# Where the full log of each failing suite is saved; empty = nowhere. A path that cannot be used
+# is reported when the first log is saved, with the reason.
+$logDir = [string]$env:SUMELA_FIXTURE_LOG_DIR
+if ($logDir.Length -gt 0) { try { $logDir = [System.IO.Path]::GetFullPath($logDir) } catch { } }
 
 $targetCulture = $null
 $suiteLcAll = $null   # outside Windows under -Culture: the LC_ALL each suite process gets
@@ -180,13 +208,75 @@ function Invoke-Suite([string]$Path) {
     return Invoke-HostChild @('-NoProfile', '-Command', $command)
 }
 
-function Write-Tail([string]$Text, [int]$Count) {
-    $trimmed = $Text.TrimEnd([char[]]"`r`n")
-    if ($trimmed.Length -eq 0) { Write-Host '    (no output)'; return }
-    $lines = $trimmed -split "\r?\n"
-    $start = [Math]::Max(0, $lines.Count - $Count)
-    if ($start -gt 0) { Write-Host ('    [' + $start + ' earlier lines omitted]') }
-    for ($i = $start; $i -lt $lines.Count; $i++) { Write-Host ('    ' + $lines[$i]) }
+function Get-Noun([int]$Count) {
+    if ($Count -eq 1) { return 'line' }
+    return 'lines'
+}
+
+# Write-Excerpt <output> <tail lines>: what a suite printed, indented, as the header describes:
+# the failure lines before the tail with the lines after each, then the tail.
+function Write-Excerpt([string]$Text, [int]$TailCount) {
+    $all = $Text.TrimEnd([char[]]"`r`n")
+    if ($all.Length -eq 0) { Write-Host '    (no output)'; return }
+    $raw = $all -split "\r?\n"
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $numbers = New-Object 'System.Collections.Generic.List[int]'     # each line's place in the full log
+    $warnings = 0
+    for ($i = 0; $i -lt $raw.Count; $i++) {
+        if ((-not $rxFail.IsMatch($raw[$i])) -and $rxEolWarning.IsMatch($raw[$i])) { $warnings++; continue }
+        $lines.Add($raw[$i])
+        $numbers.Add($i + 1)
+    }
+    if ($warnings -gt 0) { Write-Host ('    [' + $warnings + ' ' + (Get-Noun $warnings) + ' of git line-ending warnings ("LF will be replaced by CRLF") left out]') }
+    $n = $lines.Count
+    if ($n -eq 0) { Write-Host '    (no other output)'; return }
+    $t = [Math]::Max(0, $n - $TailCount)      # the lines before index $t come before the tail
+    $keep = New-Object 'bool[]' $n
+    $failure = New-Object 'bool[]' $n
+    $found = 0
+    for ($i = 0; $i -lt $t; $i++) {
+        $s = $lines[$i]
+        if (-not ($rxFail.IsMatch($s) -or ((-not $rxVerdictOk.IsMatch($s)) -and $rxFailure.IsMatch($s)))) { continue }
+        $found++
+        $failure[$i] = $true
+        $last = [Math]::Min($i + $contextLines, $t - 1)
+        for ($j = $i; $j -le $last; $j++) { $keep[$j] = $true }
+    }
+    if ($found -gt 0) {
+        Write-Host ('    [failure lines before the last ' + $TailCount + ' lines: ' + $found + ', each shown with up to ' + $contextLines + ' lines after it]')
+        $shown = 0; $prev = -2; $cut = 0; $cutFailures = 0
+        for ($i = 0; $i -lt $t; $i++) {
+            if (-not $keep[$i]) { continue }
+            if ($shown -ge $excerptCap) {
+                $cut++
+                if ($failure[$i]) { $cutFailures++ }
+                continue
+            }
+            if ($i -ne $prev + 1) { Write-Host ('    [line ' + $numbers[$i] + ']') }
+            Write-Host ('    ' + $lines[$i])
+            $shown++
+            $prev = $i
+        }
+        if ($cut -gt 0) {
+            Write-Host ('    [the excerpt stops at ' + $excerptCap + ' lines; not shown: ' + $cut + ' more ' + (Get-Noun $cut) +
+                ', failure lines among them: ' + $cutFailures + ']')
+        }
+        Write-Host ('    [the last ' + ($n - $t) + ' lines, from line ' + $numbers[$t] + ']')
+    }
+    elseif ($t -gt 0) { Write-Host ('    [' + $t + ' earlier ' + (Get-Noun $t) + ' omitted]') }
+    for ($i = $t; $i -lt $n; $i++) { Write-Host ('    ' + $lines[$i]) }
+}
+
+# Save-Log <suite name> <output>: with SUMELA_FIXTURE_LOG_DIR set, keeps the full log there.
+function Save-Log([string]$Name, [string]$Text) {
+    if ($logDir.Length -eq 0) { return }
+    $path = [System.IO.Path]::Combine($logDir, $Name + '.log')
+    try {
+        [void][System.IO.Directory]::CreateDirectory($logDir)
+        [System.IO.File]::WriteAllText($path, $Text + "`n", $utf8)
+        Write-Host ('    [full log: ' + $path + ']')
+    }
+    catch { Write-Host ('    [could not save the full log as ' + $path + ': ' + $_.Exception.Message + ']') }
 }
 
 $scratch = Join-Path ([System.IO.Path]::GetTempPath()) ('sumela-ps-fixtures-' + [System.IO.Path]::GetRandomFileName())
@@ -196,6 +286,7 @@ try {
     Write-Host 'PowerShell fixtures (tests/test_*.ps1)'
     Write-Host ('  host:       ' + $hostExe)
     Write-Host ('  PSVersion:  ' + $PSVersionTable.PSVersion.ToString() + ' (' + $PSVersionTable.PSEdition + ')')
+    if ($logDir.Length -gt 0) { Write-Host ('  full logs:  ' + $logDir + " (each failing suite's)") }
 
     # --- Self-check: the path every suite takes must tell a failure from a pass -------------
     $passCanary = Join-Path $scratch 'canary-pass.ps1'
@@ -255,9 +346,9 @@ if ($env:OS -ceq 'Windows_NT') { & cmd.exe /d /c 'exit 4' } else { & /bin/sh -c 
     if ($problem.Length -gt 0) {
         Write-Host ('  self-check FAILED: ' + $problem)
         Write-Host '  passing suite output:'
-        Write-Tail $pass.Output 20
+        Write-Excerpt $pass.Output 20
         Write-Host '  failing suite output:'
-        Write-Tail $fail.Output 20
+        Write-Excerpt $fail.Output 20
         exit 2
     }
     $seen = $probe.Groups[1].Value
@@ -294,7 +385,8 @@ if ($env:OS -ceq 'Windows_NT') { & cmd.exe /d /c 'exit 4' } else { & /bin/sh -c 
         else {
             $failed++
             Write-Host ('  FAIL  ' + $name + ' (exit ' + $result.ExitCode + ', ' + $took + ')')
-            Write-Tail $result.Output $tailLines
+            Save-Log $name $result.Output
+            Write-Excerpt $result.Output $tailLines
         }
     }
     if ($suites.Count -eq 0) { Write-Host '0 suites' }

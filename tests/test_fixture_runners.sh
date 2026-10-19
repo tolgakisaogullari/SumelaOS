@@ -8,7 +8,10 @@
 # This suite copies each runner into a throwaway repository with planted passing and failing
 # suites. It checks the exit code, the PASS and FAIL lines and the "N suites, M failed"
 # summary, and also the usage errors (exit 2), "0 suites", --require-crlf, and that
-# -Culture tr-TR reaches the processes a suite starts.
+# -Culture tr-TR reaches the processes a suite starts. For a failing suite with a long log it
+# checks what both runners show, the same way: a FAIL line far from the end with the lines
+# after it, git's line-ending warnings counted instead of shown (real ones from git, too), the
+# 400-line cap on the excerpt, and the full log saved under SUMELA_FIXTURE_LOG_DIR.
 #
 # Needs bash and git. The PowerShell half needs pwsh (SKIP without it) and runs outside Windows,
 # where LC_ALL selects the culture. On Windows the CI job relies on the runner's own self-check.
@@ -23,6 +26,7 @@ PS_RUNNER="$SCRIPT_DIR/run-ps-fixtures.ps1"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+unset SUMELA_FIXTURE_LOG_DIR        # set only by the runs that check the saved full logs
 
 PASS=0 FAIL=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS + 1)); }
@@ -57,6 +61,61 @@ last_is() {
   local last
   last="$(LC_ALL=C sed -n '$p' "$2")"
   if [ "$last" = "$3" ]; then ok "$1"; else bad "$1 (expected the last line [$3], got [$last])"; fi
+}
+# section <log> <suite>: what a runner printed below the FAIL line of one suite
+section() {
+  LC_ALL=C awk -v s="  FAIL  $2 (" 'index($0, s) == 1 { on = 1; next }
+    /^  (PASS|FAIL)  [^ ]/ || /^[0-9]+ suites/ { on = 0 } on' "$1"
+}
+
+# The planted long and flood suites print the same lines in both runners' fixtures:
+#   long:  lines 1-200 "  PASS  early check N.", 201 "  FAIL  the far-away check", 202-203 its
+#          details, 204-503 git line-ending warnings, 504-603 "  PASS  late check N.", and
+#          604 "300 passed, 1 failed"; it exits 1
+#   flood: 1000 lines "  FAIL  flood NNNN.", then 60 lines "  PASS  flood tail N."; it exits 1
+# excerpt_checks <log> <long suite> <flood suite>: what both runners show for them.
+excerpt_checks() {
+  local log="$1" n
+  has   "a long failing suite gets a FAIL line" "$log" "  FAIL  $2 (exit 1,"
+  has   "...its failure lines before the tail are counted" "$log" "    [failure lines before the last 60 lines: 1, each shown with up to 6 lines after it]"
+  has   "...a FAIL line 400 lines before the end is shown, with its place in the log" "$log" "    [line 201]"
+  has   "...the FAIL line itself" "$log" "      FAIL  the far-away check"
+  has   "...the lines after it" "$log" "        got:      2"
+  has   "...6 of them, git's warnings skipped" "$log" "      PASS  late check 4."
+  lacks "...and no more" "$log" "PASS  late check 5."
+  lacks "a passing line far from any failure is not shown" "$log" "PASS  early check 100."
+  has   "git's line-ending warnings are counted on one line" "$log" "    [300 lines of git line-ending warnings (\"LF will be replaced by CRLF\") left out]"
+  lacks "...and never shown" "$log" "LF will be replaced by CRLF the next time"
+  has   "the tail follows, with its place in the log" "$log" "    [the last 60 lines, from line 545]"
+  has   "...up to the suite's last line" "$log" "    300 passed, 1 failed"
+  has   "a flood of failure lines gets a FAIL line" "$log" "  FAIL  $3 (exit 1,"
+  has   "...its excerpt stops at 400 lines and says what it left out" "$log" "    [the excerpt stops at 400 lines; not shown: 600 more lines, failure lines among them: 600]"
+  n="$(LC_ALL=C grep -c 'FAIL  flood ' "$log")"
+  if [ "$n" = 400 ]; then ok "...it shows 400 of its failure lines"; else bad "...it shows 400 of its failure lines (got $n)"; fi
+  has   "...the first 400" "$log" "      FAIL  flood 0001."
+  has   "...through the 400th" "$log" "      FAIL  flood 0400."
+  lacks "...and not the 401st" "$log" "FAIL  flood 0401."
+  has   "...then its tail" "$log" "      PASS  flood tail 60."
+}
+
+# saved_log_checks <log> <full-log dir> <long suite> <passing suite> <header label>
+saved_log_checks() {
+  local log="$1" dir="$2" saved="$2/$3.log" n
+  has   "the header names the directory of the full logs" "$log" "$5$dir (each failing suite's)"
+  has   "a failing suite names its full log" "$log" "    [full log: $saved]"
+  if [ ! -f "$saved" ]; then
+    bad "...which is saved ($saved is missing)"
+  else
+    n="$(LC_ALL=C grep -c 'LF will be replaced by CRLF the next time' "$saved")"
+    if [ "$(wc -l <"$saved" | tr -d ' ')" = 604 ] && [ "$n" = 300 ] &&
+       LC_ALL=C grep -qx '  FAIL  the far-away check' "$saved" &&
+       [ "$(LC_ALL=C sed -n '$p' "$saved")" = "300 passed, 1 failed" ]; then
+      ok "...and holds every line the suite printed, the warnings too"
+    else
+      bad "...and holds every line the suite printed, the warnings too ($(wc -l <"$saved" | tr -d ' ') lines, $n warnings)"
+    fi
+  fi
+  if [ -e "$dir/$4.log" ]; then bad "a passing suite's log is not saved"; else ok "a passing suite's log is not saved"; fi
 }
 
 # =============================================================================================
@@ -114,6 +173,7 @@ has   "the header reports CRLF checkouts" "$log" "  checkouts:     crlf line end
 lacks "a suite outside its list does not run" "$log" "test_other.sh"
 lacks "a file that does not end in .sh does not run" "$log" "test_wiki_c.sh.bak"
 lacks "a directory does not run" "$log" "test_wiki_dir.sh"
+lacks "without SUMELA_FIXTURE_LOG_DIR no full log is saved" "$log" "[full log:"
 
 log="$WORK/gb-lf-required.log"
 run "$log" gitenv lf "$BASH" "$t/run-gitbash-fixtures.sh" --require-crlf
@@ -141,6 +201,48 @@ log="$WORK/gb-empty.log"
 run "$log" gitenv crlf "$BASH" "$WORK/gb-empty/tests/run-gitbash-fixtures.sh"
 rc_is "no suite yet: exit 0" 0
 last_is "...and the last line is \"0 suites\"" "$log" "0 suites"
+
+# What a failing suite's log shows; the CI job's conditions (CRLF checkouts, the full logs saved).
+L="$WORK/gb-long/tests"
+mkdir -p "$L"
+cp "$GB_RUNNER" "$L/"
+cat >"$L/test_wiki_long.sh" <<'EOF'
+i=0; while [ $i -lt 200 ]; do i=$((i + 1)); echo "  PASS  early check $i."; done
+echo "  FAIL  the far-away check"
+echo "    expected: 1"
+echo "    got:      2"
+i=0; while [ $i -lt 300 ]; do i=$((i + 1)); echo "warning: in the working copy of 'f$i', LF will be replaced by CRLF the next time Git touches it"; done
+i=0; while [ $i -lt 100 ]; do i=$((i + 1)); echo "  PASS  late check $i."; done
+echo "300 passed, 1 failed"
+exit 1
+EOF
+cat >"$L/test_wiki_flood.sh" <<'EOF'
+i=0; while [ $i -lt 1000 ]; do i=$((i + 1)); printf '  FAIL  flood %04d.\n' "$i"; done
+i=0; while [ $i -lt 60 ]; do i=$((i + 1)); echo "  PASS  flood tail $i."; done
+exit 1
+EOF
+cat >"$L/test_wiki_warnings.sh" <<'EOF'
+# Fails, and prints nothing but the warnings git itself gives when it adds LF files under
+# core.autocrlf=true (one line each since git 2.37, two lines before).
+d="$(mktemp -d)" && cd "$d" && git -c init.defaultBranch=main init -q . || exit 9
+i=0; while [ $i -lt 30 ]; do i=$((i + 1)); printf 'text\n' >"f$i.txt"; done
+LC_ALL=C git -c core.autocrlf=true add .
+cd / && rm -rf "$d"
+exit 1
+EOF
+printf 'echo "  FAIL  printed by a suite that exits 0"\nexit 0\n' >"$L/test_registry_parity.sh"
+
+log="$WORK/gb-long.log"
+run "$log" gitenv crlf env SUMELA_FIXTURE_LOG_DIR="$WORK/gb logs" "$BASH" "$L/run-gitbash-fixtures.sh" --require-crlf
+rc_is "long failing suites: exit 1" 1
+has   "...and the summary counts them" "$log" "4 suites, 3 failed"
+has   "a suite that exits 0 passes, whatever it prints" "$log" "  PASS  test_registry_parity.sh ("
+excerpt_checks "$log" test_wiki_long.sh test_wiki_flood.sh
+section "$log" test_wiki_warnings.sh >"$WORK/gb-warnings.txt"
+has   "a suite that prints only git's real warnings still fails" "$log" "  FAIL  test_wiki_warnings.sh (exit 1,"
+has   "...its warnings are counted" "$WORK/gb-warnings.txt" " of git line-ending warnings (\"LF will be replaced by CRLF\") left out]"
+has   "...and nothing else is shown" "$WORK/gb-warnings.txt" "    (no other output)"
+saved_log_checks "$log" "$WORK/gb logs" test_wiki_long.sh test_registry_parity.sh "  full logs:     "
 
 run "$WORK/gb-u1.log" "$BASH" "$t/run-gitbash-fixtures.sh" --bogus
 rc_is "an unknown argument: exit 2" 2
@@ -202,6 +304,7 @@ EOF
   lacks "a Test_ prefix does not run" "$log" "Test_Upper.ps1"
   lacks "a .ps1xml file does not run" "$log" "test_x.ps1xml"
   lacks "a directory does not run" "$log" "test_dir.ps1"
+  lacks "without SUMELA_FIXTURE_LOG_DIR no full log is saved" "$log" "[full log:"
 
   # CI=true: the runner stops with exit 2 if a process a suite starts misses the culture.
   log="$WORK/ps-tr.log"
@@ -222,6 +325,44 @@ EOF
   run "$log" env -u CI LC_ALL=en_US.UTF-8 "$PWSH" -NoProfile -File "$WORK/ps-empty/tests/run-ps-fixtures.ps1"
   rc_is "no suite yet: exit 0" 0
   last_is "...and the last line is \"0 suites\"" "$log" "0 suites"
+
+  # What a failing suite's log shows: the same planted lines as in the Git Bash fixture.
+  L="$WORK/ps-long/tests"
+  mkdir -p "$L"
+  cp "$PS_RUNNER" "$L/"
+  cat >"$L/test_long.ps1" <<'EOF'
+for ($i = 1; $i -le 200; $i++) { Write-Output "  PASS  early check $i." }
+Write-Output '  FAIL  the far-away check'
+Write-Output '    expected: 1'
+Write-Output '    got:      2'
+for ($i = 1; $i -le 300; $i++) { Write-Output "warning: in the working copy of 'f$i', LF will be replaced by CRLF the next time Git touches it" }
+for ($i = 1; $i -le 100; $i++) { Write-Output "  PASS  late check $i." }
+Write-Output '300 passed, 1 failed'
+exit 1
+EOF
+  cat >"$L/test_flood.ps1" <<'EOF'
+for ($i = 1; $i -le 1000; $i++) { Write-Output ('  FAIL  flood ' + $i.ToString('0000') + '.') }
+for ($i = 1; $i -le 60; $i++) { Write-Output "  PASS  flood tail $i." }
+exit 1
+EOF
+  cat >"$L/test_warnings.ps1" <<'EOF'
+# Fails, and prints nothing but git's warnings, on standard error as git does.
+for ($i = 1; $i -le 30; $i++) { [Console]::Error.WriteLine("warning: in the working copy of 'f$i.txt', LF will be replaced by CRLF the next time Git touches it") }
+exit 1
+EOF
+  printf "Write-Output '  FAIL  printed by a suite that exits 0'\nexit 0\n" >"$L/test_passes.ps1"
+
+  log="$WORK/ps-long.log"
+  run "$log" env -u CI LC_ALL=en_US.UTF-8 SUMELA_FIXTURE_LOG_DIR="$WORK/ps logs" "$PWSH" -NoProfile -File "$L/run-ps-fixtures.ps1"
+  rc_is "long failing suites: exit 1" 1
+  has   "...and the summary counts them" "$log" "4 suites, 3 failed"
+  has   "a suite that exits 0 passes, whatever it prints" "$log" "  PASS  test_passes.ps1 ("
+  excerpt_checks "$log" test_long.ps1 test_flood.ps1
+  section "$log" test_warnings.ps1 >"$WORK/ps-warnings.txt"
+  has   "a suite that prints only git's warnings still fails" "$log" "  FAIL  test_warnings.ps1 (exit 1,"
+  has   "...its warnings are counted" "$WORK/ps-warnings.txt" "    [30 lines of git line-ending warnings (\"LF will be replaced by CRLF\") left out]"
+  has   "...and the rest of its output is shown" "$WORK/ps-warnings.txt" "    [stderr]"
+  saved_log_checks "$log" "$WORK/ps logs" test_long.ps1 test_passes.ps1 "  full logs:  "
 
   run "$WORK/ps-u1.log" "$PWSH" -NoProfile -File "$p/run-ps-fixtures.ps1" -Bogus
   rc_is "an unknown argument: exit 2" 2
