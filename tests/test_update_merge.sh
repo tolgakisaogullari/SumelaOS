@@ -670,7 +670,10 @@ t27_merged_hook_keeps_mode() {
   base_upstream "$up"
   fx_set_line "$up/$H" 27 "# hook upstream change"; fx_release "$up" 0.20.0
   fx_consumer "$c" "$up" v0.19.0
-  fx_set_line "$c/$H" 4 "# hook local secret scan"; chmod 755 "$c/$H"; fx_commit "$c" "fork the hook"
+  fx_set_line "$c/$H" 4 "# hook local secret scan"; chmod 755 "$c/$H"
+  # Git for Windows takes no executable bit from a file (core.fileMode=false): the index gets it
+  # here, as a checkout of a hook committed on Linux or macOS has it.
+  git -C "$c" update-index --chmod=+x -- "$H"; fx_commit "$c" "fork the hook"
   same "t27: (setup) the hook is tracked as 100755" 100755 "$(git -C "$c" ls-files -s -- "$H" | cut -d' ' -f1)"
   # A file already identical to the release's, which lost its executable bit in the checkout.
   is_windows || chmod 644 "$c/scripts/tool.sh"
