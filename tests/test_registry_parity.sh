@@ -243,8 +243,9 @@ for variant in lf crlf nofinal; do
      cmp -s <(LC_ALL=C tail -n +$((REG_BETA_LINE + 1)) "$WORK/sync-$variant.orig") <(LC_ALL=C tail -n +$((REG_BETA_LINE + 1)) "$reg"); then
     ok "$variant: every other byte of the registry is unchanged"
   else bad "$variant: every other byte of the registry is unchanged"; diff "$WORK/sync-$variant.orig" "$reg" | head -8 | sed 's/^/      /'; fi
-  want="$NEWBETA"; [ "$variant" = crlf ] && want="$NEWBETA$CR"
-  same "$variant: the description line is the frontmatter's text" "$want" "$(lines "$reg" $REG_BETA_LINE $REG_BETA_LINE)"
+  # A CR shows as ^: Git Bash's command substitution turns CRLF into LF.
+  want="$NEWBETA"; [ "$variant" = crlf ] && want="$NEWBETA^"
+  same "$variant: the description line is the frontmatter's text" "$want" "$(lines "$reg" $REG_BETA_LINE $REG_BETA_LINE | LC_ALL=C tr '\r' '^')"
   run "$d" --check
   same "$variant: --check after the sync exits 0" 0 "$RC"
 done
