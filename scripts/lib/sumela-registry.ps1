@@ -19,8 +19,9 @@
 # Add-SumelaRegistryEntry take one. ConvertTo-SumelaByteString turns ordinary text (a command-line
 # argument) into one; ConvertFrom-SumelaByteString turns one back into text (a file path, a
 # message). Writes go through [IO.File]::WriteAllBytes to <registry>.sumela-tmp.<pid>, whose line
-# count is checked, then a rename, then a re-read; the temp file never outlives the call. Never
-# Set-Content, Add-Content or Out-File, which write ANSI or a BOM on Windows PowerShell 5.1 [RU-M1].
+# count and CR count are checked as the bash twin checks them, then a rename, then a re-read; the
+# temp file never outlives the call. Never Set-Content, Add-Content or Out-File, which write ANSI
+# or a BOM on Windows PowerShell 5.1 [RU-M1].
 #
 #   Get-SumelaFmDescription -Path <SKILL.md>
 #       [pscustomobject]@{ Code; Value }. Code is the bash twin's exit code: 0 Value holds the
@@ -287,25 +288,34 @@ function Get-SumelaRegistryDescription {
     return $null
 }
 
-function Get-SumelaRegistryLfCount {
-    param([byte[]]$Bytes)
+function Get-SumelaRegistryByteCount {
+    # How many bytes of the array are $Value (10: its lines; 13: its CRs).
+    param([byte[]]$Bytes, [int]$Value)
     $n = 0
-    foreach ($b in $Bytes) { if ($b -eq 10) { $n++ } }
+    foreach ($b in $Bytes) { if ($b -eq $Value) { $n++ } }
     return $n
 }
 
 function Save-SumelaRegistryText {
     # The rendered byte string over the registry: its line count checked against the registry's
-    # plus $Added (an add may also put one blank line first), nothing written when the bytes are
-    # already so, else a temp file beside it, then a rename. The temp file never outlives the call.
+    # plus $Added (an add may also put one blank line first), and its CR count as the bash twin
+    # checks it (the registry's CRs, or those plus one per added line), nothing written when the
+    # bytes are already so, else a temp file beside it, then a rename. The temp file never outlives
+    # the call.
     param([string]$File, [string]$Text, [string]$Who, [int]$Added)
     $latin1 = Get-SumelaRegistryLatin1
     $new = $latin1.GetBytes($Text)
     $old = [IO.File]::ReadAllBytes($File)
-    $want = (Get-SumelaRegistryLfCount $old) + $Added
-    $got = Get-SumelaRegistryLfCount $new
+    $oldLines = Get-SumelaRegistryByteCount $old 10
+    $want = $oldLines + $Added
+    $got = Get-SumelaRegistryByteCount $new 10
     if (($got -ne $want) -and (($Added -eq 0) -or ($got -ne ($want + 1)))) {
         throw (New-SumelaRegistryError 1 "${Who}: the rendered registry has $got lines where $want were expected; $File left unchanged")
+    }
+    $crsOld = Get-SumelaRegistryByteCount $old 13
+    $crsNew = Get-SumelaRegistryByteCount $new 13
+    if (($crsNew -ne $crsOld) -and ($crsNew -ne ($crsOld + $got - $oldLines))) {
+        throw (New-SumelaRegistryError 1 "${Who}: the rendered registry holds $crsNew CR bytes where the registry holds ${crsOld}: line endings were not kept as they are; $File left unchanged")
     }
     if (($old.Length -eq $new.Length) -and [string]::Equals([Convert]::ToBase64String($old), [Convert]::ToBase64String($new), [StringComparison]::Ordinal)) { return }
     $tmp = $File + '.sumela-tmp.' + $PID

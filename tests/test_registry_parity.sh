@@ -10,7 +10,8 @@
 #                                             an orphaned entry is skipped, not drift
 #   t_sync_rewrites_only_target_block         --sync rewrites the drifted <description> line and no
 #                                             other byte: LF, CRLF (kept), no final newline (kept);
-#                                             per-entry answers; no answer declines; --only
+#                                             per-entry answers, with a BOM and CRLF as a Windows
+#                                             pipe sends them; no answer declines; --only
 #   t_security_routing_drift_is_attention     drift in the four security-routing skills is ATTENTION
 #   t_reserved_tag_refused                    a description holding </description> or </skill> is
 #                                             never written (the CLI calls it UNPARSEABLE, the lib
@@ -27,6 +28,11 @@
 #                                             and fails the check
 #   t_writers_keep_bytes                      add_entry keeps CRLF; a rendered registry with the
 #                                             wrong line count is never renamed into place
+#   t_text_mode_awk_keeps_line_endings        under an awk that reads text mode, as Git for Windows'
+#                                             gawk does, sync and add_entry keep CRLF, mixed
+#                                             endings and a lone final CR byte for byte
+#                                             (BINMODE=3); an awk that drops CRs anyway is refused
+#                                             by the CR check, the registry unchanged
 #   t_register_plugin                         sumela_registry_register_plugin, the one plugin
 #                                             writer: every exit code, the provenance record
 #   t_sync_stops_at_failed_write              the run stops at the first failed write, says so, and
@@ -37,10 +43,13 @@
 #   t_source_repo_parity_zero                 this repository is in parity
 #   t_validate_fails_in_source_warns_in_consumer   validate-structure.sh section 2b
 #   t_registry_write_recorded_in_provenance   a rewrite adds .sumela/SKILL_REGISTRY.md to the record's
-#                                             "files"; check, plan and a declined sync write nothing
+#                                             "files", its carry the blob of the bytes written (CRLF
+#                                             kept); check, plan and a declined sync write nothing
 #   t_usage_and_errors                        exit 2 for usage, 1 without an install or a registry
 #   t_twins_agree                             the PowerShell twin prints the same lines and writes the
-#                                             same bytes (pwsh, when present; SKIP otherwise)
+#                                             same bytes, for LF, CRLF and mixed line endings and
+#                                             the same answer bytes (pwsh, when present; SKIP
+#                                             otherwise)
 # tests/test_registry_parity.ps1 runs the same cases against the PowerShell twin, including the
 # Windows PowerShell 5.1 byte check of the writers (t_ps51_writer_keeps_utf8) [RU-M1].
 #
@@ -145,8 +154,20 @@ to_crlf() { LC_ALL=C sed "s/\$/$CR/" "$1" > "$1.crlf" && mv "$1.crlf" "$1"; }
 commit_all() { git -C "$1" add -A && git -C "$1" commit -qm "${2:-commit}"; }
 # run <dir> <args>...: the bash CLI from <dir>; sets OUT (stdout and stderr) and RC
 run() { local d="$1"; shift; RC=0; OUT="$(cd "$d" && bash "$TOOL" "$@" 2>&1 </dev/null)" || RC=$?; }
+# Byte checks that hold on Git Bash too, whose awk reads text mode unless told BINMODE=3 (and
+# whose sed and grep this suite does not trust with a CR): awk with BINMODE=3, tr, od, cmp, tail.
 # lines <file> <from> <to>: those lines, bytes as they are (CRs kept)
-lines() { LC_ALL=C sed -n "$2,$3p" "$1"; }
+lines() { LC_ALL=C awk -v BINMODE=3 -v a="$2" -v b="$3" 'NR > b { exit } NR >= a { print }' "$1"; }
+# crs <file>, nlines <file>: its number of CR bytes, of LF bytes
+crs() { LC_ALL=C tr -cd '\r' < "$1" | wc -c | tr -d ' '; }
+nlines() { LC_ALL=C tr -cd '\n' < "$1" | wc -c | tr -d ' '; }
+# to_mixed <file>: lines 1-19 end in CRLF (beta's <description> among them), the others in LF,
+# and the last one in a lone CR instead (no LF): every ending a line can have, in one file.
+to_mixed() {
+  LC_ALL=C awk -v BINMODE=3 '
+    { if (NR > 1) printf "%s", prev; prev = $0 (NR <= 19 ? "\r\n" : "\n") }
+    END { sub(/\r?\n$/, "\r", prev); printf "%s", prev }' "$1" > "$1.mixed" && mv "$1.mixed" "$1"
+}
 
 # seed <dir>: a clone of this repository with the working tree's changes copied in (the tests exercise
 # the current scripts, not the last commit's).
@@ -162,7 +183,7 @@ seed() {
 # strip_entry <registry> <name>: removes that <skill> block and the blank line after it, without
 # the library under test.
 strip_entry() {
-  N="$2" LC_ALL=C awk '/^<skill[ >]/ { inb = 1; n = 0; drop = 0 }
+  N="$2" LC_ALL=C awk -v BINMODE=3 '/^<skill[ >]/ { inb = 1; n = 0; drop = 0 }
     inb { b[++n] = $0; k = $0; sub(/\r$/, "", k); if (k == "<name>" ENVIRON["N"] "</name>") drop = 1
           if ($0 ~ /^<\/skill>/) { if (!drop) for (i = 1; i <= n; i++) print b[i]; else gap = 1; inb = 0 }; next }
     gap && /^\r?$/ { gap = 0; next }
@@ -230,8 +251,7 @@ done
 d="$WORK/sync-nofinal"
 [ -n "$(tail -c 1 "$d/.sumela/SKILL_REGISTRY.md")" ] && ok "nofinal: the missing final newline stays missing" || bad "nofinal: the missing final newline stays missing"
 d="$WORK/sync-crlf"
-crlf_lines="$(LC_ALL=C grep -c "$CR\$" "$d/.sumela/SKILL_REGISTRY.md")"
-same "crlf: every line keeps its CRLF" "$(LC_ALL=C awk 'END { print NR }' "$d/.sumela/SKILL_REGISTRY.md")" "$crlf_lines"
+same "crlf: every line keeps its CRLF" "$(nlines "$d/.sumela/SKILL_REGISTRY.md")" "$(crs "$d/.sumela/SKILL_REGISTRY.md")"
 
 # Per-entry answers: two drifted entries, "y" for the first and "n" for the second.
 d="$WORK/answers"; mkinstall "$d"; reg="$d/.sumela/SKILL_REGISTRY.md"
@@ -245,6 +265,17 @@ has "n declines the second" "$OUT" "declined    gamma"
 has "the summary counts what is left" "$OUT" "4 checked, 1 synced, 1 out of parity (1 drift, 0 attention, 0 unparseable), 1 skipped"
 same "beta was rewritten" "Use when beta work starts (new text)." "$(reg_value "$reg" beta)"
 same "gamma was not" "Use when gamma memory is needed." "$(reg_value "$reg" gamma)"
+# Answers from a Windows pipe: CRLF line ends, and the UTF-8 BOM Windows PowerShell 5.1 writes
+# first when the console code page is UTF-8. One of each is trimmed; a second CR stays.
+cp "$WORK/answers.orig" "$reg"
+RC=0; OUT="$(cd "$d" && printf '\357\273\277y\r\nn\r\n' | bash "$TOOL" --sync 2>&1)" || RC=$?
+has "a BOM before y and CRLF after each answer: y still syncs the first" "$OUT" "synced      beta"
+has "…and n still declines the second" "$OUT" "declined    gamma"
+same "…beta was rewritten" "Use when beta work starts (new text)." "$(reg_value "$reg" beta)"
+cp "$WORK/answers.orig" "$reg"
+RC=0; OUT="$(cd "$d" && printf 'y\r\r\nyes' | bash "$TOOL" --sync 2>&1)" || RC=$?
+has "only one CR is trimmed: y and two CRs declines" "$OUT" "declined    beta"
+has "…and a last answer without its line end still counts" "$OUT" "synced      gamma"
 cp "$WORK/answers.orig" "$reg"
 run "$d" --sync
 same "no answer (end of input, as in an agent's shell): exit 3" 3 "$RC"
@@ -446,6 +477,97 @@ unchanged "…and the registry is left as it was" "$WORK/short.orig" "$reg"
 ls "$d/.sumela" | grep -q 'sumela-tmp' && bad "…no temp file is left behind" || ok "…no temp file is left behind"
 
 # ---------------------------------------------------------------------------------------------
+echo "== t_text_mode_awk_keeps_line_endings"
+# Git for Windows' awk is an MSYS2 gawk: it opens its input files and stdin in text mode, so each
+# CRLF reaches the program as LF unless the call passes -v BINMODE=3 (posix/gawkmisc.c). Without
+# that, a sync turned a CRLF registry into an LF one on Git Bash. mkawk wraps the real awk to
+# behave that way anywhere: "text" as Git for Windows' gawk does, "blind" dropping those CRs
+# whatever the call says (an awk that cannot keep them: the writers' CR check must refuse it).
+mkawk() {  # <dir> <text|blind>
+  mkdir -p "$1"
+  { printf '#!/usr/bin/env bash\nREAL=%s MODE=%s\n' "$(printf '%q' "$REAL_AWK")" "$2"
+    cat <<'EOF'
+tmp="$(mktemp -d)" || exit 2
+trap 'rm -rf "$tmp"' EXIT
+text() {  # stdin -> stdout, the CR before each LF dropped (a lone CR, and a last line without LF, kept)
+  local l
+  while IFS= read -r l; do printf '%s\n' "${l%$'\r'}"; done
+  printf '%s' "$l"
+}
+bin=false prog=false files=0 n=0
+set -- "$@" --end-of-arguments--
+while [ "$1" != --end-of-arguments-- ]; do
+  a="$1"; shift
+  if [ "$prog" = false ]; then
+    case "$a" in
+      -v|-F|-f) v="$1"; shift; set -- "$@" "$a" "$v"
+                if [ "$a" = -v ]; then case "$v" in BINMODE=1|BINMODE=3|BINMODE=*r*) bin=true ;; esac; fi
+                if [ "$a" = -f ]; then prog=true; fi
+                continue ;;
+      -*) set -- "$@" "$a"; continue ;;
+      *) prog=true; set -- "$@" "$a"; continue ;;
+    esac
+  fi
+  case "$a" in *=*) set -- "$@" "$a"; continue ;; esac
+  files=$((files + 1))
+  if [ -f "$a" ] && { [ "$bin" = false ] || [ "$MODE" = blind ]; }; then
+    n=$((n + 1)); text < "$a" > "$tmp/$n"; set -- "$@" "$tmp/$n"
+  else set -- "$@" "$a"; fi
+done
+shift
+if [ "$files" -eq 0 ] && { [ "$bin" = false ] || [ "$MODE" = blind ]; }; then text | "$REAL" "$@"; else "$REAL" "$@"; fi
+EOF
+  } > "$1/awk"
+  chmod +x "$1/awk"
+}
+mkawk "$WORK/textawk" text; mkawk "$WORK/blindawk" blind
+probe="$(printf 'a\r\nb\n' | PATH="$WORK/textawk:$PATH" awk '{ printf "%s|", $0 }')"
+same "the text-mode awk drops the CR of a CRLF line read without BINMODE (the Git for Windows reading)" "a|b|" "$probe"
+probe="$(printf 'a\r\nb\n' | PATH="$WORK/textawk:$PATH" awk -v BINMODE=3 '{ printf "%s|", $0 }' | LC_ALL=C tr '\r' '^')"
+same "…and keeps it with BINMODE=3" "a^|b|" "$probe"
+# want <variant> <file>: the expected registry, built without the library: the LF fixture with
+# beta's description (and, for "add", a new delta block) in it, then given the variant's endings.
+want() {
+  LC_ALL=C awk -v BINMODE=3 -v n="$REG_BETA_LINE" -v s="$NEWBETA" -v add="$1" '
+    add == "add" && $0 == "</available_skills>" { print "<skill activation=\"lazy\">"; print "<name>delta</name>"
+      print "<description>Use when delta.</description>"; print "<path>.sumela/memory-plugins/delta/SKILL.md</path>"
+      print "</skill>"; print "" }
+    add != "add" && NR == n { print s; next }
+    { print }' "$WORK/endings.lf" > "$2"
+}
+mkinstall "$WORK/endings"; cp "$WORK/endings/.sumela/SKILL_REGISTRY.md" "$WORK/endings.lf"
+for shape in crlf mixed; do
+  d="$WORK/endings-$shape"; mkinstall "$d"; reg="$d/.sumela/SKILL_REGISTRY.md"
+  if [ "$shape" = crlf ]; then to_crlf "$reg"; else to_mixed "$reg"; fi
+  commit_all "$d" "$shape"; cp "$reg" "$WORK/endings-$shape.orig"
+  want sync "$WORK/endings-$shape.want"; want add "$WORK/endings-$shape.add"
+  if [ "$shape" = crlf ]; then to_crlf "$WORK/endings-$shape.want"; to_crlf "$WORK/endings-$shape.add"
+  else to_mixed "$WORK/endings-$shape.want"; to_mixed "$WORK/endings-$shape.add"; fi
+  PATH="$WORK/textawk:$PATH" run "$d" --sync --yes
+  same "$shape, under a text-mode awk: --sync --yes exits 0" 0 "$RC"
+  unchanged "$shape: only beta's line changed, and every line kept its ending (the rewritten one too)" "$WORK/endings-$shape.want" "$reg"
+  cp "$WORK/endings-$shape.orig" "$reg"
+  rc=0; msg="$(PATH="$WORK/textawk:$PATH"; sumela_registry_add_entry "$reg" delta .sumela/memory-plugins/delta/SKILL.md "Use when delta." 2>&1)" || rc=$?
+  same "$shape: add_entry under a text-mode awk exits 0" 0 "$rc"
+  unchanged "$shape: …the new block ends as the line it went before; nothing else changed" "$WORK/endings-$shape.add" "$reg"
+  cp "$WORK/endings-$shape.orig" "$reg"
+  rc=0; msg="$(PATH="$WORK/blindawk:$PATH"; sumela_registry_set_description "$reg" .sumela/skills/beta/SKILL.md "Use when beta work starts (new text)." 2>&1)" || rc=$?
+  same "$shape: an awk that drops the CRs is refused: exit 1" 1 "$rc"
+  has "…the CR check says why" "$msg" "CR bytes where the registry holds $(crs "$WORK/endings-$shape.orig")"
+  rc=0; msg="$(PATH="$WORK/blindawk:$PATH"; sumela_registry_add_entry "$reg" delta .sumela/memory-plugins/delta/SKILL.md "Use when delta." 2>&1)" || rc=$?
+  same "$shape: …add_entry too: exit 1" 1 "$rc"
+  unchanged "$shape: …and the registry is left as it was" "$WORK/endings-$shape.orig" "$reg"
+  ls "$d/.sumela" | grep -q 'sumela-tmp' && bad "$shape: …no temp file is left behind" || ok "$shape: …no temp file is left behind"
+done
+d="$WORK/endings-crlf"
+PATH="$WORK/blindawk:$PATH" run "$d" --sync --yes
+same "the CLI under such an awk: exit 1" 1 "$RC"
+has "…it stops at the write it could not make" "$OUT" "stopped at the first failed write (beta)"
+unchanged "…and writes nothing" "$WORK/endings-crlf.orig" "$d/.sumela/SKILL_REGISTRY.md"
+PATH="$WORK/blindawk:$PATH" run "$WORK/endings" --sync --yes
+same "an LF registry has no CR to lose: the same awk syncs it (exit 0)" 0 "$RC"
+
+# ---------------------------------------------------------------------------------------------
 echo "== t_register_plugin"
 # The one plugin writer, called directly (setup.sh and setup-memory.sh only map its exit codes).
 d="$WORK/plug"; mkinstall "$d"; reg="$d/.sumela/SKILL_REGISTRY.md"
@@ -481,7 +603,7 @@ d="$WORK/plug-crlf"; mkinstall "$d"; reg="$d/.sumela/SKILL_REGISTRY.md"; to_crlf
 skill "$d/.sumela/memory-plugins/omega/SKILL.md" omega '"Use when omega."'; commit_all "$d" crlf
 rc=0; sumela_registry_register_plugin "$d" omega || rc=$?
 same "a CRLF registry: exit 0" 0 "$rc"
-same "…every line still ends with CRLF" "$(LC_ALL=C awk 'END { print NR }' "$reg")" "$(LC_ALL=C grep -c "$CR\$" "$reg")"
+same "…every line still ends with CRLF" "$(nlines "$reg")" "$(crs "$reg")"
 d="$WORK/plug-rec"; mkinstall "$d"
 skill "$d/.sumela/memory-plugins/omega/SKILL.md" omega '"Use when omega."'; commit_all "$d" rec
 printf 'not a record\n' > "$d/.sumela/.last-update.json"
@@ -643,6 +765,15 @@ head="$(git -C "$d" rev-parse HEAD)"; blob="$(git -C "$d" hash-object --no-filte
 same "with no record, a minimal one names the registry in \"files\" and binds it to HEAD and its content" \
   "$(printf '{\n  "files": [\n    ".sumela/SKILL_REGISTRY.md"\n  ],\n  "carry_head": "%s",\n  "carry": ["%s .sumela/SKILL_REGISTRY.md"]\n}' "$head" "$blob")" \
   "$(cat "$rec" 2>/dev/null)"
+# The carry is git hash-object --no-filters of the registry as written, in both twins: a CRLF
+# registry is recorded with its CRs (a twin that lost them would record another blob).
+d="$WORK/prov-crlf"; mkinstall "$d"; rec="$d/.sumela/.last-update.json"; reg="$d/.sumela/SKILL_REGISTRY.md"
+to_crlf "$reg"; commit_all "$d" crlf
+run "$d" --sync --yes
+same "a CRLF registry: the sync exits 0" 0 "$RC"
+same "…every line keeps its CRLF" "$(nlines "$reg")" "$(crs "$reg")"
+blob="$(git -C "$d" hash-object --no-filters -- .sumela/SKILL_REGISTRY.md)"
+has "…and the carry is the blob of those bytes" "$(cat "$rec" 2>/dev/null)" "\"carry\": [\"$blob .sumela/SKILL_REGISTRY.md\"]"
 d="$WORK/prov2"; mkinstall "$d"; rec="$d/.sumela/.last-update.json"
 cat > "$rec" <<'JSON'
 {
@@ -706,30 +837,54 @@ else
     OUT="$(printf '%s\n' "$OUT" | LC_ALL=C sed -e 's#powershell -NoProfile -File scripts/sumela-registry-parity.ps1 -Sync -Yes#bash scripts/sumela-registry-parity.sh --sync --yes#' \
       -e 's#powershell -NoProfile -File scripts/sumela-registry-parity.ps1 -Sync#bash scripts/sumela-registry-parity.sh --sync#')"
   }
-  for variant in lf crlf; do
+  # same_bytes <label> <bash twin's file> <PowerShell twin's file>: on a difference, each side's
+  # LF and CR counts (a lost line ending shows there) and the first differing bytes.
+  same_bytes() {
+    if cmp -s "$2" "$3"; then ok "$1"; return; fi
+    bad "$1"
+    printf '      bash: %s LF, %s CR; PowerShell: %s LF, %s CR\n' "$(nlines "$2")" "$(crs "$2")" "$(nlines "$3")" "$(crs "$3")"
+    cmp -l "$2" "$3" 2>&1 | head -4 | sed 's/^/      /'
+  }
+  # Each variant answers its own way (one line each for beta, then secure-coding-standard): lf
+  # plainly; crlf as a Windows pipe may, with CRLF line ends and the BOM Windows PowerShell 5.1
+  # writes first; mixed with "yes" and a CRLF, then a declining "No".
+  for variant in lf crlf mixed; do
     b="$WORK/twin-$variant-bash"; p="$WORK/twin-$variant-ps"
     for t in "$b" "$p"; do
       mkinstall "$t"
       skill "$t/.sumela/skills/secure-coding-standard/SKILL.md" secure-coding-standard '"Use whenever code is touched — ö."'
       printf -- '---\nname: gamma\ndescription: |\n  block\n---\n' > "$t/.sumela/memory-plugins/gamma/SKILL.md"
-      if [ "$variant" = crlf ]; then for f in "$t/.sumela/SKILL_REGISTRY.md" "$t"/.sumela/skills/*/SKILL.md; do to_crlf "$f"; done; fi
+      case "$variant" in
+        crlf) for f in "$t/.sumela/SKILL_REGISTRY.md" "$t"/.sumela/skills/*/SKILL.md; do to_crlf "$f"; done ;;
+        mixed) to_mixed "$t/.sumela/SKILL_REGISTRY.md" ;;
+      esac
       commit_all "$t" "$variant"
     done
+    cp "$b/.sumela/SKILL_REGISTRY.md" "$WORK/twin-$variant-bash.orig"
+    case "$variant" in
+      lf) answers='y\nn\n' ;;
+      crlf) answers='\357\273\277y\r\nn\r\n' ;;
+      mixed) answers='yes\r\nNo\n' ;;
+    esac
     for mode in check plan; do
       run "$b" "--$mode"; bo="$OUT"; brc="$RC"
       if [ "$mode" = check ]; then psrun "$p" -Check; else psrun "$p" -Plan; fi
       same "$variant $mode: the same exit code" "$brc" "$RC"
       if [ "$bo" = "$OUT" ]; then ok "$variant $mode: the same lines"; else bad "$variant $mode: the same lines"; diff <(printf '%s\n' "$bo") <(printf '%s\n' "$OUT") | head -8 | sed 's/^/      /'; fi
     done
-    RC=0; bo="$(cd "$b" && printf 'y\nn\n' | bash "$TOOL" --sync 2>&1)" || RC=$?; brc="$RC"
-    RC=0; OUT="$(cd "$p" && printf 'y\nn\n' | "$PWSH" -NoProfile -NonInteractive -File "$PSTOOL" -Sync 2>&1)" || RC=$?
+    # shellcheck disable=SC2059   # the answers are a printf format: their escapes are the bytes
+    RC=0; bo="$(cd "$b" && printf "$answers" | bash "$TOOL" --sync 2>&1)" || RC=$?; brc="$RC"
+    # shellcheck disable=SC2059
+    RC=0; OUT="$(cd "$p" && printf "$answers" | "$PWSH" -NoProfile -NonInteractive -File "$PSTOOL" -Sync 2>&1)" || RC=$?
     OUT="$(printf '%s\n' "$OUT" | LC_ALL=C sed 's#powershell -NoProfile -File scripts/sumela-registry-parity.ps1 -Sync -Yes#bash scripts/sumela-registry-parity.sh --sync --yes#')"
     same "$variant answered sync: the same exit code" "$brc" "$RC"
     if [ "$bo" = "$OUT" ]; then ok "$variant answered sync: the same lines"; else bad "$variant answered sync: the same lines"; diff <(printf '%s\n' "$bo") <(printf '%s\n' "$OUT") | head -8 | sed 's/^/      /'; fi
-    unchanged "$variant answered sync: the same registry bytes" "$b/.sumela/SKILL_REGISTRY.md" "$p/.sumela/SKILL_REGISTRY.md"
+    has "$variant answered sync: the first entry is synced" "$bo" "synced      beta"
+    same_bytes "$variant answered sync: the same registry bytes" "$b/.sumela/SKILL_REGISTRY.md" "$p/.sumela/SKILL_REGISTRY.md"
     run "$b" --sync --yes; psrun "$p" -Sync -Yes
-    unchanged "$variant --sync --yes: the same registry bytes" "$b/.sumela/SKILL_REGISTRY.md" "$p/.sumela/SKILL_REGISTRY.md"
-    unchanged "$variant --sync --yes: the same provenance record" "$b/.sumela/.last-update.json" "$p/.sumela/.last-update.json"
+    same_bytes "$variant --sync --yes: the same registry bytes" "$b/.sumela/SKILL_REGISTRY.md" "$p/.sumela/SKILL_REGISTRY.md"
+    same "$variant --sync --yes: the bash twin kept every CR the registry had" "$(crs "$WORK/twin-$variant-bash.orig")" "$(crs "$b/.sumela/SKILL_REGISTRY.md")"
+    same_bytes "$variant --sync --yes: the same provenance record" "$b/.sumela/.last-update.json" "$p/.sumela/.last-update.json"
   done
   # The malformed registries and the paths that leave the install: the same rows and exit codes.
   for t in mal-indented mal-trailing mal-lost-end mal-all-indented mal-tab-start mal-loose-description mal-one-line mal-orphan unsafe/inst; do

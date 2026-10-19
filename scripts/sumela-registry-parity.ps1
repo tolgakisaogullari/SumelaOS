@@ -5,7 +5,8 @@
 # the rows (DRIFT, ATTENTION, UNPARSEABLE), what is skipped, the summary line, what a sync asks and
 # writes, the provenance record, the exit codes. This twin prints the same lines (LF line endings,
 # the registry's own bytes), except that the fixer it names is its own command, and writes the
-# same bytes (scripts/lib/sumela-registry.ps1).
+# same bytes (scripts/lib/sumela-registry.ps1). It reads a redirected answer as bytes, as the bash
+# twin does, and trims it the same way: one UTF-8 BOM before it, one CR after it.
 #
 # Usage, from anywhere inside the install (Windows PowerShell 5.1 or pwsh 7):
 #   powershell -NoProfile -File scripts/sumela-registry-parity.ps1 [-Check]   report drift (default)
@@ -144,13 +145,36 @@ function Write-Diff([int]$Line, [string]$Name, [string]$Old, [string]$New) {
     Write-OutLine ('-<description>' + $Old + '</description>')
     Write-OutLine ('+<description>' + $New + '</description>')
 }
+$script:answerStream = $null
+function Read-AnswerBytes {
+    # One line of redirected stdin as a byte string, without its LF; $null at the end of input. It
+    # is read byte by byte, as bash's read takes a pipe, so no decoder decides what an answer is:
+    # [Console]::In would drop a BOM or keep it, as the host's input encoding has it.
+    if ($null -eq $script:answerStream) { $script:answerStream = [Console]::OpenStandardInput() }
+    $sb = New-Object System.Text.StringBuilder
+    $any = $false
+    while ($true) {
+        $b = $script:answerStream.ReadByte()
+        if ($b -lt 0) { break }
+        if ($b -eq 10) { return $sb.ToString() }
+        $any = $true
+        [void]$sb.Append([char]$b)
+    }
+    if ($any) { return $sb.ToString() }
+    return $null
+}
 function Read-Consent([string]$Name) {
-    # $true on "y" or "yes"; no answer (end of input) declines.
+    # $true on "y" or "yes"; no answer (end of input) declines. The bash twin's answer: one line,
+    # without one UTF-8 BOM before it and one CR after it.
     Write-Out ('Sync the registry description of ' + (Show-Name $Name) + ' from its frontmatter? [y/N] ')
-    $a = [Console]::In.ReadLine()
+    $redirected = [Console]::IsInputRedirected
+    if ($redirected) { $a = Read-AnswerBytes } else { $a = [Console]::In.ReadLine() }
     if ($null -eq $a) { Write-Out ([string][char]10); return $false }
-    if ([Console]::IsInputRedirected) { Write-Out ([string][char]10) }
-    $a = $a.TrimEnd([char]13)
+    if ($redirected) { Write-Out ([string][char]10) }
+    $bom = [string][char]0xEF + [string][char]0xBB + [string][char]0xBF        # the BOM's bytes
+    if ($a.StartsWith($bom, $ord)) { $a = $a.Substring(3) }
+    elseif ($a.StartsWith([string][char]0xFEFF, $ord)) { $a = $a.Substring(1) }   # ...decoded (a console)
+    if ($a.EndsWith([string][char]13, $ord)) { $a = $a.Substring(0, $a.Length - 1) }
     foreach ($w in @('y', 'Y', 'yes', 'Yes', 'YES')) { if ([string]::Equals($a, $w, $ord)) { return $true } }   # the bash twin's case
     return $false
 }

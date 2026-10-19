@@ -4,17 +4,24 @@
 # scripts/sumela-registry-parity.ps1, scripts/lib/sumela-registry.ps1 and the PowerShell plugin
 # writers.
 #   t_check_detects_drift_exit3, t_sync_rewrites_only_target_block (LF, CRLF, no final newline,
-#   answers on stdin, no answer, -Only), t_security_routing_drift_is_attention,
+#   answers on stdin, as exact bytes with a BOM and CRLF too, no answer, -Only),
+#   t_security_routing_drift_is_attention,
 #   t_reserved_tag_refused, t_unparseable_is_never_synced, t_malformed_registry_is_never_a_pass,
 #   t_unsafe_paths_are_unparseable, t_register_plugin (the one plugin writer, called directly:
 #   it covers the setup.ps1 writer on every host), t_sync_stops_at_failed_write,
 #   t_writers_copy_verbatim
 #   (setup-memory.ps1's Register-Plugin wherever this host can parse it; setup.ps1 wherever its
 #   run reaches the plugin step),
-#   t_source_repo_parity_zero, t_registry_write_recorded_in_provenance, t_usage_and_errors,
+#   t_source_repo_parity_zero, t_registry_write_recorded_in_provenance (its carry the blob of the
+#   bytes written, CRLF kept), t_usage_and_errors,
 #   t_ps51_writer_keeps_utf8 (the writers keep non-ASCII text byte for byte: under Windows
 #   PowerShell 5.1, Get-Content and Set-Content would read and write ANSI) [RU-M1],
-#   t_twins_agree (with bash, when there is one: Git Bash on Windows).
+#   t_line_endings_kept (CRLF, LF and a lone final CR in one registry, through both writers; the
+#   CR check refuses a rendering that lost CRs), t_cleanup_removes_read_only_trees (this suite's
+#   cleanup clears git's read-only object files first),
+#   t_twins_agree (with bash, when there is one: Git Bash on Windows; LF, CRLF and mixed endings;
+#   the same answers to both twins: as this host writes text, from a writer that starts stdin with
+#   a BOM as Windows PowerShell 5.1 does under code page 65001, and as exact bytes).
 # t_validate_fails_in_source_warns_in_consumer is in the bash suite only: validate-structure.sh is
 # bash and runs the bash twin.
 #
@@ -136,10 +143,18 @@ function ConvertTo-ArgText([string]$Value) {
     [void]$sb.Append([char]34)
     return $sb.ToString()
 }
+function ConvertTo-HexText([byte[]]$Bytes) {
+    if ($null -eq $Bytes -or $Bytes.Length -eq 0) { return 'nothing' }
+    return [string]::Join(' ', @($Bytes | ForEach-Object { ([int]$_).ToString('x2', [System.Globalization.CultureInfo]::InvariantCulture) }))
+}
+$script:stdinStart = $null
 function Invoke-Child {
-    # <exe> <args> in <dir>: stdin gets $Stdin (or nothing: end of input at once), stdout and stderr
-    # are decoded as UTF-8. Returns Code, Out (CRs dropped) and Err.
-    param([string]$Exe, [string[]]$ArgList, [string]$Dir, [string]$Stdin = '', [hashtable]$Env = @{})
+    # <exe> <args> in <dir>: stdin gets $Stdin as this host writes text to a child (in
+    # $StdinEncoding when given: one with a preamble starts stdin with it, as Windows PowerShell 5.1
+    # does under console code page 65001), or nothing (end of input at once), or exactly the bytes
+    # $StdinBytes; stdout and stderr are decoded as UTF-8. Returns Code, Out (CRs dropped) and Err.
+    param([string]$Exe, [string[]]$ArgList, [string]$Dir, [string]$Stdin = '', [hashtable]$Env = @{}, [byte[]]$StdinBytes = $null,
+        [System.Text.Encoding]$StdinEncoding = $null)
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $Exe
     $psi.Arguments = [string]::Join(' ', @($ArgList | ForEach-Object { ConvertTo-ArgText $_ }))
@@ -150,18 +165,78 @@ function Invoke-Child {
     $psi.RedirectStandardError = $true
     $psi.StandardOutputEncoding = $utf8
     $psi.StandardErrorEncoding = $utf8
-    if ($null -ne $psi.PSObject.Properties['StandardInputEncoding']) { $psi.StandardInputEncoding = $utf8 }
+    $ownEncoding = ($null -ne $psi.PSObject.Properties['StandardInputEncoding'])
+    $encoding = $utf8
+    if ($null -ne $StdinEncoding) { $encoding = $StdinEncoding }
+    if ($ownEncoding) { $psi.StandardInputEncoding = $encoding }
     foreach ($k in $Env.Keys) { $psi.EnvironmentVariables[[string]$k] = [string]$Env[$k] }
-    $p = [System.Diagnostics.Process]::Start($psi)
+    # Windows PowerShell 5.1 writes a child's stdin in [Console]::InputEncoding and, as the process
+    # starts, that encoding's preamble: a UTF-8 BOM under console code page 65001. Exact bytes need
+    # a preamble-free encoding there for the moment of the start, and a given encoding is set there.
+    $restore = $null
+    if ((-not $ownEncoding) -and (($null -ne $StdinBytes) -or ($null -ne $StdinEncoding))) {
+        try { $restore = [Console]::InputEncoding; [Console]::InputEncoding = $encoding } catch { $restore = $null }
+    }
+    try { $p = [System.Diagnostics.Process]::Start($psi) }
+    finally { if ($null -ne $restore) { try { [Console]::InputEncoding = $restore } catch { } } }
     $o = $p.StandardOutput.ReadToEndAsync()
     $e = $p.StandardError.ReadToEndAsync()
-    if ($Stdin.Length -gt 0) { $p.StandardInput.Write($Stdin) }
+    $start = $p.StandardInput.Encoding.GetPreamble()
+    if (($null -eq $StdinBytes) -and ($null -eq $StdinEncoding) -and ($null -eq $script:stdinStart)) {
+        $script:stdinStart = (ConvertTo-HexText $start) + ' (' + $p.StandardInput.Encoding.WebName + ', code page ' + $p.StandardInput.Encoding.CodePage + ')'
+    }
+    if ($null -ne $StdinBytes) {
+        if ($start.Length -gt 0) {
+            # Reported, not thrown: the cases that sent these bytes fail on code -1 and the suite goes on.
+            Write-Host "  NOTE  this host started a child's stdin with $(ConvertTo-HexText $start): its exact bytes could not be sent"
+            try { $p.Kill() } catch { }
+            return [pscustomobject]@{ Code = -1; Out = ''; Err = 'exact stdin bytes could not be sent' }
+        }
+        $p.StandardInput.BaseStream.Write($StdinBytes, 0, $StdinBytes.Length)
+        $p.StandardInput.BaseStream.Flush()
+    } elseif ($Stdin.Length -gt 0) { $p.StandardInput.Write($Stdin) }
     $p.StandardInput.Close()
     $p.WaitForExit()
     return [pscustomobject]@{ Code = $p.ExitCode; Out = $o.Result.Replace($CR + $LF, $LF); Err = $e.Result }
 }
-function Invoke-Tool([string]$Dir, [string[]]$ArgList, [string]$Stdin = '') {
-    return (Invoke-Child -Exe $hostExe -ArgList (@('-NoProfile', '-NonInteractive', '-File', $tool) + $ArgList) -Dir $Dir -Stdin $Stdin)
+function Invoke-Tool([string]$Dir, [string[]]$ArgList, [string]$Stdin = '', [byte[]]$StdinBytes = $null, [System.Text.Encoding]$StdinEncoding = $null) {
+    return (Invoke-Child -Exe $hostExe -ArgList (@('-NoProfile', '-NonInteractive', '-File', $tool) + $ArgList) -Dir $Dir -Stdin $Stdin -StdinBytes $StdinBytes -StdinEncoding $StdinEncoding)
+}
+# The bytes of a byte string (one char per byte), for -StdinBytes. $BOM is the UTF-8 BOM's bytes.
+function Get-Bytes([string]$ByteString) { return [byte[]]$latin1.GetBytes($ByteString) }
+$BOM = [string][char]0xEF + [string][char]0xBB + [string][char]0xBF
+function Get-ByteCount([byte[]]$Bytes, [int]$Value) { $n = 0; foreach ($b in $Bytes) { if ($b -eq $Value) { $n++ } }; return $n }
+function ConvertTo-Mixed([string]$Path) {
+    # The bash suite's to_mixed: lines 1-19 end in CRLF (beta's <description> among them), the
+    # others in LF, and the last one in a lone CR instead (no LF). The file ends in LF.
+    $parts = $latin1.GetString([IO.File]::ReadAllBytes($Path)).Split([char]10)
+    $n = $parts.Length - 1
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $n; $i++) {
+        [void]$sb.Append($parts[$i])
+        if ($i -eq ($n - 1)) { [void]$sb.Append($CR) } elseif ($i -lt 19) { [void]$sb.Append($CR + $LF) } else { [void]$sb.Append($LF) }
+    }
+    [IO.File]::WriteAllBytes($Path, $latin1.GetBytes($sb.ToString()))
+}
+function Remove-Tree([string]$Path) {
+    # A directory tree, removed. Git marks its object files read-only, and on Windows
+    # [IO.Directory]::Delete refuses a read-only file: every file's attributes are cleared first.
+    # Returns '' once the tree is gone, else why it is not; never throws.
+    $why = ''
+    for ($try = 0; $try -lt 3; $try++) {
+        if (-not [IO.Directory]::Exists($Path)) { return '' }
+        try {
+            foreach ($f in [IO.Directory]::GetFiles($Path, '*', [IO.SearchOption]::AllDirectories)) {
+                [IO.File]::SetAttributes($f, [IO.FileAttributes]::Normal)
+            }
+            [IO.Directory]::Delete($Path, $true)
+            return ''
+        } catch {
+            $why = $_.Exception.Message
+            Start-Sleep -Milliseconds 300                  # a child that just exited may still hold a file
+        }
+    }
+    return $why
 }
 function Get-RegValue([string]$Reg, [string]$Name) {
     # The <description> after <name>Name</name>, read here without the library.
@@ -272,6 +347,18 @@ try {
     Has 'n declines the second' $r.Out 'declined    gamma'
     Same 'beta was rewritten' 'Use when beta work starts (new text).' (Get-RegValue $reg 'beta')
     Same 'gamma was not' 'Use when gamma memory is needed.' (Get-RegValue $reg 'gamma')
+    # Answers from a Windows pipe, as exact bytes: CRLF line ends, and the UTF-8 BOM Windows
+    # PowerShell 5.1 writes first when the console code page is UTF-8. One of each is trimmed (the
+    # answer is read as bytes, not through a decoder that may drop a BOM or keep it); a second CR stays.
+    [IO.File]::Copy($orig, $reg, $true)
+    $r = Invoke-Tool $d @('-Sync') -StdinBytes (Get-Bytes ($BOM + 'y' + $CR + $LF + 'n' + $CR + $LF))
+    Has 'a BOM before y and CRLF after each answer: y still syncs the first' $r.Out 'synced      beta'
+    Has '...and n still declines the second' $r.Out 'declined    gamma'
+    Same '...beta was rewritten' 'Use when beta work starts (new text).' (Get-RegValue $reg 'beta')
+    [IO.File]::Copy($orig, $reg, $true)
+    $r = Invoke-Tool $d @('-Sync') -StdinBytes (Get-Bytes ('y' + $CR + $CR + $LF + 'yes'))
+    Has 'only one CR is trimmed: y and two CRs declines' $r.Out 'declined    beta'
+    Has '...and a last answer without its line end still counts' $r.Out 'synced      gamma'
     [IO.File]::Copy($orig, $reg, $true)
     $r = Invoke-Tool $d @('-Sync')
     Same 'no answer (end of input): exit 3' 3 $r.Code
@@ -641,6 +728,17 @@ try {
     $gotRec = ''
     if ([IO.File]::Exists($rec)) { $gotRec = Read-Utf8 $rec }
     Same 'with no record, a minimal one names the registry in "files" and binds it to HEAD and its content' $wantRec $gotRec
+    # The carry is git hash-object --no-filters of the registry as written, in both twins: a CRLF
+    # registry is recorded with its CRs (a twin that lost them would record another blob).
+    $d = Join-Path $work 'prov-crlf'; $reg = New-Install $d; ConvertTo-Crlf $reg; Save-All $d 'crlf'
+    $r = Invoke-Tool $d @('-Sync', '-Yes')
+    Same 'a CRLF registry: the sync exits 0' 0 $r.Code
+    $bytes = Read-Bytes $reg
+    Same '...every line keeps its CRLF' (Get-ByteCount $bytes 10) (Get-ByteCount $bytes 13)
+    $blob = [string](tgit -C $d hash-object --no-filters -- .sumela/SKILL_REGISTRY.md)
+    $gotRec = ''
+    if ([IO.File]::Exists((Join-Path $d '.sumela/.last-update.json'))) { $gotRec = Read-Utf8 (Join-Path $d '.sumela/.last-update.json') }
+    Has '...and the carry is the blob of those bytes' $gotRec ('"carry": ["' + $blob + ' .sumela/SKILL_REGISTRY.md"]')
     $d = Join-Path $work 'prov3'; [void](New-Install $d)
     $r = Invoke-Tool $d @('-Sync')
     if ([IO.File]::Exists((Join-Path $d '.sumela/.last-update.json'))) { Bad 'a declined sync writes no record' } else { Ok 'a declined sync writes no record' }
@@ -682,6 +780,38 @@ try {
     Same 'the frontmatter reader returns the UTF-8 bytes of a non-ASCII description' ('Use when alpha work starts ' + $EM + ' ' + $TR + '.') (ConvertFrom-SumelaByteString $res.Value)
 
     # -----------------------------------------------------------------------------------------
+    Write-Host '== t_line_endings_kept'
+    # Each line keeps its own ending through both writers, as in the bash twin: CRLF lines, LF lines
+    # and a last line that ends in a lone CR, in one registry. The expected bytes are built here,
+    # without the library: the LF fixture with the change made, then given the same endings.
+    $d = Join-Path $work 'endings'; $reg = New-Install $d
+    $lfText = $latin1.GetString((Read-Bytes $reg))
+    ConvertTo-Mixed $reg; Save-All $d 'mixed'
+    $orig = Join-Path $work 'endings.orig'; [IO.File]::Copy($reg, $orig)
+    $want = Join-Path $work 'endings.want'
+    [IO.File]::WriteAllBytes($want, $latin1.GetBytes($lfText.Replace('(old text).', '(new text).'))); ConvertTo-Mixed $want
+    $r = Invoke-Tool $d @('-Sync', '-Yes')
+    Same 'mixed endings: -Sync -Yes exits 0' 0 $r.Code
+    Unchanged "...only beta's line changed, and every line kept its ending (the rewritten one too)" $want $reg
+    [IO.File]::Copy($orig, $reg, $true)
+    $block = '<skill activation="lazy">' + $LF + '<name>delta</name>' + $LF + '<description>Use when delta.</description>' + $LF +
+        '<path>.sumela/memory-plugins/delta/SKILL.md</path>' + $LF + '</skill>' + $LF + $LF
+    $wantAdd = Join-Path $work 'endings.add'
+    [IO.File]::WriteAllBytes($wantAdd, $latin1.GetBytes($lfText.Replace($LF + '</available_skills>' + $LF, $LF + $block + '</available_skills>' + $LF)))
+    ConvertTo-Mixed $wantAdd
+    Add-SumelaRegistryEntry -Registry $reg -Name 'delta' -SkillPath '.sumela/memory-plugins/delta/SKILL.md' -Description 'Use when delta.'
+    Unchanged '...an added block ends as the line it went before; nothing else changed' $wantAdd $reg
+    # The CR check refuses a rendering that lost CRs, as the bash twin's does.
+    [IO.File]::Copy($orig, $reg, $true)
+    $code = 0; $msg = ''
+    try { Save-SumelaRegistryText -File $reg -Text ($latin1.GetString((Read-Bytes $reg)).Replace($CR, '')) -Who 'probe' -Added 0 }
+    catch { $code = $_.Exception.Data['SumelaExitCode']; $msg = $_.Exception.Message }
+    Same 'a rendering that lost its CRs is refused (code 1)' 1 $code
+    Has '...the CR check says why' $msg ('CR bytes where the registry holds ' + (Get-ByteCount (Read-Bytes $orig) 13))
+    Unchanged '...and the registry is left as it was' $orig $reg
+    Same '...no temp file is left behind' 0 @([IO.Directory]::GetFiles((Join-Path $d '.sumela'), '*sumela-tmp*')).Count
+
+    # -----------------------------------------------------------------------------------------
     Write-Host '== t_usage_and_errors'
     $d = Join-Path $work 'usage'; [void](New-Install $d)
     Same 'an unknown argument: exit 2' 2 (Invoke-Tool $d @('-Bogus')).Code
@@ -699,12 +829,39 @@ try {
     Same 'from a subdirectory, the install root is found above it' 3 (Invoke-Tool $sub @('-Check')).Code
 
     # -----------------------------------------------------------------------------------------
+    Write-Host '== t_cleanup_removes_read_only_trees'
+    # This suite's own cleanup (Remove-Tree): git marks its object files read-only, and on Windows
+    # [IO.Directory]::Delete refuses a read-only file. A cleanup that fails is a NOTE after the
+    # results, never a failure that hides them.
+    $t = Join-Path $work 'cleanup'; [void](New-Install $t)
+    $ro = Join-Path $t 'deep/dir/read-only.txt'; Write-Utf8 $ro ('x' + $LF)
+    [IO.File]::SetAttributes($ro, [IO.FileAttributes]::ReadOnly)
+    $readOnly = @([IO.Directory]::GetFiles($t, '*', [IO.SearchOption]::AllDirectories) |
+        Where-Object { ([IO.File]::GetAttributes($_) -band [IO.FileAttributes]::ReadOnly) -ne 0 }).Count
+    if ($readOnly -ge 1) { Ok "the tree holds read-only files ($readOnly)" } else { Bad 'the tree holds read-only files (0)' }
+    Same '...and is removed all the same' '' (Remove-Tree $t)
+    Same '...gone' 'False' ([string][IO.Directory]::Exists($t))
+
+    # -----------------------------------------------------------------------------------------
     Write-Host '== t_twins_agree'
+    function SameBytes([string]$label, [string]$A, [string]$B) {
+        # Unchanged, and on a difference each side's LF and CR counts (a lost line ending shows there).
+        if (Test-SameBytes $A $B) { Ok $label; return }
+        $x = Read-Bytes $A; $y = Read-Bytes $B
+        Bad "$label (bash: $(Get-ByteCount $x 10) LF, $(Get-ByteCount $x 13) CR; PowerShell: $(Get-ByteCount $y 10) LF, $(Get-ByteCount $y 13) CR)"
+    }
     $bash = Find-Bash
     if ($null -eq $bash) {
         Skip 'the bash twin (no bash on this machine)'
     } else {
-        foreach ($variant in @('lf', 'crlf')) {
+        # Each variant answers its own way (beta, then secure-coding-standard), to both twins: lf as
+        # text this host writes to a child (Windows PowerShell 5.1 may start it with a BOM, see the
+        # NOTE); bom as text a writer whose encoding has a preamble writes (it starts stdin with a
+        # BOM, as Windows PowerShell 5.1 does under console code page 65001), on an LF registry;
+        # crlf as exact bytes, with the BOM and CRLF line ends a Windows pipe may carry; mixed as
+        # exact bytes, "yes" and a CRLF, then a declining "No".
+        Write-Host "  NOTE  text this host writes to a child's stdin starts with: $script:stdinStart"
+        foreach ($variant in @('lf', 'bom', 'crlf', 'mixed')) {
             $pb = Join-Path $work "twin-$variant-bash"; $pp = Join-Path $work "twin-$variant-ps"
             foreach ($t in @($pb, $pp)) {
                 $treg = New-Install $t
@@ -714,8 +871,10 @@ try {
                     ConvertTo-Crlf $treg
                     foreach ($s in @('alpha', 'beta', 'secure-coding-standard')) { ConvertTo-Crlf (Join-Path $t ".sumela/skills/$s/SKILL.md") }
                 }
+                if ([string]::Equals($variant, 'mixed', [StringComparison]::Ordinal)) { ConvertTo-Mixed $treg }
                 Save-All $t $variant
             }
+            $crsBefore = Get-ByteCount (Read-Bytes (Join-Path $pb '.sumela/SKILL_REGISTRY.md')) 13
             foreach ($mode in @('check', 'plan')) {
                 $rb = Invoke-Child -Exe $bash -ArgList @($toolSh, "--$mode") -Dir $pb
                 $mp = '-Check'
@@ -725,14 +884,23 @@ try {
                 $po = $rp.Out.Replace('powershell -NoProfile -File scripts/sumela-registry-parity.ps1 -Sync', 'bash scripts/sumela-registry-parity.sh --sync')
                 Same "$variant ${mode}: the same lines" $rb.Out $po
             }
-            $rb = Invoke-Child -Exe $bash -ArgList @($toolSh, '--sync') -Dir $pb -Stdin ('y' + $LF + 'n' + $LF)
-            $rp = Invoke-Tool $pp @('-Sync') ('y' + $LF + 'n' + $LF)
+            $text = ''; $bytes = $null; $enc = $null
+            if ([string]::Equals($variant, 'lf', [StringComparison]::Ordinal)) { $text = 'y' + $LF + 'n' + $LF }
+            elseif ([string]::Equals($variant, 'bom', [StringComparison]::Ordinal)) { $text = 'y' + $LF + 'n' + $LF; $enc = New-Object System.Text.UTF8Encoding $true }
+            elseif ([string]::Equals($variant, 'crlf', [StringComparison]::Ordinal)) { $bytes = Get-Bytes ($BOM + 'y' + $CR + $LF + 'n' + $CR + $LF) }
+            else { $bytes = Get-Bytes ('yes' + $CR + $LF + 'No' + $LF) }
+            $rb = Invoke-Child -Exe $bash -ArgList @($toolSh, '--sync') -Dir $pb -Stdin $text -StdinBytes $bytes -StdinEncoding $enc
+            $rp = Invoke-Tool $pp @('-Sync') $text $bytes $enc
             Same "$variant answered sync: the same exit code" $rb.Code $rp.Code
-            Unchanged "$variant answered sync: the same registry bytes" (Join-Path $pb '.sumela/SKILL_REGISTRY.md') (Join-Path $pp '.sumela/SKILL_REGISTRY.md')
+            $po = $rp.Out.Replace('powershell -NoProfile -File scripts/sumela-registry-parity.ps1 -Sync -Yes', 'bash scripts/sumela-registry-parity.sh --sync --yes')
+            Same "$variant answered sync: the same lines" $rb.Out $po
+            Has "$variant answered sync: the first entry is synced" $rb.Out 'synced      beta'
+            SameBytes "$variant answered sync: the same registry bytes" (Join-Path $pb '.sumela/SKILL_REGISTRY.md') (Join-Path $pp '.sumela/SKILL_REGISTRY.md')
             [void](Invoke-Child -Exe $bash -ArgList @($toolSh, '--sync', '--yes') -Dir $pb)
             [void](Invoke-Tool $pp @('-Sync', '-Yes'))
-            Unchanged "$variant -Sync -Yes: the same registry bytes" (Join-Path $pb '.sumela/SKILL_REGISTRY.md') (Join-Path $pp '.sumela/SKILL_REGISTRY.md')
-            Unchanged "$variant -Sync -Yes: the same provenance record" (Join-Path $pb '.sumela/.last-update.json') (Join-Path $pp '.sumela/.last-update.json')
+            SameBytes "$variant -Sync -Yes: the same registry bytes" (Join-Path $pb '.sumela/SKILL_REGISTRY.md') (Join-Path $pp '.sumela/SKILL_REGISTRY.md')
+            Same "$variant -Sync -Yes: the bash twin kept every CR the registry had" $crsBefore (Get-ByteCount (Read-Bytes (Join-Path $pb '.sumela/SKILL_REGISTRY.md')) 13)
+            SameBytes "$variant -Sync -Yes: the same provenance record" (Join-Path $pb '.sumela/.last-update.json') (Join-Path $pp '.sumela/.last-update.json')
         }
         # The malformed registries and the paths that leave the install: the same rows and exits.
         foreach ($t in @('mal-indented', 'mal-trailing', 'mal-lost-end', 'mal-all-indented', 'mal-tab-start', 'mal-loose-description', 'mal-one-line', 'mal-orphan', 'unsafe/inst')) {
@@ -745,7 +913,11 @@ try {
         }
     }
 } finally {
-    try { [IO.Directory]::Delete($work, $true) } catch { Write-Host "  (could not remove $work)" }
+    # Read-only git objects are cleared first (Remove-Tree); a cleanup that still fails is a note,
+    # and never keeps the summary and the exit code below from being reached.
+    $why = ''
+    try { $why = Remove-Tree $work } catch { $why = $_.Exception.Message }
+    if ($why.Length -gt 0) { Write-Host "  NOTE  could not remove ${work}: $why" }
 }
 
 Write-Host ''

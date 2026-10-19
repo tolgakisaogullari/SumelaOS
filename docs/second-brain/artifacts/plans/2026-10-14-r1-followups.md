@@ -64,6 +64,13 @@ findings were applied; these minor ones were not.
 7. **Doc alignment**: the plan's R1-03 text and the spec still describe the wider
    "preserve every path in `files`" rule; the library header is the narrower, correct one.
 
+7b. **Git for Windows' awk (MSYS2 gawk) opens files and stdin in TEXT mode** (found by the
+   Windows CI run of R1-07): any bash script that reads a tracked file with awk and writes the
+   result back silently turns CRLF into LF there. R1-07 now passes `-v BINMODE=3` to every awk
+   and refuses a rendering that lost CRs. **Audit every other awk that rewrites files** —
+   `scripts/update.sh` (R1-04; its one Windows failure may be this), `scripts/sumela-migrate.sh`,
+   `scripts/lib/sumela-provenance.sh`, `scripts/lib/sumela-gitignore.sh`, the hooks — and
+   apply the same rule, with a stub-awk test like R1-07's.
 8. **Hooks checked out with CRLF on Windows**: a v0.19 install on Windows (core.autocrlf=true)
    has CRLF hook scripts (`env: bash\r`), which the R1-08 e2e hit through a rollback's
    `git checkout`. R1-12's eol pins fix new checkouts; existing installs need the pins plus a

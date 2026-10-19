@@ -41,11 +41,16 @@
 # point are not checked.
 #
 # --sync reads one answer per entry from stdin: "y" or "yes" rewrites it; anything else, or no
-# answer at all (end of input, as in an agent's shell), declines it. Each rewrite goes through a
-# temp file and a rename and is re-read; the temp file is removed if the run is interrupted. After a
-# rewrite, .sumela/SKILL_REGISTRY.md is added to the provenance record's "files"
+# answer at all (end of input, as in an agent's shell), declines it. An answer is one line of
+# stdin, read as bytes, without one UTF-8 byte order mark before it and one CR after it: a Windows
+# pipe can end each line in CRLF, and Windows PowerShell 5.1 starts what it writes to a child's
+# stdin with a BOM when the console code page is UTF-8. Each rewrite goes through a temp file and
+# a rename and is re-read; the temp file is removed if the run is interrupted. Every line keeps
+# its own ending, on Git Bash too (scripts/lib/sumela-registry.sh). After a rewrite,
+# .sumela/SKILL_REGISTRY.md is added to the provenance record's "files"
 # (scripts/lib/sumela-provenance.sh), so the self-modification guard knows that a framework tool,
-# not the developer, wrote that diff.
+# not the developer, wrote that diff. Its "carry" entry is `git hash-object --no-filters` of the
+# registry as written, in both twins: the same registry bytes give the same record.
 #
 # Exit: 0 every checked entry is in parity (after --sync: none is left out of parity);
 #       1 error: no install root or registry, a skill that cannot be read, a write that failed or
@@ -161,7 +166,7 @@ ask() {  # <name>: 0 on "y" or "yes"; no answer (end of input) declines
     printf '\n'
     return 1
   fi
-  a="${a%$'\r'}"
+  a="${a#$'\357\273\277'}"; a="${a%$'\r'}"         # one UTF-8 BOM before it, one CR after it
   case "$a" in y|Y|yes|Yes|YES) return 0 ;; esac
   return 1
 }
@@ -247,8 +252,9 @@ while IFS= read -r row <&3 || [ -n "$row" ]; do
 done 3< "$T/rows"
 
 # A registry that holds <skill text but no block or block start the grammar sees parses as empty:
-# never a pass.
-if [ "$n_rows" -eq 0 ] && [ "$ONLY_SET" != true ] && LC_ALL=C grep -qE -- "<skill([ >$TAB]|\$)" "$REG"; then
+# never a pass. (awk with BINMODE=3, not grep: a CR stays part of its line on every platform.)
+if [ "$n_rows" -eq 0 ] && [ "$ONLY_SET" != true ] &&
+   LC_ALL=C awk -v BINMODE=3 '/<skill([ >\t]|$)/ { f = 1; exit } END { exit !f }' "$REG"; then
   n_checked=$((n_checked + 1)); n_unp=$((n_unp + 1))
   print_row UNPARSEABLE "" "$REG_REL" "the registry holds <skill text but no block its readers can parse"
 fi

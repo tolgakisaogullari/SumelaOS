@@ -15,19 +15,28 @@
 # as written), exactly as reconcile-registry.py copies a description into a new entry.
 #
 # The registry grammar. Lines end in LF; a trailing CR is ignored when a line is matched and kept
-# when it is rewritten, so a CRLF checkout stays CRLF. A block starts at a line matching
-# ^<skill[ >] and ends at the next line matching ^</skill> (a <skill line inside an open block is
-# part of that block). Inside a block, <name>, <path> and <description> are whole lines,
-# ^<tag>...</tag>$. A "loose" line is any other line of the block, but its first and its closing
-# one, that a lenient reader could still take for structure: once its blanks are trimmed it starts
-# with <name>, <path>, <description>, one of their closing tags, </skill> or <skill (an indented
-# tag, a tag with text after it, or the start of a block whose </skill> was lost). An entry is
-# usable when its block holds exactly one <path> line, one <description> line and no loose line
-# (a <path> line holding a TAB counts as loose); a writer touches nothing else. Outside the blocks,
-# a line that starts with <skill once trimmed, but not as ^<skill[ >], is a block no reader here
-# sees: sumela_registry_rows reports it. Every rewrite keeps every other byte, a missing final
-# newline included. It goes through <registry>.sumela-tmp.<pid> (gitignored through
-# scripts/lib/sumela-gitignore.list), whose line count is checked before the rename.
+# when it is rewritten, so a CRLF checkout stays CRLF. Each line keeps its own ending: a file of
+# mixed endings, or one whose last line ends in a lone CR, is rewritten as it was. A block starts
+# at a line matching ^<skill[ >] and ends at the next line matching ^</skill> (a <skill line
+# inside an open block is part of that block). Inside a block, <name>, <path> and <description>
+# are whole lines, ^<tag>...</tag>$. A "loose" line is any other line of the block, but its first
+# and its closing one, that a lenient reader could still take for structure: once its blanks are
+# trimmed it starts with <name>, <path>, <description>, one of their closing tags, </skill> or
+# <skill (an indented tag, a tag with text after it, or the start of a block whose </skill> was
+# lost). An entry is usable when its block holds exactly one <path> line, one <description> line
+# and no loose line (a <path> line holding a TAB counts as loose); a writer touches nothing else.
+# Outside the blocks, a line that starts with <skill once trimmed, but not as ^<skill[ >], is a
+# block no reader here sees: sumela_registry_rows reports it. Every rewrite keeps every other
+# byte, a missing final newline included. It goes through <registry>.sumela-tmp.<pid> (gitignored
+# through scripts/lib/sumela-gitignore.list), whose line count and CR count are checked before
+# the rename.
+#
+# Bytes as they are, on every platform. Every awk here runs with -v BINMODE=3. Git for Windows'
+# awk is an MSYS2 gawk, which opens its input files and stdin in text mode: each CRLF would reach
+# the program as LF, and a rewrite would turn a CRLF registry into an LF one. BINMODE=3 makes
+# gawk read and write bytes as they are; any other awk takes it for an unused variable. The CR
+# count is the backstop: a rendering that does not hold the registry's CR bytes (an awk that
+# drops them whatever it is told) is never renamed into place.
 #
 #   sumela_fm_description <SKILL.md>
 #       Prints the top-level `description:` of the file's YAML frontmatter, one pair of outer
@@ -50,14 +59,15 @@
 #   sumela_registry_set_description <registry> <skill-path> <description>
 #       Rewrites the <description> line of every block whose one <path> line is <skill-path>, then
 #       re-reads it. Exit 0 written (or already so); 1 no usable entry for the path, a block for
-#       it is not usable (the registry is left unchanged), or the write failed or did not re-read;
-#       4 refused: the description holds </description>, </skill> or a line break.
+#       it is not usable (the registry is left unchanged), the rendering lost a line or a CR (left
+#       unchanged too), or the write failed or did not re-read; 4 refused: the description holds
+#       </description>, </skill> or a line break.
 #   sumela_registry_add_entry <registry> <name> <skill-path> <description>
 #       Inserts a lazy <skill> block before the first </available_skills> line, with that line's
 #       line ending, and re-reads it. The caller checks that the skill is not registered yet.
-#       Exit 0 written; 1 no </available_skills> line, or the write failed or did not re-read;
-#       4 refused: the description as above, or an empty name or path, or one holding < > or a
-#       line break.
+#       Exit 0 written; 1 no </available_skills> line, the rendering lost a line or a CR (the
+#       registry is left unchanged), or the write failed or did not re-read; 4 refused: the
+#       description as above, or an empty name or path, or one holding < > or a line break.
 #   sumela_registry_register_plugin <install-root> <plugin>
 #       The one plugin writer (scripts/setup.sh and scripts/setup-memory.sh call it): registers
 #       .sumela/memory-plugins/<plugin>/SKILL.md with its frontmatter description, verbatim, then
@@ -97,9 +107,15 @@ _sumela_reg_lines() {  # <file> -> its number of LF bytes
   printf '%s\n' "$((n))"
 }
 
+_sumela_reg_crs() {  # <file> -> its number of CR bytes (tr, which reads bytes as they are on Git Bash too)
+  local n
+  n="$(LC_ALL=C tr -cd '\r' < "$1" | wc -c)" || return 1
+  printf '%s\n' "$((n))"
+}
+
 sumela_fm_description() {  # <SKILL.md> -> frontmatter description, one pair of outer quotes removed
   [ -f "$1" ] || return 1
-  LC_ALL=C awk -v q="'" '
+  LC_ALL=C awk -v BINMODE=3 -v q="'" '
     # closes(v, c): 1 when the quoted value v, opened by quote c, closes at its last byte. Inside
     # double quotes a backslash escapes, so the closing quote needs an even run of backslashes
     # before it; inside single quotes a quote is escaped by doubling, so the closing run of quotes
@@ -130,7 +146,7 @@ sumela_fm_description() {  # <SKILL.md> -> frontmatter description, one pair of 
 
 sumela_registry_rows() {  # <registry> -> B and L rows (see the header)
   [ -f "$1" ] || return 1
-  LC_ALL=C awk "$(_sumela_reg_awklib)"'
+  LC_ALL=C awk -v BINMODE=3 "$(_sumela_reg_awklib)"'
     function flush(ended,    i, k, np, nd, nn, nlo, dl, ds, nm, pt) {
       np = 0; nd = 0; nn = 0; nlo = 0; dl = 0; ds = ""; nm = ""; pt = ""
       for (i = 1; i <= n; i++) {
@@ -152,7 +168,7 @@ sumela_registry_rows() {  # <registry> -> B and L rows (see the header)
 
 sumela_registry_description() {  # <registry> <skill-path> -> the <description> of its first usable entry
   local row i
-  row="$(sumela_registry_rows "$1" | SUMELA_PATH="$2" LC_ALL=C awk -F '\t' \
+  row="$(sumela_registry_rows "$1" | SUMELA_PATH="$2" LC_ALL=C awk -v BINMODE=3 -F '\t' \
     '$1 == "B" && $3 == 1 && $4 == 1 && $5 == 0 && $8 == ENVIRON["SUMELA_PATH"] { print; exit }')"
   [ -n "$row" ] || return 1
   for i in 1 2 3 4 5 6 7 8; do row="${row#*	}"; done
@@ -160,11 +176,20 @@ sumela_registry_description() {  # <registry> <skill-path> -> the <description> 
 }
 
 _sumela_reg_commit() {  # <tmp> <registry> <who> <lines added>: rename the rendered temp file over the registry
-  local want got
-  want="$(( $(_sumela_reg_lines "$2") + $4 ))"; got="$(_sumela_reg_lines "$1")"
+  local old want got crs_old crs_new
+  old="$(_sumela_reg_lines "$2")"; want="$((old + $4))"; got="$(_sumela_reg_lines "$1")"
   if [ "$got" != "$want" ] && { [ "$4" = 0 ] || [ "$got" != "$((want + 1))" ]; }; then
     rm -f "$1"
     echo "$3: the rendered registry has $got lines where $want were expected; $2 left unchanged" >&2
+    return 1
+  fi
+  # Every CR of the registry is kept, and the lines an add inserts end as the line they go before:
+  # the rendering holds the registry's CRs, or those plus one per added line. Anything else is an
+  # awk that does not keep bytes as they are (see the header), caught here instead of in the file.
+  if ! crs_old="$(_sumela_reg_crs "$2")" || ! crs_new="$(_sumela_reg_crs "$1")" ||
+     { [ "$crs_new" != "$crs_old" ] && [ "$crs_new" != "$((crs_old + got - old))" ]; }; then
+    rm -f "$1"
+    echo "$3: the rendered registry holds ${crs_new:-?} CR bytes where the registry holds ${crs_old:-?}: this awk does not keep line endings as they are (it reads or writes in text mode); $2 left unchanged" >&2
     return 1
   fi
   if cmp -s "$1" "$2"; then rm -f "$1"; return 0; fi         # already so: no rewrite
@@ -179,7 +204,7 @@ sumela_registry_set_description() {  # <registry> <skill-path> <description>: re
   case "$3" in *"</description>"*|*"</skill>"*|*$'\n'*|*$'\r'*) return 4 ;; esac
   [ -f "$reg" ] || { echo "sumela_registry_set_description: $reg not found" >&2; return 1; }
   [ -n "$(tail -c 1 "$reg")" ] && nl=0                       # no final newline: keep it that way
-  SUMELA_PATH="$2" SUMELA_DESC="$3" LC_ALL=C awk -v nl="$nl" "$(_sumela_reg_awklib)"'
+  SUMELA_PATH="$2" SUMELA_DESC="$3" LC_ALL=C awk -v BINMODE=3 -v nl="$nl" "$(_sumela_reg_awklib)"'
     BEGIN { want = "<path>" ENVIRON["SUMELA_PATH"] "</path>"; desc = ENVIRON["SUMELA_DESC"] }
     function out(s) { if (held) printf "%s\n", last; last = s; held = 1 }
     function flush(ended,    i, k, cr, np, nd, nlo, hit) {
@@ -225,7 +250,7 @@ sumela_registry_add_entry() {  # <registry> <name> <skill-path> <description>: a
   [ -n "$(tail -c 1 "$reg")" ] && nl=0
   # The name travels as _SUMELA_NAME: SUMELA_PATH and SUMELA_DESC are this library's only public
   # plumbing names (tests/test_env_tables.sh lists them).
-  _SUMELA_NAME="$2" SUMELA_PATH="$3" SUMELA_DESC="$4" LC_ALL=C awk -v nl="$nl" '
+  _SUMELA_NAME="$2" SUMELA_PATH="$3" SUMELA_DESC="$4" LC_ALL=C awk -v BINMODE=3 -v nl="$nl" '
     function out(s) { if (held) printf "%s\n", last; last = s; held = 1 }
     { k = $0; sub(/\r$/, "", k); t = k; gsub(/^[ \t]+|[ \t]+$/, "", t) }
     !done && t == "</available_skills>" {
