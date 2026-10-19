@@ -74,18 +74,26 @@ jobs:
           }
           if ($bad) { exit 1 } else { Write-Host "PowerShell scripts parse clean ($($files.Count) tracked *.ps1 files)." }
 
+  # One Windows job per lane, in parallel: run in sequence, the four lanes outgrew one job's
+  # time limit (the first run was cancelled at 60 minutes, mid-suite).
   windows:
+    name: windows (${{ matrix.lane }})
     runs-on: windows-latest
-    timeout-minutes: 60                   # a hung suite must not hold the runner for the 6-hour default
+    timeout-minutes: 90                   # per lane; a hung suite must not hold the runner for the 6-hour default
+    strategy:
+      fail-fast: false                    # one push reports every lane
+      matrix:
+        lane: [powershell-5.1, pwsh-7, git-bash, tr-TR]
     steps:
       - uses: actions/checkout@v4
         id: checkout
         with: { fetch-depth: 0 }
 
-      # Each step after the first also runs when an earlier one failed, so one push reports every
-      # environment. None runs after a failed checkout or a cancelled run, and the two tr-TR
-      # steps run only after the culture step has proved its setting.
+      # Within a lane, each step after the first also runs when an earlier one failed. None runs
+      # after a failed checkout or a cancelled run, and the two tr-TR steps run only after the
+      # culture step has proved its setting.
       - name: PowerShell script parse check (Windows PowerShell 5.1)
+        if: ${{ matrix.lane == 'powershell-5.1' }}
         shell: powershell
         run: |
           # Every tracked *.ps1, read the way Windows PowerShell 5.1 reads a script it runs: a file
@@ -127,19 +135,19 @@ jobs:
       # SUMELA_FIXTURE_LOG_DIR: where a runner saves the full log of each failing suite (see the
       # last step).
       - name: PowerShell fixtures (Windows PowerShell 5.1)
-        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        if: ${{ matrix.lane == 'powershell-5.1' && !cancelled() && steps.checkout.outcome == 'success' }}
         shell: powershell
         env: { SUMELA_FIXTURE_LOG_DIR: "${{ runner.temp }}/fixture-logs/powershell-5.1" }
         run: powershell -NoProfile -File tests/run-ps-fixtures.ps1
 
       - name: PowerShell fixtures (pwsh 7)
-        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        if: ${{ matrix.lane == 'pwsh-7' && !cancelled() && steps.checkout.outcome == 'success' }}
         shell: pwsh
         env: { SUMELA_FIXTURE_LOG_DIR: "${{ runner.temp }}/fixture-logs/pwsh-7" }
         run: pwsh -NoProfile -File tests/run-ps-fixtures.ps1
 
       - name: Bash fixtures under Git Bash with CRLF checkouts       # Git for Windows' installer default
-        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        if: ${{ matrix.lane == 'git-bash' && !cancelled() && steps.checkout.outcome == 'success' }}
         shell: bash
         env: { SUMELA_FIXTURE_LOG_DIR: "${{ runner.temp }}/fixture-logs/git-bash" }
         run: |
@@ -157,7 +165,7 @@ jobs:
 
       - name: Set the user culture to tr-TR for the steps below      # "I".ToLower() is "ı" there
         id: culture
-        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        if: ${{ matrix.lane == 'tr-TR' && !cancelled() && steps.checkout.outcome == 'success' }}
         shell: powershell
         run: |
           # A process takes the user culture when it starts. This step keeps its own culture, and
@@ -174,13 +182,13 @@ jobs:
           exit $bad
 
       - name: PowerShell fixtures under the tr-TR culture
-        if: ${{ !cancelled() && steps.culture.outcome == 'success' }}
+        if: ${{ matrix.lane == 'tr-TR' && !cancelled() && steps.culture.outcome == 'success' }}
         shell: pwsh
         env: { SUMELA_FIXTURE_LOG_DIR: "${{ runner.temp }}/fixture-logs/pwsh-7-tr-TR" }
         run: pwsh -NoProfile -File tests/run-ps-fixtures.ps1 -Culture tr-TR
 
       - name: Bash fixtures under Git Bash, with the PowerShell processes they start under tr-TR   # twin parity
-        if: ${{ !cancelled() && steps.culture.outcome == 'success' }}
+        if: ${{ matrix.lane == 'tr-TR' && !cancelled() && steps.culture.outcome == 'success' }}
         shell: bash
         env: { SUMELA_FIXTURE_LOG_DIR: "${{ runner.temp }}/fixture-logs/git-bash-tr-TR" }
         run: |
@@ -191,12 +199,13 @@ jobs:
           bash tests/run-gitbash-fixtures.sh --require-crlf
 
       # The steps above print a failing suite's failure lines and tail; this keeps its whole log.
-      # Pinned to a full commit SHA, so a moved tag cannot change what runs here.
+      # always(): a lane cancelled at its time limit still keeps the logs it has (an empty
+      # folder uploads nothing). Pinned to a full commit SHA, so a moved tag cannot change what runs.
       - name: Keep the full logs of failing suites for 7 days
-        if: ${{ failure() && steps.checkout.outcome == 'success' }}
+        if: ${{ always() && steps.checkout.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
         with:
-          name: windows-fixture-logs-attempt-${{ github.run_attempt }}
+          name: windows-fixture-logs-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/fixture-logs/
           if-no-files-found: ignore
           retention-days: 7
