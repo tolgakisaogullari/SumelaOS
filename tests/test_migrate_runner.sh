@@ -72,6 +72,13 @@ g() { git -c commit.gpgsign=false -c tag.gpgsign=false -c core.hooksPath="$WORK/
 # converts a POSIX path argument for git, but not one that holds ' ` * ? [ or ]: the fixtures
 # hand git this form themselves.
 np() { if [ "$ON_WINDOWS" = true ]; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+# crs <file>, lfs <file>: its number of CR bytes, of LF bytes. tr reads bytes as they are on Git
+# Bash too; grep there does not see the CR of a CRLF line, so grep $'\r' cannot test for one.
+crs() { LC_ALL=C tr -cd '\r' < "$1" | wc -c | tr -d ' '; }
+lfs() { LC_ALL=C tr -cd '\n' < "$1" | wc -c | tr -d ' '; }
+# crlf <file>: every line ends in CRLF (BINMODE=3: Git for Windows' awk reads and writes bytes as
+# they are only with it)
+crlf() { LC_ALL=C awk -v BINMODE=3 '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$1" > "$1.crlf" && mv -f "$1.crlf" "$1"; }
 
 # fx <command...>: one fixture step. The suite stops at the first one that fails, naming it:
 # every later assertion would only fail with it and bury the cause. In a $( ) it ends the
@@ -506,7 +513,7 @@ cp "$NOTES/upgrade.md" "$BADN/upgrade.md"
 lint_ok "full-line comments are allowed" 0.21.0.md "$(blk "$FULL
 # a full-line comment is allowed
    # an indented one too")"
-LC_ALL=C sed 's/$/\r/' "$NOTES/0.20.1.md" > "$BADN/0.20.1.md"
+fx cp "$NOTES/0.20.1.md" "$BADN/0.20.1.md"; fx crlf "$BADN/0.20.1.md"
 m "$REPO_ROOT" lint "$BADN/0.20.1.md"; rc_is "CRLF notes lint clean" 0
 has "…and parse to the same steps" "$OUT" "0.20.1.md: ok (2 steps)"
 # The runner refuses to plan from invalid notes in the release (exit 4), and records nothing.
@@ -518,12 +525,16 @@ has "…and names the defect, at its path in the clone" "$OUT" "$(np "$WORK")/in
 if [ ! -e "$WORK/inv-proj/.sumela/.upgrade/migrate.state" ]; then ok "…and writes no state"; else bad "…and writes no state"; fi
 m "$WORK/inv-proj" status; same "…so status stays usable" "pending_repo=0 pending_developer=0" "$OUT"
 # CRLF notes committed in a release run like LF ones.
-CRN="$WORK/crlf-notes"; write_generic "$CRN"; for f in "$CRN"/*.md; do LC_ALL=C sed 's/$/\r/' "$f" > "$f.x" && mv "$f.x" "$f"; done
+CRN="$WORK/crlf-notes"; write_generic "$CRN"; for f in "$CRN"/*.md; do fx crlf "$f"; done
 mk_release "$WORK/crlf-rel" 0.20.0 - "$CRN"
-printf '*.md -text\n*.sh text eol=lf\n' > "$WORK/crlf-rel/.gitattributes"
-fx g -C "$WORK/crlf-rel" add -A && fx g -C "$WORK/crlf-rel" commit -qm crlf && fx g -C "$WORK/crlf-rel" tag -a -m v v0.20.0
+printf '*.md -text\n*.sh text eol=lf\n*.ps1 text eol=lf\n' > "$WORK/crlf-rel/.gitattributes"
+# Under core.autocrlf=true (the Windows CI) mk_release's commit stored the notes with LF; with
+# -text in place, --renormalize stores them as they are.
+fx g -C "$WORK/crlf-rel" add -A && fx g -C "$WORK/crlf-rel" add --renormalize . &&
+  fx g -C "$WORK/crlf-rel" commit -qm crlf && fx g -C "$WORK/crlf-rel" tag -a -m v v0.20.0
 CL="$(src_of "$WORK/crlf-rel")" || exit 1
-if LC_ALL=C grep -q $'\r' "$CL/scripts/sumela-migrations/upgrade.md"; then ok "…the fixture's notes carry CRLF"; else bad "…the fixture's notes carry CRLF"; fi
+CLN="$CL/scripts/sumela-migrations/upgrade.md"
+if [ "$(crs "$CLN")" -gt 0 ] && [ "$(crs "$CLN")" = "$(lfs "$CLN")" ]; then ok "…the fixture's notes carry CRLF"; else bad "…the fixture's notes carry CRLF ($(crs "$CLN") CRs, $(lfs "$CLN") LFs)"; fi
 UP="$WORK/crlf-rel" mk_project "$WORK/crlf-proj" 0.19.0
 m "$WORK/crlf-proj" plan --source "$CL" --scope repo
 rc_is "plan reads CRLF notes" 0
@@ -881,7 +892,7 @@ L="$WT/.sumela/migrations-applied/upgrade-02@0.20.0"
 same "a generic step's ledger is named <id>@<target> and holds status, at and version" "status: done|at: |version: 0.20.0" \
   "$(LC_ALL=C sed 's/^at: .*/at: /' "$L" | tr '\n' '|' | sed 's/|$//')"
 if LC_ALL=C grep -Eq '^at: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$L"; then ok "…at is a UTC timestamp"; else bad "…at is a UTC timestamp ($(cat "$L"))"; fi
-if LC_ALL=C grep -q $'\r' "$L"; then bad "…written with LF"; else ok "…written with LF"; fi
+if [ "$(crs "$L")" = 0 ]; then ok "…written with LF"; else bad "…written with LF"; fi
 FILES="$(sumela_record_files "$WT/.sumela/.last-update.json")"
 has "every repo ledger entry is in the provenance record's files" "$FILES" ".sumela/migrations-applied/upgrade-01@0.20.0"
 has "…the third too" "$FILES" ".sumela/migrations-applied/upgrade-03@0.20.0"
@@ -1234,7 +1245,6 @@ echo "== t_crlf_files_read_alike"
 # A state file, upstream.conf, repo ledger or developer log that an editor or another tool
 # rewrote with CRLF reads exactly as the LF one: no "\r" reaches a path, a git argument or a
 # comparison (a CR in the recorded clone or worktree path would make it "missing").
-crlf() { LC_ALL=C awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$1" > "$1.crlf" && mv -f "$1.crlf" "$1"; }
 UP="$WORK/rel20" mk_project "$WORK/cr" 0.19.0
 P="$WORK/cr"; WT="$WORK/cr-upgrade"; TGT=0.20.0; STEP_LOG=""
 m "$P" plan --source "$REL20_SRC" --scope repo
@@ -1243,7 +1253,8 @@ same "the fixture's first two steps pass" "" "$STEP_LOG"
 m "$P" plan --scope repo; LF_PLAN="$OUT"
 m "$P" show upgrade-03; LF_SHOW="$OUT"
 fx crlf "$P/.sumela/.upgrade/migrate.state"; fx crlf "$P/.sumela/upstream.conf"; fx crlf "$WT/.sumela/migrations-applied/upgrade-02@0.20.0"
-if LC_ALL=C grep -q $'\r$' "$P/.sumela/.upgrade/migrate.state"; then ok "…the state now ends its lines with CRLF"; else bad "…the state now ends its lines with CRLF"; fi
+ST="$P/.sumela/.upgrade/migrate.state"
+if [ "$(crs "$ST")" -gt 0 ] && [ "$(crs "$ST")" = "$(lfs "$ST")" ]; then ok "…the state now ends its lines with CRLF"; else bad "…the state now ends its lines with CRLF ($(crs "$ST") CRs, $(lfs "$ST") LFs)"; fi
 m "$P" plan --scope repo
 same "a CRLF state, upstream.conf and ledger plan alike" "$LF_PLAN" "$OUT"
 m "$P" show upgrade-03

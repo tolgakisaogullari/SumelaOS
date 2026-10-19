@@ -1327,7 +1327,10 @@ function Get-StepLine([string]$key) {
 }
 function Invoke-StepLine($sl, [switch]$Capture) {
     # Runs a step line from {ROOT} with SUMELA_MIGRATE_SRC and SUMELA_MIGRATE_ROOT set; output is
-    # never filtered. -> @{ ExitCode; Output } (Output only with -Capture: stdout and stderr, CRs dropped)
+    # never filtered. The step's own shell enters {ROOT}: no process of the runner sits in it
+    # meanwhile (Windows cannot remove a directory a process is in, Git Bash's bin/bash.exe launcher
+    # stays where it was started, and upgrade-01's rollback removes {ROOT}); run_line in the bash
+    # runner. -> @{ ExitCode; Output } (Output only with -Capture: stdout and stderr, CRs dropped)
     $savedSrc = $env:SUMELA_MIGRATE_SRC; $savedRoot = $env:SUMELA_MIGRATE_ROOT
     $env:SUMELA_MIGRATE_SRC = $script:stepSrc; $env:SUMELA_MIGRATE_ROOT = $script:stepRoot
     $tmp = $script:work + '/step-' + [guid]::NewGuid().ToString('N')
@@ -1341,7 +1344,7 @@ function Invoke-StepLine($sl, [switch]$Capture) {
             $body = @(
                 '$ErrorActionPreference = ''Continue'''
                 'try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }'
-                'Set-Location -LiteralPath $env:SUMELA_MIGRATE_ROOT'
+                'try { Set-Location -LiteralPath $env:SUMELA_MIGRATE_ROOT -ErrorAction Stop } catch { [Console]::Error.WriteLine([string]$_); exit 1 }'
                 $shim
                 '$global:LASTEXITCODE = 0'
                 $sl.Line
@@ -1356,7 +1359,7 @@ function Invoke-StepLine($sl, [switch]$Capture) {
             [IO.File]::WriteAllText($tmp + '.sh', "cd `"`$SUMELA_MIGRATE_ROOT`" || exit 1`n" + $sl.Line + "`n", $script:utf8)
             $exe = $bash; $argv = @($tmp + '.sh')
         }
-        Push-Location -LiteralPath $script:stepRoot
+        Push-Location -LiteralPath $script:work
         try {
             if ($Capture) {
                 $r = Invoke-Native -Exe $exe -ArgList $argv -Merge
