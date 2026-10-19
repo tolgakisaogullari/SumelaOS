@@ -94,6 +94,34 @@ function Warn([string]$s) { [Console]::Error.WriteLine($script:prog + ': ' + $s)
 function Stop-Mig([int]$code, [string]$msg) { if ($msg) { Warn $msg }; exit $code }
 function Die([string]$msg) { Stop-Mig 1 $msg }
 function Slash([string]$p) { if ($null -eq $p) { return '' }; return $p.Replace('\', '/') }
+function Clear-ReadOnlyTree([IO.DirectoryInfo]$dir) {
+    # Every entry under <dir> loses the read-only attribute; a link or junction is neither
+    # changed nor followed.
+    $ro = [int][IO.FileAttributes]::ReadOnly; $rp = [int][IO.FileAttributes]::ReparsePoint
+    foreach ($e in $dir.GetFileSystemInfos()) {
+        $a = [int]$e.Attributes
+        if (($a -band $rp) -ne 0) { continue }
+        if (($a -band $ro) -ne 0) { $e.Attributes = [IO.FileAttributes]($a -bxor $ro) }
+        if ($e -is [IO.DirectoryInfo]) { Clear-ReadOnlyTree $e }
+    }
+}
+function Remove-Tree([string]$path) {
+    # Deletes a directory tree. Windows will not delete a read-only file (git writes its objects
+    # read-only), so every entry loses that attribute first; a file another process still holds
+    # gets a few retries. Throws when the tree cannot be removed.
+    for ($try = 1; [IO.Directory]::Exists($path); $try++) {
+        try {
+            $d = New-Object IO.DirectoryInfo $path
+            $a = [int]$d.Attributes; $ro = [int][IO.FileAttributes]::ReadOnly
+            if (($a -band $ro) -ne 0) { $d.Attributes = [IO.FileAttributes]($a -bxor $ro) }
+            Clear-ReadOnlyTree $d
+            [IO.Directory]::Delete($path, $true)
+        } catch {
+            if ($try -ge 5) { throw }
+            Start-Sleep -Milliseconds 200
+        }
+    }
+}
 
 function Show-Usage {
     $u = @(
@@ -590,7 +618,7 @@ function Import-NotesSet {
     if ($rel.Count -eq 0) { return 0 }
     $shown = (Slash $Dir) + '/' + $script:notesRel
     $tmpd = $script:work + '/notes-' + $Set
-    if ([IO.Directory]::Exists($tmpd)) { [IO.Directory]::Delete($tmpd, $true) }
+    Remove-Tree $tmpd
     [void][IO.Directory]::CreateDirectory($tmpd)
     $files = New-Object System.Collections.Generic.List[string]
     foreach ($x in $rel) {
@@ -656,7 +684,57 @@ function Convert-Text([string]$s) {
     return $s.Replace('{SRC}', $script:stepSrc).Replace('{ROOT}', $script:stepRoot).Replace('{TARGET}', $script:stepTarget)
 }
 
+# --- Windows paths ---------------------------------------------------------------------------
+$script:cygpath = $null; $script:cygpathFound = $false
+function Find-Cygpath {
+    # Git for Windows' cygpath.exe, beside its Git Bash (<git --exec-path>/../../../usr/bin), never
+    # from PATH; $null when there is none. Looked up once.
+    if (-not $script:cygpathFound) {
+        $script:cygpathFound = $true
+        $exec = Get-GitLine -Dir '' -GitArgs @('--exec-path')
+        if ($exec) {
+            $p = [IO.Path]::GetFullPath((Join-Path $exec '../../../usr/bin/cygpath.exe'))
+            if ([IO.File]::Exists($p)) { $script:cygpath = $p }
+        }
+    }
+    return $script:cygpath
+}
+function ConvertTo-NativePath([string]$p) {
+    # On Windows, an absolute POSIX path (an MSYS path a bash tool wrote) in the form git reads,
+    # C:/x: cygpath -m when Git for Windows has it (it knows the mount table: /tmp, /usr, the
+    # cygdrive prefix), else /x/rest maps to X:/rest. Any other path, and every path elsewhere,
+    # is returned as it is (native_path in the bash runner).
+    if ((-not $script:onWindows) -or (-not $p.StartsWith('/', $ord))) { return $p }
+    $cyg = Find-Cygpath
+    if ($cyg) {
+        $r = Invoke-Native -Exe $cyg -ArgList @('-m', $p)
+        if (($r.ExitCode -eq 0) -and (@($r.Lines).Count -eq 1) -and ([string]$r.Lines[0]).Length -gt 0) { return [string]$r.Lines[0] }
+    }
+    $m = [regex]::Match($p, '^/([A-Za-z])(/.*)?\z')
+    if (-not $m.Success) { return $p }
+    $rest = $m.Groups[2].Value; if ($rest.Length -eq 0) { $rest = '/' }
+    return ($m.Groups[1].Value.ToUpperInvariant() + ':' + $rest)
+}
+
 # --- URLs ------------------------------------------------------------------------------------
+function ConvertTo-AsciiLower([string]$s) {
+    # A-Z to a-z and nothing else, as awk's tolower in the C locale (url_key in the bash runner).
+    $c = $s.ToCharArray()
+    for ($i = 0; $i -lt $c.Length; $i++) { $v = [int]$c[$i]; if (($v -ge 65) -and ($v -le 90)) { $c[$i] = [char]($v + 32) } }
+    return (-join $c)
+}
+function Get-LocalUrlPath([string]$u) {
+    # The path of a URL that names a local repository (a plain path, or a file:// URL, where
+    # file:///C:/x gives C:/x), backslashes as slashes; $null for a remote URL (another scheme,
+    # or an scp-style host:path) (local_url_path in the bash runner).
+    $m = [regex]::Match($u, '^[A-Za-z][A-Za-z0-9+.-]*://')
+    if ($m.Success) {
+        if (-not (Eq (ConvertTo-AsciiLower $m.Value) 'file://')) { return $null }
+        $u = $u.Substring($m.Length)
+        if ($u -cmatch '^/[A-Za-z]:([/\\]|\z)') { $u = $u.Substring(1) }
+    } elseif (($u -cmatch '^[^/]+:') -and ($u -cnotmatch '^[A-Za-z]:')) { return $null }
+    return $u.Replace('\', '/')
+}
 function Remove-UserInfo([string]$u) {
     # Never store or print a credential: http(s) URLs lose their whole userinfo, other scheme URLs
     # keep the user name and lose the password (strip_userinfo in the bash runner).
@@ -672,17 +750,25 @@ function Remove-UserInfo([string]$u) {
     return $s + $a + $rest
 }
 function Get-UrlKey([string]$u) {
-    # A comparable form of a repository URL (url_key in the bash runner).
+    # A comparable form of a repository URL (url_key in the bash runner): on Windows a local path
+    # in its native form, its drive letter in upper case (/c/x, c:\x and file:///C:/x are all C:/x).
+    if ($script:onWindows) {
+        $p = Get-LocalUrlPath $u
+        if ($null -ne $p) {
+            $u = ConvertTo-NativePath $p
+            if ($u -cmatch '^[a-z]:') { $u = $u.Substring(0, 1).ToUpperInvariant() + $u.Substring(1) }
+        }
+    }
     $m = [regex]::Match($u, '^[A-Za-z][A-Za-z0-9+.-]*://')
     if ($m.Success) {
         $x = $u.Substring($m.Length); $slash = $x.IndexOf('/')
         if ($slash -lt 0) { $a = $x; $rest = '' } else { $a = $x.Substring(0, $slash); $rest = $x.Substring($slash) }
         $at = $a.LastIndexOf('@'); if ($at -ge 0) { $a = $a.Substring($at + 1) }
-        $u = $a.ToLowerInvariant() + $rest
+        $u = (ConvertTo-AsciiLower $a) + $rest
     } elseif (($u -cmatch '^[^/]+:') -and ($u -cnotmatch '^[A-Za-z]:')) {
         $c = $u.IndexOf(':'); $a = $u.Substring(0, $c); $rest = $u.Substring($c + 1)
         $at = $a.LastIndexOf('@'); if ($at -ge 0) { $a = $a.Substring($at + 1) }
-        $u = $a.ToLowerInvariant() + '/' + $rest
+        $u = (ConvertTo-AsciiLower $a) + '/' + $rest
     }
     $u = $u.TrimEnd('/')
     if ($u.EndsWith('.git', $ord)) { $u = $u.Substring(0, $u.Length - 4) }
@@ -723,9 +809,24 @@ function Initialize-Location {
     $lr = Find-InstallRoot
     if (-not $lr) { Die "no .sumela/ above $((Get-Location -PSProvider FileSystem).ProviderPath): run this inside a SumelaOS project's checkout" }
     $script:localRoot = Slash $lr
-    $c = Get-GitLine -Dir $script:localRoot -GitArgs @('rev-parse', '--path-format=absolute', '--git-common-dir')
-    if ($null -eq $c) { Die "$($script:localRoot) is not inside a git work tree (git 2.31 or later is required)" }
-    $script:common = $c
+    # git's own message says why it failed; the probe tells a directory git cannot enter from a
+    # repository it does not find or refuses (locate in the bash runner).
+    $r = Invoke-Git -Dir $script:localRoot -GitArgs @('rev-parse', '--path-format=absolute', '--git-common-dir')
+    if ($r.ExitCode -ne 0) {
+        foreach ($l in @($r.Err)) { [Console]::Error.WriteLine($l) }
+        if ((Invoke-Git -Dir $script:localRoot -GitArgs @('version')).ExitCode -ne 0) {
+            Die "git cannot enter $($script:localRoot) (git's message is above): the directory is missing, unreadable, or named in a form git cannot open"
+        }
+        Die "$($script:localRoot) is not inside a git work tree, or git refuses the repository there (git's message is above)"
+    }
+    foreach ($l in @($r.Err)) { [Console]::Error.WriteLine($l) }
+    # git before 2.31 does not fail on --path-format: it prints the option back, then a relative path.
+    $lines = @($r.Lines)
+    if (($lines.Count -ne 1) -or ([string]$lines[0] -cnotmatch '^(/|[A-Za-z]:/)')) {
+        $first = ''; if ($lines.Count -gt 0) { $first = [string]$lines[0] }
+        Die "git 2.31 or later is required: git rev-parse --path-format=absolute printed '$first' ($(Get-GitLine -Dir '' -GitArgs @('version')))"
+    }
+    $script:common = [string]$lines[0]
     $p = Get-GitLine -Dir $script:localRoot -GitArgs @('rev-parse', '--show-prefix')
     if ($null -eq $p) { Die "git cannot read $($script:localRoot)" }
     $script:prefix = $p.TrimEnd('/')
@@ -829,13 +930,15 @@ function Invoke-LsRemote([string]$url, [string]$ref) {
     $savedP = $env:GIT_ALLOW_PROTOCOL; $savedC = $env:GIT_CEILING_DIRECTORIES
     if (-not $env:GIT_ALLOW_PROTOCOL) { $env:GIT_ALLOW_PROTOCOL = 'https:ssh:git' }
     $env:GIT_CEILING_DIRECTORIES = [IO.Path]::GetDirectoryName($script:work)
-    try { return (Invoke-Git -Dir $script:work -GitArgs @('ls-remote', '--', $url, $ref)) }
+    # A local path goes to git in its native form (ConvertTo-NativePath).
+    try { return (Invoke-Git -Dir $script:work -GitArgs @('ls-remote', '--', (ConvertTo-NativePath $url), $ref)) }
     finally { $env:GIT_ALLOW_PROTOCOL = $savedP; $env:GIT_CEILING_DIRECTORIES = $savedC }
 }
 function Get-CloneProblem([string]$d, [string]$mode) {
     # Checks the release clone as check_clone in the bash runner does; sets cloneTop, cloneTarget,
     # cloneTag, cloneHead, cloneUrl. Returns $null, or why the clone is refused.
     if (Test-Control $d) { return "refused: the release clone's path holds a control character (a newline?): clone it to a plain path" }
+    $d = ConvertTo-NativePath $d
     if (-not [IO.Directory]::Exists($d)) { return "release clone $d does not exist" }
     $top = Get-CGitLine -Dir $d -GitArgs @('rev-parse', '--show-toplevel')
     if (-not $top) { return "$d is not a git checkout of the release" }
@@ -899,7 +1002,7 @@ function Invoke-Reclone([string]$d) {
     Say "the release clone $d is missing: cloning $(Remove-UserInfo $url) at $tag again"
     $saved = $env:GIT_ALLOW_PROTOCOL
     if (-not $env:GIT_ALLOW_PROTOCOL) { $env:GIT_ALLOW_PROTOCOL = 'https:ssh:git' }
-    try { $r = Invoke-Git -Dir '' -GitArgs @('clone', '--branch', $tag, '--', $url, $d) } finally { $env:GIT_ALLOW_PROTOCOL = $saved }
+    try { $r = Invoke-Git -Dir '' -GitArgs @('clone', '--branch', $tag, '--', (ConvertTo-NativePath $url), (ConvertTo-NativePath $d)) } finally { $env:GIT_ALLOW_PROTOCOL = $saved }
     foreach ($l in @($r.Err)) { if ($l) { [Console]::Error.WriteLine($l) } }
     if ($r.ExitCode -ne 0) { Die "cannot clone $(Remove-UserInfo $url) at $tag into $d" }
 }
@@ -1476,7 +1579,7 @@ function Invoke-Set {
             Assert-NotTracking $script:mainRoot $v
             $haveBranch = $true
         } elseif (Eq $k 'worktree') {
-            $v = Resolve-UserPath $v
+            $v = Resolve-UserPath (ConvertTo-NativePath $v)
             if (-not [IO.Directory]::Exists($v)) { Die "worktree $v does not exist (create it with git worktree add first)" }
             $top = Get-GitLine -Dir $v -GitArgs @('rev-parse', '--show-toplevel'); if (-not $top) { Die "$v is not a git checkout" }
             $common = Get-GitLine -Dir $top -GitArgs @('rev-parse', '--path-format=absolute', '--git-common-dir')
@@ -1666,6 +1769,7 @@ try {
     elseif (Eq $cmd 'record') { if ($n -ne 2) { Die 'record needs <id> done|declined|not-applicable' }; Invoke-Record $a0 $script:args2[1] }
     elseif (Eq $cmd 'rollback') { if ($n -ne 1) { Die 'rollback needs one step id' }; Invoke-Rollback $a0 }
 } finally {
-    if ([IO.Directory]::Exists($script:work)) { try { [IO.Directory]::Delete($script:work, $true) } catch { } }
+    # Its own temporary directory: a failure to remove it is reported, and changes no exit code.
+    try { Remove-Tree $script:work } catch { Warn "could not remove the temporary directory $($script:work): $($_.Exception.Message)" }
 }
 exit $code

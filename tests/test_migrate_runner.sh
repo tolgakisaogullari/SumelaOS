@@ -22,9 +22,15 @@
 #     git configuration trusted (fsmonitor, insteadOf), notes read from regular blobs at HEAD,
 #     installed notes unmodified, --allow-untagged only with SUMELA_MIGRATE_ALLOW_UNTAGGED,
 #     credentials never printed, control characters refused [RU-M10]; paths with spaces and
-#     quotes reach the steps intact.
+#     quotes reach the steps intact;
+#   - Windows: the runner hands git, records and prints native paths (C:/x), from a checkout whose
+#     path Git Bash would not convert (' and `); a local origin matches the upstream in any
+#     spelling of the same path and in no other (simulated with uname and cygpath stand-ins
+#     elsewhere); git that cannot enter the checkout, or is older than 2.31, is named as such;
+#     CRLF state, upstream.conf and ledger files read as LF ones.
 #
 # Every fixture lives under one temporary directory; the state directory is redirected there.
+# A fixture step that fails stops the suite at once, naming it (fx), instead of a cascade.
 # Run from anywhere:  bash tests/test_migrate_runner.sh
 # Exit 0 = all assertions passed, 1 = a failure (printed above).
 # -----------------------------------------------------------------------------
@@ -62,9 +68,28 @@ fi
 export GIT_ALLOW_PROTOCOL="file:https:ssh:git"     # the fixtures' upstreams are local paths
 export GIT_AUTHOR_NAME=Test GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=Test GIT_COMMITTER_EMAIL=t@example.com
 g() { git -c commit.gpgsign=false -c tag.gpgsign=false -c core.hooksPath="$WORK/no-hooks" -c init.defaultBranch=main "$@"; }
+# np <path>: a path as git, and so the runner, prints it: C:/x on Windows, else as it is. Git Bash
+# converts a POSIX path argument for git, but not one that holds ' ` * ? [ or ]: the fixtures
+# hand git this form themselves.
+np() { if [ "$ON_WINDOWS" = true ]; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+
+# fx <command...>: one fixture step. The suite stops at the first one that fails, naming it:
+# every later assertion would only fail with it and bury the cause. In a $( ) it ends the
+# substitution; the marker then stops the suite at the next runner call.
+FX_BROKEN="$WORK/fixture-broken"
+fx_fail() {
+  { printf '  FAIL  fixture: %s\n' "$1"
+    echo "Result: $PASS passed, $((FAIL + 1)) failed (stopped at a fixture that could not be built)"; } >&2
+  : > "$FX_BROKEN"
+  exit 1
+}
+fx() { "$@" && return 0; fx_fail "$* (exit $?)"; }
 
 # m <dir> <args...>: runs the runner from <dir>; $OUT holds stdout and stderr, $RC the exit code
-m() { local d="$1"; shift; OUT="$(cd "$d" && bash "$RUNNER" "$@" 2>&1)"; RC=$?; }
+m() {
+  [ ! -e "$FX_BROKEN" ] || exit 1
+  local d="$1"; shift; OUT="$(cd "$d" && bash "$RUNNER" "$@" 2>&1)"; RC=$?
+}
 # pending_ids: the ids of the "pending" lines of the last plan, space-separated
 pending_ids() { printf '%s\n' "$OUT" | LC_ALL=C sed -n 's/^    \([^ ]*\)  .*consent=.*/\1/p' | tr '\n' ' ' | sed 's/ $//'; }
 
@@ -253,41 +278,44 @@ write_compose() {  # <notes dir>
 # mk_release <dir> <version> <tag|-> <notes dir>: an upstream repository at a tagged commit
 mk_release() {
   local d="$1" v="$2" tag="$3" notes="$4"
-  mkdir -p "$d/.sumela" "$d/scripts/sumela-migrations"
-  g init -q "$d"
+  fx mkdir -p "$d/.sumela" "$d/scripts/sumela-migrations"
+  fx g init -q "$(np "$d")"
   printf '%s\n' "$v" > "$d/.sumela/VERSION"
   printf '*.sh text eol=lf\n*.ps1 text eol=lf\n' > "$d/.gitattributes"
-  cp "$notes"/*.md "$d/scripts/sumela-migrations/"
+  fx cp "$notes"/*.md "$d/scripts/sumela-migrations/"
   write_tools "$d"
-  g -C "$d" add -A && g -C "$d" commit -qm "release $v"
-  [ "$tag" = - ] || g -C "$d" tag -a -m "release $tag" "$tag"
+  fx g -C "$(np "$d")" add -A
+  fx g -C "$(np "$d")" commit -qm "release $v"
+  [ "$tag" = - ] || fx g -C "$(np "$d")" tag -a -m "release $tag" "$tag"
 }
 # src_of <release> -> <release>.clone: a clone of the upstream, at its HEAD, its tags fetched
 src_of() {
   local r="$1" c="$1.clone" head
-  head="$(git -C "$r" rev-parse HEAD)"
-  [ -d "$c" ] || g clone -q -- "$r" "$c" 2>/dev/null
-  g -C "$c" fetch -q --tags --force --prune --prune-tags origin 2>/dev/null
-  g -C "$c" -c advice.detachedHead=false checkout -q --detach "$head"
+  head="$(git -C "$(np "$r")" rev-parse -q --verify 'HEAD^{commit}')" || fx_fail "src_of: $r has no commit"
+  [ -d "$c" ] || fx g clone -q -- "$(np "$r")" "$(np "$c")"
+  fx g -C "$(np "$c")" fetch -q --tags --force --prune --prune-tags origin
+  fx g -C "$(np "$c")" -c advice.detachedHead=false checkout -q --detach "$head"
   printf '%s' "$c"
 }
 # mk_project <dir> <version> [<notes dir>]: a project at <version>, its upstream $UP when set,
 # the notes installed when given
 mk_project() {
   local d="$1" v="$2"
-  mkdir -p "$d/.sumela"
-  g init -q "$d"
+  fx mkdir -p "$d/.sumela"
+  fx g init -q "$(np "$d")"
   printf '%s\n' "$v" > "$d/.sumela/VERSION"
   printf 'app\n' > "$d/app.txt"
   printf '*.sh text eol=lf\n*.ps1 text eol=lf\n' > "$d/.gitattributes"
   printf '.sumela/.last-update.json\n' > "$d/.gitignore"
   [ -n "${UP:-}" ] && printf '# upstream\n%s\n' "$UP" > "$d/.sumela/upstream.conf"
-  if [ $# -ge 3 ]; then mkdir -p "$d/scripts/sumela-migrations"; cp "$3"/*.md "$d/scripts/sumela-migrations/"; write_tools "$d"; fi
-  g -C "$d" add -A && g -C "$d" commit -qm "project at $v"
+  if [ $# -ge 3 ]; then fx mkdir -p "$d/scripts/sumela-migrations"; fx cp "$3"/*.md "$d/scripts/sumela-migrations/"; write_tools "$d"; fi
+  fx g -C "$(np "$d")" add -A
+  fx g -C "$(np "$d")" commit -qm "project at $v"
 }
-# do_worktree <project> <worktree> <target>: upgrade-01's agent instruction, scripted
+# do_worktree <project> <worktree> <target>: upgrade-01's agent instruction, scripted (set gets
+# the path as bash spells it: the runner converts it for git itself)
 do_worktree() {
-  g -C "$1" worktree add -q --no-track -b "sumela/upgrade-$3" "$2" main >/dev/null 2>&1
+  fx g -C "$(np "$1")" worktree add -q --no-track -b "sumela/upgrade-$3" "$(np "$2")" main >/dev/null
   m "$1" set prefix=sumela/ base=main "worktree=$2"
 }
 # step_through <project> <ids...>: show, run (or the scripted equivalent), verify, record done
@@ -298,7 +326,7 @@ step_through() {
     m "$p" show "$id"; [ "$RC" = 0 ] || { STEP_LOG="$STEP_LOG show $id: exit $RC ($OUT);"; continue; }
     case "$id" in
       upgrade-01) do_worktree "$p" "$WT" "$TGT" ;;
-      upgrade-07) (cd "$WT" && g add -A && g commit -qm "chore(sumela): upgrade to v$TGT") >/dev/null 2>&1; RC=0 ;;
+      upgrade-07) (fx cd "$WT" && fx g add -A && fx g commit -qm "chore(sumela): upgrade to v$TGT") >/dev/null; RC=0 ;;
       *) m "$p" run "$id" ;;
     esac
     [ "$RC" = 0 ] || { STEP_LOG="$STEP_LOG run $id: exit $RC ($OUT);"; continue; }
@@ -313,6 +341,13 @@ GEN="$WORK/notes-generic"; write_generic "$GEN"
 { step_block 0.20.0-01 repo post-update; } > "$GEN/0.20.0.md"
 
 echo "Migration runner (scripts/sumela-migrate.sh)"
+# The fixture guard itself: a failing step stops at once, names itself and leaves the marker.
+FXOUT="$( (fx false) 2>&1 )"; FXRC=$?
+if [ "$FXRC" = 1 ] && [ -e "$FX_BROKEN" ] && case "$FXOUT" in *"FAIL  fixture: false (exit 1)"*) true ;; *) false ;; esac; then
+  rm -f "$FX_BROKEN"; ok "a failing fixture step stops the suite and names itself"
+else
+  echo "FAIL: the fixture guard (fx) does not stop on a failing step (exit $FXRC: $FXOUT)"; exit 1
+fi
 
 echo "== t_parse_and_validate_required_keys"
 m "$REPO_ROOT" lint "$NOTES/upgrade.md" "$NOTES/0.20.0.md" "$NOTES/0.20.1.md" "$NOTES/0.20.2.md"
@@ -479,15 +514,15 @@ INV="$WORK/inv-notes"; write_generic "$INV"; printf '%s' "$(blk "$(printf '%s\n'
 mk_release "$WORK/inv-rel" 0.20.0 v0.20.0 "$INV"; UP="$WORK/inv-rel" mk_project "$WORK/inv-proj" 0.19.0
 m "$WORK/inv-proj" plan --source "$(src_of "$WORK/inv-rel")" --scope repo
 rc_is "plan from a release whose notes fail the lint exits 4" 4
-has "…and names the defect, at its path in the clone" "$OUT" "$WORK/inv-rel.clone/scripts/sumela-migrations/0.20.0.md:1: step 0.20.0-01: missing verify"
+has "…and names the defect, at its path in the clone" "$OUT" "$(np "$WORK")/inv-rel.clone/scripts/sumela-migrations/0.20.0.md:1: step 0.20.0-01: missing verify"
 if [ ! -e "$WORK/inv-proj/.sumela/.upgrade/migrate.state" ]; then ok "…and writes no state"; else bad "…and writes no state"; fi
 m "$WORK/inv-proj" status; same "…so status stays usable" "pending_repo=0 pending_developer=0" "$OUT"
 # CRLF notes committed in a release run like LF ones.
 CRN="$WORK/crlf-notes"; write_generic "$CRN"; for f in "$CRN"/*.md; do LC_ALL=C sed 's/$/\r/' "$f" > "$f.x" && mv "$f.x" "$f"; done
 mk_release "$WORK/crlf-rel" 0.20.0 - "$CRN"
 printf '*.md -text\n*.sh text eol=lf\n' > "$WORK/crlf-rel/.gitattributes"
-g -C "$WORK/crlf-rel" add -A && g -C "$WORK/crlf-rel" commit -qm crlf && g -C "$WORK/crlf-rel" tag -a -m v v0.20.0
-CL="$(src_of "$WORK/crlf-rel")"
+fx g -C "$WORK/crlf-rel" add -A && fx g -C "$WORK/crlf-rel" commit -qm crlf && fx g -C "$WORK/crlf-rel" tag -a -m v v0.20.0
+CL="$(src_of "$WORK/crlf-rel")" || exit 1
 if LC_ALL=C grep -q $'\r' "$CL/scripts/sumela-migrations/upgrade.md"; then ok "…the fixture's notes carry CRLF"; else bad "…the fixture's notes carry CRLF"; fi
 UP="$WORK/crlf-rel" mk_project "$WORK/crlf-proj" 0.19.0
 m "$WORK/crlf-proj" plan --source "$CL" --scope repo
@@ -496,7 +531,7 @@ same "…in the same order as LF notes" "upgrade-01 upgrade-02 upgrade-03 upgrad
 
 echo "== t_plan_orders_by_phase_version_requires"
 mk_release "$WORK/rel" 0.20.2 v0.20.2 "$NOTES"; UP="$WORK/rel" mk_project "$WORK/p1" 0.19.0
-REL_SRC="$(src_of "$WORK/rel")"
+REL_SRC="$(src_of "$WORK/rel")" || exit 1
 m "$WORK/p1" plan --source "$REL_SRC" --scope repo
 rc_is "plan --source exits 0" 0
 same "phase, then version (generic steps count as the target), then id, with requires respected" \
@@ -544,7 +579,7 @@ if [ -e "$P/.sumela/.upgrade/migrate.state" ]; then ok "…and keeps its state u
 
 echo "== t_post_update_steps_survive_stamp"
 mk_release "$WORK/rel20" 0.20.0 v0.20.0 "$GEN"; UP="$WORK/rel20" mk_project "$WORK/p2" 0.19.0
-REL20_SRC="$(src_of "$WORK/rel20")"
+REL20_SRC="$(src_of "$WORK/rel20")" || exit 1
 P="$WORK/p2"; WT="$WORK/p2-upgrade"; TGT=0.20.0; STEP_LOG=""
 m "$P" plan --source "$REL20_SRC" --scope repo
 step_through "$P" upgrade-01 upgrade-02 upgrade-03
@@ -579,24 +614,24 @@ m "$P" run upgrade-06; rc_is "…which unblocks the step that requires it" 0
 echo "== t_resume_in_new_session"
 UP="$WORK/rel20" mk_project "$WORK/p3" 0.19.0
 P="$WORK/p3"; WT="$WORK/p3-upgrade"; TGT=0.20.0; STEP_LOG=""
-g clone -q "$WORK/rel20" "$WORK/clone3" && g -C "$WORK/clone3" -c advice.detachedHead=false checkout -q v0.20.0
+fx g clone -q "$WORK/rel20" "$WORK/clone3" && fx g -C "$WORK/clone3" -c advice.detachedHead=false checkout -q v0.20.0
 m "$P" plan --source "$WORK/clone3" --scope repo
 step_through "$P" upgrade-01 upgrade-02
 state="$(state_of "$P")"
 has "the state records where the upgrade started" "$state" "from=0.19.0"
 has "…its target and tag" "$state" "tag=v0.20.0"
-has "…the clone's origin" "$state" "url=$WORK/rel20"
-has "…the worktree" "$state" "worktree=$WT"
+has "…the clone's origin" "$state" "url=$(np "$WORK")/rel20"
+has "…the worktree" "$state" "worktree=$(np "$WT")"
 has "…and the branch the worktree is on" "$state" "branch=sumela/upgrade-0.20.0"
 rm -rf "$WORK/clone3"
 m "$P" status
 same "status is offline: a missing clone is not cloned" "pending_repo=0 pending_developer=0" "$(printf '%s\n' "$OUT" | grep '^pending_')"
-has "…and says the upgrade is unfinished" "$OUT" "release clone $WORK/clone3 is missing"
+has "…and says the upgrade is unfinished" "$OUT" "release clone $(np "$WORK")/clone3 is missing"
 m "$P" plan --scope repo
 rc_is "a new session resumes from the state alone" 0
-has "…cloning the recorded tag again" "$OUT" "cloning $WORK/rel20 at v0.20.0 again"
+has "…cloning the recorded tag again" "$OUT" "cloning $(np "$WORK")/rel20 at v0.20.0 again"
 same "…and lists what is left, in order" "upgrade-03 0.20.0-01 upgrade-04 upgrade-05 upgrade-06" "$(pending_ids)"
-has "…running in the recorded worktree" "$OUT" "root:  $WT"
+has "…running in the recorded worktree" "$OUT" "root:  $(np "$WT")"
 step_through "$P" upgrade-03
 same "the resumed session continues in the worktree" "" "$STEP_LOG"
 same "…where the apply happened" 0.20.0 "$(tr -d '\r\n' < "$WT/.sumela/VERSION")"
@@ -613,7 +648,7 @@ m "$P" rollback upgrade-03 --confirmed-by-user
 rc_is "a rollback whose line succeeds exits 0" 0
 if [ ! -f "$L" ]; then ok "…and its ledger entry is gone: the step is pending again"; else bad "…and its ledger entry is gone"; fi
 if [ ! -e "$WT/done-apply-0.20.0" ]; then ok "…its effect undone"; else bad "…its effect undone"; fi
-g -C "$P" worktree remove --force "$WT"
+fx g -C "$P" worktree remove --force "$WT"
 m "$P" record upgrade-05 not-applicable
 rc_is "once the recorded worktree is gone, repo steps refuse to record" 1
 has "…and say why" "$OUT" "no longer exists: repo steps neither run, record nor roll back without it"
@@ -640,7 +675,7 @@ same "upgrade-01 is pending again, in the main checkout" "upgrade-01 upgrade-02 
 echo "== t_complete_upgrade_retires_state"
 UP="$WORK/rel20" mk_project "$WORK/p5" 0.19.0
 P="$WORK/p5"; WT="$WORK/p5-upgrade"; TGT=0.20.0; STEP_LOG=""
-g clone -q "$WORK/rel20" "$WORK/clone5" && g -C "$WORK/clone5" -c advice.detachedHead=false checkout -q v0.20.0
+fx g clone -q "$WORK/rel20" "$WORK/clone5" && fx g -C "$WORK/clone5" -c advice.detachedHead=false checkout -q v0.20.0
 m "$P" plan --source "$WORK/clone5" --scope repo; ORDER="$(pending_ids)"
 # shellcheck disable=SC2086
 step_through "$P" $ORDER
@@ -649,7 +684,7 @@ has "with every step recorded and the merge still to come, plan says what is lef
 if [ -e "$P/.sumela/.upgrade/migrate.state" ]; then ok "…and keeps the state: the rollbacks need it before the merge"; else bad "…and keeps the state: the rollbacks need it before the merge"; fi
 m "$P" plan --scope repo
 lacks "…and so does plan without --source" "$OUT" "is complete"
-g -C "$P" merge -q --no-ff -m "Merge the upgrade" sumela/upgrade-0.20.0 && rm -rf "$WORK/clone5"
+fx g -C "$P" merge -q --no-ff -m "Merge the upgrade" sumela/upgrade-0.20.0 && rm -rf "$WORK/clone5"
 m "$P" status
 same "after the merge, status reports nothing pending, offline" "pending_repo=0 pending_developer=0" "$OUT"
 m "$P" plan --scope repo
@@ -679,7 +714,7 @@ printf '# upstream\n%s\n' "$WORK/rel21" > "$P/.sumela/upstream.conf"
 m "$P" plan --source "$(src_of "$WORK/rel21")" --scope repo
 rc_is "the next release refuses while the earlier upgrade's worktree is unmerged" 1
 has "…naming how to abandon it" "$OUT" "rollback upgrade-01 --confirmed-by-user"
-g -C "$P" merge -q --no-ff -m "Merge the upgrade" sumela/upgrade-0.20.0
+fx g -C "$P" merge -q --no-ff -m "Merge the upgrade" sumela/upgrade-0.20.0
 m "$P" plan --source "$(src_of "$WORK/rel21")" --scope repo
 rc_is "once it is merged into the main checkout, the next release starts" 0
 has "…retiring the earlier state" "$OUT" "the upgrade to v0.20.0 is complete (the main checkout is at v0.20.0)"
@@ -704,7 +739,7 @@ m "$WORK/tm" run 0.20.0-01; rc_is "a developer step runs from the installed note
 m "$WORK/tm" record 0.20.0-01 done; rc_is "…and records done after its verify passes" 0
 m "$WORK/tm" status --scope developer
 same "status counts what is left" "pending_developer=1" "$OUT"
-g -C "$WORK/tm" worktree add -q -b feat "$WORK/tm-wt" main >/dev/null 2>&1
+fx g -C "$WORK/tm" worktree add -q -b feat "$WORK/tm-wt" main >/dev/null
 m "$WORK/tm-wt" plan --scope developer
 same "a linked worktree of the same clone shares the developer ledger" "0.20.1-01" "$(pending_ids)"
 m "$WORK/tm" record 0.20.1-01 declined
@@ -764,8 +799,8 @@ expect: exit0
 EOF
 mk_project "$WORK/ps" 0.20.0 "$PS_N"
 printf '#!/usr/bin/env bash\ncase " $* " in *" --check "*) echo check only ;; *) : > PLAN-RAN-WRITER ;; esac\n' > "$WORK/ps/tools/writer.sh"
-g -C "$WORK/ps" add -A && g -C "$WORK/ps" commit -qm writer
-g -C "$WORK/ps" config --local sumela.testKey abc
+fx g -C "$WORK/ps" add -A && fx g -C "$WORK/ps" commit -qm writer
+fx g -C "$WORK/ps" config --local sumela.testKey abc
 m "$WORK/ps" plan --scope developer
 rc_is "plan exits 0" 0
 has "a developer step whose read-only verify passes is recorded done (pre-satisfied)" "$OUT" "recorded 0.20.0-01 done (pre-satisfied)"
@@ -871,17 +906,17 @@ m "$WORK/u" plan --source "$(src_of "$WORK/untagged")" --scope repo
 rc_is "a clone whose HEAD has no release tag is refused" 1
 has "…naming the tag it needs" "$OUT" "not at an annotated release tag v0.20.0"
 if [ ! -e "$WORK/u/.sumela/.upgrade/migrate.state" ]; then ok "…and nothing is recorded"; else bad "…and nothing is recorded"; fi
-g -C "$WORK/untagged" tag v0.20.0
+fx g -C "$WORK/untagged" tag v0.20.0
 m "$WORK/u" plan --source "$(src_of "$WORK/untagged")" --scope repo
 rc_is "a lightweight tag is refused (cat-file -t must say tag)" 1
-g -C "$WORK/untagged" tag -d v0.20.0 >/dev/null; g -C "$WORK/untagged" tag -a -m x v0.20.1
+fx g -C "$WORK/untagged" tag -d v0.20.0 >/dev/null; fx g -C "$WORK/untagged" tag -a -m x v0.20.1
 m "$WORK/u" plan --source "$(src_of "$WORK/untagged")" --scope repo
 rc_is "a tag of another version is refused" 1
-g -C "$WORK/untagged.clone" tag -a -m forged v0.20.0
+fx g -C "$WORK/untagged.clone" tag -a -m forged v0.20.0
 m "$WORK/u" plan --source "$WORK/untagged.clone" --scope repo
 rc_is "a tag made in the clone alone is refused: the upstream does not have it" 1
 has "…git ls-remote says so" "$OUT" "says v0.20.0 is absent"
-g -C "$WORK/untagged.clone" tag -d v0.20.0 >/dev/null
+fx g -C "$WORK/untagged.clone" tag -d v0.20.0 >/dev/null
 m "$WORK/u" plan --source "$(src_of "$WORK/untagged")" --scope repo --allow-untagged
 rc_is "--allow-untagged alone is refused: it is for maintainer tests only" 1
 has "…which take SUMELA_MIGRATE_ALLOW_UNTAGGED=1 as well" "$OUT" "SUMELA_MIGRATE_ALLOW_UNTAGGED=1"
@@ -911,23 +946,23 @@ printf 'echo TAMPERED\n' >> "$CU/tools/step.sh"
 m "$WORK/u3" plan --source "$CU" --scope repo
 rc_is "a clone with a modified tool is refused" 1
 has "…its local changes named" "$OUT" "has local changes"
-g -C "$CU" checkout -q -- tools/step.sh
+fx g -C "$CU" checkout -q -- tools/step.sh
 echo x > "$CU/tools/extra.sh"
 m "$WORK/u3" plan --source "$CU" --scope repo
 rc_is "a clone with an untracked file is refused" 1
 rm -f "$CU/tools/extra.sh"
-printf '\n# staged\n' >> "$CU/scripts/sumela-migrations/upgrade.md"; g -C "$CU" add scripts/sumela-migrations/upgrade.md
+printf '\n# staged\n' >> "$CU/scripts/sumela-migrations/upgrade.md"; fx g -C "$CU" add scripts/sumela-migrations/upgrade.md
 m "$WORK/u3" plan --source "$CU" --scope repo
 rc_is "a clone with staged notes is refused" 1
-g -C "$CU" reset -q --hard
-g -C "$CU" update-index --assume-unchanged scripts/sumela-migrations/upgrade.md
+fx g -C "$CU" reset -q --hard
+fx g -C "$CU" update-index --assume-unchanged scripts/sumela-migrations/upgrade.md
 LC_ALL=C sed 's/^consent: confirm$/consent: none/' "$CU/scripts/sumela-migrations/upgrade.md" > "$CU/x.tmp" && cat "$CU/x.tmp" > "$CU/scripts/sumela-migrations/upgrade.md" && rm -f "$CU/x.tmp"
 m "$WORK/u3" plan --source "$CU" --scope repo
 rc_is "a clone that hides an edit (assume-unchanged) is refused" 1
 has "…and says how" "$OUT" "hides local changes"
-g -C "$CU" update-index --no-assume-unchanged scripts/sumela-migrations/upgrade.md; g -C "$CU" checkout -q -- scripts/sumela-migrations/upgrade.md
+fx g -C "$CU" update-index --no-assume-unchanged scripts/sumela-migrations/upgrade.md; fx g -C "$CU" checkout -q -- scripts/sumela-migrations/upgrade.md
 CANARY="s3cr3tCANARY"
-g -C "$CU" config remote.origin.url "https://alice:$CANARY@example.invalid/x/SumelaOS.git"
+fx g -C "$CU" config remote.origin.url "https://alice:$CANARY@example.invalid/x/SumelaOS.git"
 m "$WORK/u3" plan --source "$CU" --scope repo
 rc_is "a credentialed origin that is not the upstream is refused" 1
 lacks "…and the credential is never printed" "$OUT" "$CANARY"
@@ -938,19 +973,19 @@ rc_is "a confirmed origin that cannot be asked for the tag is refused (the tag c
 has "…naming it without the credential" "$OUT" "cannot ask https://example.invalid/x/SumelaOS.git for v0.20.0"
 CANARY_OUT="$CANARY_OUT$OUT"
 lacks "the canary credential appears in no output, nor in any state file" "$CANARY_OUT$(cat "$WORK/u3/.sumela/.upgrade/migrate.state" 2>/dev/null)" "$CANARY"
-g -C "$CU" config remote.origin.url "$WORK/rel20"
+fx g -C "$CU" config remote.origin.url "$WORK/rel20"
 # The clone's own git configuration is not trusted: no fsmonitor hook runs, and no
 # url.<x>.insteadOf can make the tag check ask another repository.
-g -C "$CU" config core.fsmonitor "touch \"$WORK/FSMONITOR-RAN\"; false"
+fx g -C "$CU" config core.fsmonitor "touch \"$WORK/FSMONITOR-RAN\"; false"
 m "$WORK/u3" plan --source "$CU" --scope repo
 rc_is "a clean clone with an fsmonitor hook in its config is checked" 0
 if [ ! -e "$WORK/FSMONITOR-RAN" ]; then ok "…without running that hook"; else bad "…without running that hook"; fi
-g -C "$CU" config --unset core.fsmonitor
-g clone -q "$WORK/rel20" "$WORK/fork"; printf 'echo FORK\n' >> "$WORK/fork/tools/step.sh"
-g -C "$WORK/fork" commit -qam fork && g -C "$WORK/fork" tag -a -f -m fork v0.20.0 >/dev/null
-g clone -q "$WORK/fork" "$WORK/fork.clone" && g -C "$WORK/fork.clone" -c advice.detachedHead=false checkout -q v0.20.0
-g -C "$WORK/fork.clone" remote set-url origin "$WORK/rel20"
-g -C "$WORK/fork.clone" config "url.$WORK/fork.insteadOf" "$WORK/rel20"
+fx g -C "$CU" config --unset core.fsmonitor
+fx g clone -q "$WORK/rel20" "$WORK/fork"; printf 'echo FORK\n' >> "$WORK/fork/tools/step.sh"
+fx g -C "$WORK/fork" commit -qam fork && fx g -C "$WORK/fork" tag -a -f -m fork v0.20.0 >/dev/null
+fx g clone -q "$WORK/fork" "$WORK/fork.clone" && fx g -C "$WORK/fork.clone" -c advice.detachedHead=false checkout -q v0.20.0
+fx g -C "$WORK/fork.clone" remote set-url origin "$WORK/rel20"
+fx g -C "$WORK/fork.clone" config "url.$WORK/fork.insteadOf" "$WORK/rel20"
 rm -f "$WORK/u3/.sumela/.upgrade/migrate.state"
 m "$WORK/u3" plan --source "$WORK/fork.clone" --scope repo
 rc_is "a fork's commit under the upstream's URL is refused, insteadOf in the clone or not" 1
@@ -958,7 +993,7 @@ has "…the upstream itself says the tag is elsewhere" "$OUT" "$WORK/rel20 says 
 if [ "$ON_WINDOWS" != true ]; then
   NL="$WORK/clone
 worktree=$WORK/evil"
-  g clone -q "$WORK/rel20" "$NL" && g -C "$NL" -c advice.detachedHead=false checkout -q v0.20.0
+  fx g clone -q "$WORK/rel20" "$NL" && fx g -C "$NL" -c advice.detachedHead=false checkout -q v0.20.0
   m "$WORK/u3" plan --source "$NL" --scope repo
   rc_is "a clone path with a newline is refused" 1
   has "…saying why" "$OUT" "holds a control character"
@@ -978,7 +1013,7 @@ m "$WORK/rcp" plan --source "$(src_of "$WORK/rc")" --scope repo
 rc_is "an annotated v<target>-rc.<n> tag is accepted" 0
 has "…the target stays the release's VERSION" "$OUT" "v0.19.0 -> v0.20.0"
 same "…and the RC tag is recorded" "tag=v0.20.0-rc.1" "$(grep '^tag=' "$WORK/rcp/.sumela/.upgrade/migrate.state")"
-g -C "$WORK/rc" tag -a -m final v0.20.0
+fx g -C "$WORK/rc" tag -a -m final v0.20.0
 m "$WORK/rcp" plan --source "$(src_of "$WORK/rc")" --scope repo
 same "the final tag on the same commit is preferred" "tag=v0.20.0" "$(grep '^tag=' "$WORK/rcp/.sumela/.upgrade/migrate.state")"
 mk_release "$WORK/rcbad" 0.20.0 v0.20.0-rc.x "$GEN"
@@ -1000,7 +1035,7 @@ rc_is "installed notes that differ from HEAD are refused" 1
 has "…naming the fix" "$OUT" "differ from HEAD"
 m "$WORK/mod" run 0.20.0-01
 rc_is "…for every command" 1
-g -C "$WORK/mod" checkout -q -- scripts/sumela-migrations/0.20.0.md
+fx g -C "$WORK/mod" checkout -q -- scripts/sumela-migrations/0.20.0.md
 step_block 0.19.5-01 developer first-session > "$WORK/mod/scripts/sumela-migrations/0.19.5.md"
 m "$WORK/mod" plan --scope developer
 rc_is "an untracked notes file is not a source of steps" 0
@@ -1009,8 +1044,8 @@ lacks "…its step is not listed, though its version would select it" "$OUT" "0.
 mk_project "$WORK/sym" 0.20.1 "$TM"
 step_block 0.19.9-01 developer first-session > "$WORK/outside.md"
 blob="$(printf '%s' "$WORK/outside.md" | git -C "$WORK/sym" hash-object -w --stdin)"
-g -C "$WORK/sym" update-index --add --cacheinfo "120000,$blob,scripts/sumela-migrations/0.19.9.md"
-g -C "$WORK/sym" commit -qm "notes as a symlink" && g -C "$WORK/sym" checkout -q -- scripts/sumela-migrations/0.19.9.md
+fx g -C "$WORK/sym" update-index --add --cacheinfo "120000,$blob,scripts/sumela-migrations/0.19.9.md"
+fx g -C "$WORK/sym" commit -qm "notes as a symlink" && fx g -C "$WORK/sym" checkout -q -- scripts/sumela-migrations/0.19.9.md
 m "$WORK/sym" plan --scope developer
 rc_is "a notes file committed as a symlink is refused" 1
 has "…saying why" "$OUT" "is not a regular file (mode 120000"
@@ -1115,11 +1150,11 @@ rc_is "upgrade-01's agent: line is printed there" 0
 
 echo "== t_set_worktree_moves_from"
 UP="$WORK/until-rel" mk_project "$WORK/sf" 0.19.0
-printf '0.20.0\n' > "$WORK/sf/.sumela/VERSION"; g -C "$WORK/sf" commit -qam "main at 0.20.0"
-g -C "$WORK/sf" branch base-0.19 HEAD~1
+printf '0.20.0\n' > "$WORK/sf/.sumela/VERSION"; fx g -C "$WORK/sf" commit -qam "main at 0.20.0"
+fx g -C "$WORK/sf" branch base-0.19 HEAD~1
 m "$WORK/sf" plan --source "$(src_of "$WORK/until-rel")" --scope repo
 has "the plan starts from the main checkout's v0.20.0" "$OUT" "v0.20.0 -> v0.20.1"
-g -C "$WORK/sf" worktree add -q --no-track -b sumela/upgrade-0.20.1 "$WORK/sf-wt" base-0.19 >/dev/null 2>&1
+fx g -C "$WORK/sf" worktree add -q --no-track -b sumela/upgrade-0.20.1 "$WORK/sf-wt" base-0.19 >/dev/null
 m "$WORK/sf" set prefix=sumela/ base=base-0.19 "worktree=$WORK/sf-wt"
 has "set worktree= takes the worktree's older VERSION as the start" "$OUT" "the upgrade now starts from v0.19.0"
 m "$WORK/sf" plan --source "$(src_of "$WORK/until-rel")" --scope repo
@@ -1140,24 +1175,29 @@ expect: match:^arg=
 agent: the clone is {SRC} and the checkout {ROOT}
 ```
 EOF
-if [ "$ON_WINDOWS" = true ]; then ODD="$WORK/odd dir 'a' \$x \`b\`"   # Windows forbids " in names
+# The project, its clone and its worktree sit in a directory whose name holds a space, quotes, $
+# and backticks, and the runner starts there as bash spells the path. Git Bash hands git such a
+# path unconverted (a ' or a ` stops its conversion): the runner converts it itself.
+if [ "$ON_WINDOWS" = true ]; then
+  ODD="$WORK/odd dir 'a' \$x \`b\`"
+  echo "  SKIP  a double quote in these paths (Windows forbids \" in file names; the other characters stay)"
 else ODD="$WORK/odd dir \"q\" 'a' \$x \`b\`"; fi
-mkdir -p "$ODD"
+fx mkdir -p "$ODD"
 mk_release "$ODD/rel" 0.20.0 v0.20.0 "$SQ"; UP="$ODD/rel" mk_project "$ODD/proj" 0.19.0
-ODD_SRC="$(src_of "$ODD/rel")"
+ODD_SRC="$(src_of "$ODD/rel")" || exit 1
 m "$ODD/proj" plan --source "$ODD_SRC" --scope repo; rc_is "plan accepts a clone path with spaces and quotes" 0
 P="$ODD/proj"; WT="$ODD/proj upgrade"; TGT=0.20.0; STEP_LOG=""
 step_through "$P" upgrade-01
 same "the worktree path with spaces and quotes is recorded" "" "$STEP_LOG"
 m "$P" show 0.20.0-01
 has "show prints the command with environment references" "$OUT" 'run: bash "${SUMELA_MIGRATE_SRC}/tools/args.sh" "${SUMELA_MIGRATE_ROOT}" "${SUMELA_MIGRATE_SRC}/x y" v0.20.0'
-has "…and the agent text with the plain paths" "$OUT" "agent: the clone is $ODD_SRC and the checkout $WT"
+has "…and the agent text with the plain paths" "$OUT" "agent: the clone is $(np "$ODD_SRC") and the checkout $(np "$WT")"
 m "$P" run 0.20.0-01
 rc_is "the step runs" 0
-has "{ROOT} arrives as one argument, byte for byte" "$OUT" "arg=$WT"
-has "{SRC} inside a longer quoted word too" "$OUT" "arg=$ODD_SRC/x y"
+has "{ROOT} arrives as one argument, byte for byte" "$OUT" "arg=$(np "$WT")"
+has "{SRC} inside a longer quoted word too" "$OUT" "arg=$(np "$ODD_SRC")/x y"
 has "{TARGET} is substituted literally" "$OUT" "arg=v0.20.0"
-has "the step sees SUMELA_MIGRATE_SRC" "$OUT" "src=$ODD_SRC"
+has "the step sees SUMELA_MIGRATE_SRC" "$OUT" "src=$(np "$ODD_SRC")"
 m "$P" verify 0.20.0-01; rc_is "verify runs with the same environment" 0
 
 echo "== t_set_and_state"
@@ -1175,20 +1215,186 @@ rc_is "set refuses a prefix that makes no branch name" 1
 m "$WORK/u2" set "prefix=a$(printf '\t')b/"
 rc_is "set refuses a value with a control character" 1
 # The upgrade branch tracks nothing but its own remote branch: else a push could land on the base.
-g -C "$WORK/u2" worktree add -q -b sumela/upgrade-0.20.0 "$WORK/u2-wt" main >/dev/null 2>&1
-g -C "$WORK/u2" branch -q --set-upstream-to=main sumela/upgrade-0.20.0
+fx g -C "$WORK/u2" worktree add -q -b sumela/upgrade-0.20.0 "$WORK/u2-wt" main >/dev/null
+fx g -C "$WORK/u2" branch -q --set-upstream-to=main sumela/upgrade-0.20.0
 m "$WORK/u2" set "worktree=$WORK/u2-wt"
 rc_is "set refuses a worktree whose branch tracks another branch (the base)" 1
 has "…naming it and the fix" "$OUT" "tracks refs/heads/main: a push could land there"
 m "$WORK/u2" set branch=sumela/upgrade-0.20.0
 rc_is "…and such a branch named by set branch= too" 1
-g -C "$WORK/u2" branch -q --unset-upstream sumela/upgrade-0.20.0
-g -C "$WORK/u2" config branch.sumela/upgrade-0.20.0.remote origin
-g -C "$WORK/u2" config branch.sumela/upgrade-0.20.0.merge refs/heads/sumela/upgrade-0.20.0
+fx g -C "$WORK/u2" branch -q --unset-upstream sumela/upgrade-0.20.0
+fx g -C "$WORK/u2" config branch.sumela/upgrade-0.20.0.remote origin
+fx g -C "$WORK/u2" config branch.sumela/upgrade-0.20.0.merge refs/heads/sumela/upgrade-0.20.0
 m "$WORK/u2" set "worktree=$WORK/u2-wt"
 rc_is "…and accepts one that tracks its own remote branch (after git push -u)" 0
 m "$WORK/tm" set prefix=sumela/
 rc_is "set needs an upgrade in progress" 1
+
+echo "== t_crlf_files_read_alike"
+# A state file, upstream.conf, repo ledger or developer log that an editor or another tool
+# rewrote with CRLF reads exactly as the LF one: no "\r" reaches a path, a git argument or a
+# comparison (a CR in the recorded clone or worktree path would make it "missing").
+crlf() { LC_ALL=C awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$1" > "$1.crlf" && mv -f "$1.crlf" "$1"; }
+UP="$WORK/rel20" mk_project "$WORK/cr" 0.19.0
+P="$WORK/cr"; WT="$WORK/cr-upgrade"; TGT=0.20.0; STEP_LOG=""
+m "$P" plan --source "$REL20_SRC" --scope repo
+step_through "$P" upgrade-01 upgrade-02
+same "the fixture's first two steps pass" "" "$STEP_LOG"
+m "$P" plan --scope repo; LF_PLAN="$OUT"
+m "$P" show upgrade-03; LF_SHOW="$OUT"
+fx crlf "$P/.sumela/.upgrade/migrate.state"; fx crlf "$P/.sumela/upstream.conf"; fx crlf "$WT/.sumela/migrations-applied/upgrade-02@0.20.0"
+if LC_ALL=C grep -q $'\r$' "$P/.sumela/.upgrade/migrate.state"; then ok "…the state now ends its lines with CRLF"; else bad "…the state now ends its lines with CRLF"; fi
+m "$P" plan --scope repo
+same "a CRLF state, upstream.conf and ledger plan alike" "$LF_PLAN" "$OUT"
+m "$P" show upgrade-03
+same "…and show the same step, every path without a CR" "$LF_SHOW" "$OUT"
+m "$P" plan --source "$REL20_SRC" --scope repo
+rc_is "…plan --source still trusts the clone (upstream.conf is read without its CR)" 0
+m "$P" run upgrade-03; rc_is "…and the next step runs in the recorded worktree" 0
+mk_project "$WORK/crdev" 0.20.1 "$TM"
+m "$WORK/crdev" run 0.20.0-01; m "$WORK/crdev" record 0.20.0-01 done
+LOG="$(cd "$WORK/crdev" && sumela_state_dir)/migrations.log"
+m "$WORK/crdev" show 0.20.0-01; LF_SHOW="$OUT"
+fx crlf "$LOG"
+m "$WORK/crdev" show 0.20.0-01
+same "a CRLF developer log reads alike (status: recorded: done)" "$LF_SHOW" "$OUT"
+has "…the status is the plain word" "$OUT" "status: recorded: done
+"
+
+echo "== t_windows_path_forms"
+# On Windows a clone's origin is the native path git recorded (C:/x), while upstream.conf or
+# --trust-origin may hold the MSYS spelling a bash tool wrote (/c/x): both name one repository and
+# match. Any other difference still refuses, a matching spelling never skips the tag check, and
+# git is handed the native form. Elsewhere Git Bash is simulated (uname says MINGW64; cygpath maps
+# /x/rest to X:/rest as Git Bash's does), so this runs, and bites, everywhere. C:/$N does not
+# exist: a matching spelling then fails at the ls-remote (refused: cannot ask), a mismatch before.
+N=sumela-nowhere
+FW="$WORK/fakewin"; fx mkdir -p "$FW/bin" "$FW/cyg" "$FW/lad" "$FW/enter" "$FW/oldgit"
+REAL_GIT="$(command -v git)"
+cat > "$FW/bin/git" <<'EOF'
+#!/bin/sh
+# git, logging the URL each ls-remote is handed (git [-C <dir>] ls-remote -- <url> <ref>)
+seen=""
+for a in "$@"; do
+  if [ "$seen" = url ]; then printf '%s\n' "$a" >> "$FW_LOG"; break; fi
+  case "$a" in ls-remote) seen=ls ;; --) if [ "$seen" = ls ]; then seen=url; fi ;; esac
+done
+exec "$REAL_GIT" "$@"
+EOF
+cat > "$FW/oldgit/git" <<'EOF'
+#!/bin/sh
+# git before 2.31: rev-parse prints --path-format=absolute back instead of failing
+case " $* " in *" rev-parse --path-format=absolute --git-common-dir "*) printf '%s\n' --path-format=absolute .git; exit 0 ;; esac
+exec "$REAL_GIT" "$@"
+EOF
+cat > "$FW/enter/cygpath" <<'EOF'
+#!/bin/sh
+# a cygpath whose native form names nothing: git cannot enter it (the Windows failure mode)
+printf '%s-unreadable\n' "$2"
+EOF
+if [ "$ON_WINDOWS" != true ]; then
+  printf '#!/bin/sh\nif [ "$1" = -s ]; then echo MINGW64_NT-10.0-26100; else exec /usr/bin/uname "$@"; fi\n' > "$FW/bin/uname"
+  cat > "$FW/cyg/cygpath" <<'EOF'
+#!/bin/sh
+# cygpath -m|-w|-u <path>, as Git Bash's for drive paths (its cygdrive prefix is /): /x/rest is
+# X:/rest (-m) or X:\rest (-w); X:/rest and X:\rest are /x/rest (-u). Any other path is returned
+# as it is (Git Bash's would place it under its install directory).
+up() { printf '%s' "$1" | tr abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ; }
+lo() { printf '%s' "$1" | tr ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz; }
+mode="$1"; p="$2"
+case "$mode" in
+  -m|-w)
+    case "$p" in /[A-Za-z]|/[A-Za-z]/*) r="${p#/?}"; p="$(up "$(printf '%s' "$p" | cut -c2)"):${r:-/}" ;; esac
+    if [ "$mode" = -w ]; then p="$(printf '%s' "$p" | tr / '\\')"; fi ;;
+  -u)
+    case "$p" in [A-Za-z]:*) r="$(printf '%s' "${p#?:}" | tr '\\' /)"; p="/$(lo "$(printf '%s' "$p" | cut -c1)")$r" ;; esac ;;
+  *) echo "cygpath (test stub): unsupported option $mode" >&2; exit 2 ;;
+esac
+printf '%s\n' "$p"
+EOF
+  chmod +x "$FW/cyg/cygpath"
+fi
+chmod +x "$FW"/bin/* "$FW"/enter/* "$FW"/oldgit/*
+WLAD="$FW/lad"; [ "$ON_WINDOWS" = true ] && WLAD="$LOCALAPPDATA"
+# mw [<PATH prefix>] -- <dir> <args...>: the runner under (simulated) Windows; $OUT and $RC. The
+# default prefix holds the git stand-in and, outside Windows, uname and cygpath as Git Bash's.
+WPATH="$FW/bin:$FW/cyg"
+mw() {
+  local pre="$WPATH"; if [ "$1" != -- ]; then pre="$1"; shift; fi; shift
+  [ ! -e "$FX_BROKEN" ] || exit 1
+  local d="$1"; shift
+  OUT="$(cd "$d" && env "PATH=$pre:$PATH" "LOCALAPPDATA=$WLAD" "FW_LOG=$FW/ls-remote.log" "REAL_GIT=$REAL_GIT" \
+    GIT_ALLOW_PROTOCOL=file bash "$RUNNER" "$@" 2>&1)"; RC=$?
+}
+WCL="$WORK/winforms.clone"
+fx g clone -q -- "$(np "$WORK/rel20")" "$(np "$WCL")"
+fx g -C "$(np "$WCL")" -c advice.detachedHead=false checkout -q v0.20.0
+UP="https://example.invalid/upstream.git" mk_project "$WORK/wp" 0.19.0
+# wform <label> <origin> <upstream.conf line> <match|refused> [<runner options>...]
+wform() {
+  local label="$1" origin="$2" up="$3" want="$4"; shift 4
+  MSYS_NO_PATHCONV=1 fx g -C "$(np "$WCL")" config remote.origin.url "$origin"
+  printf '# upstream\n%s\n' "$up" > "$WORK/wp/.sumela/upstream.conf"
+  rm -f "$WORK/wp/.sumela/.upgrade/migrate.state" "$FW/ls-remote.log"
+  mw -- "$WORK/wp" plan --source "$WCL" --scope repo "$@"
+  case "$want" in
+    match) if [ "$RC" = 1 ] && case "$OUT" in *"refused: cannot ask "*) true ;; *) false ;; esac; then ok "$label: matches, and the tag is asked of it"
+           else bad "$label: matches, and the tag is asked of it (exit $RC: $(printf '%s' "$OUT" | tail -3))"; fi ;;
+    refused) if [ "$RC" = 1 ] && case "$OUT" in *"refused: the release clone comes from "*) true ;; *) false ;; esac; then ok "$label: refused"
+             else bad "$label: refused (exit $RC: $(printf '%s' "$OUT" | tail -3))"; fi ;;
+  esac
+}
+wform "C:/x against /c/x" "C:/$N/up" "/c/$N/up" match
+same "…git is handed the native form" "C:/$N/up" "$(cat "$FW/ls-remote.log" 2>/dev/null)"
+wform "c:/x/ against /c/x.git (the drive letter in either case; the trailing slash and .git as ever)" "c:/$N/up/" "/c/$N/up.git" match
+wform "C:\\x against /c/x" "C:\\$N\\up" "/c/$N/up" match
+wform "file:///C:/x against /c/x" "file:///C:/$N/up" "/c/$N/up" match
+wform "C:/x against file:///c/x" "C:/$N/up" "file:///c/$N/up" match
+wform "a case difference past the drive letter" "C:/$N/UP" "/c/$N/up" refused
+wform "another drive" "D:/$N/up" "/c/$N/up" refused
+wform "another directory" "C:/$N/up-fork" "/c/$N/up" refused
+wform "a UNC path" "//srv/$N/up" "/c/$N/up" refused
+wform "--trust-origin in the MSYS spelling of the native origin" "C:/$N/fork" 'https://example.invalid/upstream.git' match --trust-origin "/c/$N/fork"
+has "…which the output records" "$OUT" "which the user confirmed"
+same "…git is handed the native form" "C:/$N/fork" "$(cat "$FW/ls-remote.log" 2>/dev/null)"
+wform "--trust-origin naming another path" "C:/$N/fork" 'https://example.invalid/upstream.git' refused --trust-origin "/c/$N/elsewhere"
+has "…saying so" "$OUT" "as --trust-origin says"
+if [ "$ON_WINDOWS" = true ]; then
+  echo "  SKIP  the rule without cygpath (Git Bash always has one, and it decided every case above)"
+else
+  # Without cygpath (every MSYS2 has one; the runner falls back on the rule): /x/rest is X:/rest.
+  MSYS_NO_PATHCONV=1 fx g -C "$(np "$WCL")" config remote.origin.url "C:/$N/up"
+  printf '# upstream\n%s\n' "/c/$N/up" > "$WORK/wp/.sumela/upstream.conf"
+  rm -f "$WORK/wp/.sumela/.upgrade/migrate.state" "$FW/ls-remote.log"
+  mw "$FW/bin" -- "$WORK/wp" plan --source "$WCL" --scope repo
+  has "without cygpath, C:/x against /c/x still matches, and the tag is asked of it" "$OUT" "refused: cannot ask /c/$N/up for v0.20.0"
+  same "…git is handed the native form" "C:/$N/up" "$(cat "$FW/ls-remote.log" 2>/dev/null)"
+fi
+MSYS_NO_PATHCONV=1 fx g -C "$(np "$WCL")" config remote.origin.url "file://$WORK/rel20"
+printf '# upstream\n%s\n' "$WORK/rel20" > "$WORK/wp/.sumela/upstream.conf"
+rm -f "$WORK/wp/.sumela/.upgrade/migrate.state"
+mw -- "$WORK/wp" plan --source "$WCL" --scope repo
+rc_is "a file:// origin and the plain path of the real upstream: plan proceeds" 0
+has "…the state records the clone's native path" "$(state_of "$WORK/wp")" "clone=$(np "$WCL")"
+# A spelling that matches never skips the tag check: a fork's commit under any spelling of the
+# upstream's path is refused by the upstream itself.
+MSYS_NO_PATHCONV=1 fx g -C "$(np "$WORK/fork.clone")" config remote.origin.url "file://$WORK/rel20"
+rm -f "$WORK/wp/.sumela/.upgrade/migrate.state"
+mw -- "$WORK/wp" plan --source "$WORK/fork.clone" --scope repo
+rc_is "a fork's commit under another spelling of the upstream's path is refused" 1
+has "…the upstream itself says the tag is elsewhere" "$OUT" "$WORK/rel20 says v0.20.0 is $(git -C "$(np "$WORK/rel20")" rev-parse 'v0.20.0^{commit}')"
+# Where git cannot open the checkout, the runner says so, and does not blame the git version.
+mw "$FW/enter:$WPATH" -- "$WORK/wp" status
+rc_is "a checkout git cannot enter: exit 1" 1
+has "…named as such" "$OUT" "git cannot enter $WORK/wp-unreadable (git's message is above): the directory is missing, unreadable, or named in a form git cannot open"
+lacks "…not as an old git" "$OUT" "2.31"
+fx mkdir -p "$WORK/nogit/.sumela"
+OUT="$(cd "$WORK/nogit" && GIT_CEILING_DIRECTORIES="$WORK" bash "$RUNNER" status 2>&1)"; RC=$?
+rc_is "a directory outside every git work tree: exit 1" 1
+has "…named as such" "$OUT" "is not inside a git work tree, or git refuses the repository there (git's message is above)"
+mw "$FW/oldgit:$WPATH" -- "$WORK/wp" status
+rc_is "a git older than 2.31: exit 1" 1
+has "…named as such" "$OUT" "git 2.31 or later is required: git rev-parse --path-format=absolute printed '--path-format=absolute'"
 
 echo ""
 echo "Result: $PASS passed, $FAIL failed"

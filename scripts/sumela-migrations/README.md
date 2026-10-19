@@ -128,6 +128,14 @@ hook, untracked cache or relaxed stat check applies to its checks, and the tag c
 newline) is refused, and so is a notes file committed as a symlink: notes are read only from
 regular blobs at HEAD, with `git cat-file`.
 
+**Windows paths.** Both runners record, print and hand each step paths in the form git for Windows
+prints (`C:/x`), whatever form they were given (`/c/x` from Git Bash, `C:\x` from PowerShell): Git
+Bash does not convert a path that holds `'`, `` ` ``, `*`, `?`, `[` or `]` for git, which then
+cannot open it. For the same reason a local-path origin matches the project's upstream (or the
+`--trust-origin` URL) in any spelling of that path: `/c/x`, `C:\x`, `c:/x` and `file:///C:/x`
+are one path (other MSYS paths, such as `/tmp/x`, as Git for Windows' `cygpath` maps them).
+Nothing else is folded: another drive, directory or letter case past the drive is refused.
+
 **Where steps run.** `{ROOT}` is the install root of the upgrade worktree once `upgrade-01` has
 recorded it with `set worktree=…`, else of the main checkout (the first entry of
 `git worktree list`), where only `upgrade-01` and `verify` work; developer steps run in the

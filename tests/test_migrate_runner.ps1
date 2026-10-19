@@ -12,8 +12,11 @@
 # by artifact, both ledgers, the trust checks (clean clone, upstream origin or -TrustOrigin,
 # ls-remote outside the clone, no fsmonitor, regular notes blobs only, credentials never printed,
 # control characters refused), the state kept until the merge, the path quoting, the run.ps1 / Git Bash routing
-# [RU-I13] and twin parity with the bash runner. Runs under Windows PowerShell 5.1 and pwsh 7,
-# and under the tr-TR culture.
+# [RU-I13] and twin parity with the bash runner: the same decision, in the same words, for every
+# Windows spelling of a local origin (simulated elsewhere) and for a checkout git cannot use;
+# CRLF state files read as LF ones; trees removed with the runner's Remove-Tree, which deletes
+# read-only git objects. A step that throws is reported as a failure and the result still printed.
+# Runs under Windows PowerShell 5.1 and pwsh 7, and under the tr-TR culture.
 #
 # Run:  pwsh -NoProfile -File tests/test_migrate_runner.ps1   (or: powershell -NoProfile -File ...)
 # Exit 0 = all assertions passed, 1 = a failure (printed above). Keep this file ASCII-only.
@@ -25,6 +28,14 @@ $runner = Join-Path $repoRoot 'scripts/sumela-migrate.ps1'
 $bashRunner = Join-Path $repoRoot 'scripts/sumela-migrate.sh'
 . (Join-Path $repoRoot 'scripts/lib/sumela-state.ps1')
 . (Join-Path $repoRoot 'scripts/lib/sumela-provenance.ps1')
+# The runner's own Remove-Tree: the suite removes every tree with it (git writes its objects
+# read-only, which a plain recursive delete cannot remove on Windows), and t_remove_tree pins it.
+$runnerAst = [Management.Automation.Language.Parser]::ParseFile($runner, [ref]$null, [ref]$null)
+foreach ($fn in @('Clear-ReadOnlyTree', 'Remove-Tree')) {
+    $def = $runnerAst.Find({ param($n) ($n -is [Management.Automation.Language.FunctionDefinitionAst]) -and ($n.Name -ceq $fn) }, $true)
+    if ($null -eq $def) { Write-Host "FAIL: scripts/sumela-migrate.ps1 defines no function $fn"; exit 1 }
+    . ([ScriptBlock]::Create($def.Extent.Text))
+}
 
 $script:pass = 0
 $script:fail = 0
@@ -564,7 +575,7 @@ try {
     $state = Read-Text "$work/p3/.sumela/.upgrade/migrate.state"
     Has 'the state records where the upgrade started' $state 'from=0.19.0'
     Has '...and the branch the worktree is on' $state 'branch=sumela/upgrade-0.20.0'
-    [IO.Directory]::Delete("$work/clone3", $true)
+    Remove-Tree "$work/clone3"
     Invoke-Mig "$work/p3" @('status')
     Has 'status is offline: a missing clone is not cloned' $script:out 'pending_repo=0 pending_developer=0'
     Invoke-Mig "$work/p3" @('plan', '-Scope', 'repo')
@@ -612,7 +623,7 @@ try {
     Has 'with every step recorded and the merge still to come, plan says what is left' $script:out 'every repo step is recorded: merge the upgrade pull request, then update the main checkout'
     if ([IO.File]::Exists("$work/p5/.sumela/.upgrade/migrate.state")) { Ok '...and keeps the state: the rollbacks need it before the merge' } else { Bad '...and keeps the state: the rollbacks need it before the merge' }
     tgit -C "$work/p5" merge -q --no-ff -m 'Merge the upgrade' sumela/upgrade-0.20.0
-    [IO.Directory]::Delete("$work/clone5", $true)
+    Remove-Tree "$work/clone5"
     Invoke-Mig "$work/p5" @('status')
     Same 'after the merge, status reports nothing pending, offline' 'pending_repo=0 pending_developer=0' $script:out
     Invoke-Mig "$work/p5" @('plan', '-Scope', 'repo')
@@ -1055,9 +1066,148 @@ expect: equals:ok
     Has '...the PowerShell line' $script:out '$ & "${env:SUMELA_MIGRATE_ROOT}/tools/step.ps1" via-ps'
     Invoke-Mig "$work/rp2" @('record', '0.20.0-01', 'done'); RcIs '...and verifies with verify.ps1' 0
     Has '...which wrote the artifact' (Read-Text "$work/rp2/order.log") 'via-ps'
+
+    Write-Host '== t_remove_tree'
+    # Git writes its objects read-only and Windows will not delete a read-only file: a plain
+    # recursive delete of a clone stopped this suite there. The runner's Remove-Tree (which the
+    # suite uses as well) clears the attribute first. Elsewhere a read-only directory makes the
+    # same plain delete fail.
+    $rt = "$work/rt"
+    Write-Text "$rt/objects/ab/cdef" 'blob'; Write-Text "$rt/top.txt" 'x'
+    foreach ($p in @("$rt/objects/ab/cdef", "$rt/top.txt")) { [IO.File]::SetAttributes($p, [IO.FileAttributes]::ReadOnly) }
+    (New-Object IO.DirectoryInfo "$rt/objects/ab").Attributes = [IO.FileAttributes]::ReadOnly
+    $plain = ''
+    try { [IO.Directory]::Delete($rt, $true) } catch { $plain = $_.Exception.GetType().Name }
+    if ($plain) { Ok "a plain recursive delete fails on a read-only tree ($plain): the fixture bites" }
+    elseif ($onWindows) { Bad 'a plain recursive delete fails on a read-only tree' }
+    else { Skip 'a plain recursive delete removed the read-only tree (this user ignores permissions: root?)' }
+    try { Remove-Tree $rt; if (-not [IO.Directory]::Exists($rt)) { Ok 'Remove-Tree removes it' } else { Bad 'Remove-Tree removes it' } }
+    catch { Bad "Remove-Tree removes it ($($_.Exception.Message))" }
+    try { Remove-Tree "$work/no-such-tree"; Ok '...and passes over a tree that is not there' } catch { Bad "...and passes over a tree that is not there ($($_.Exception.Message))" }
+
+    Write-Host '== t_crlf_files_read_alike'
+    # A state file, upstream.conf or ledger rewritten with CRLF reads as the LF one: no CR reaches
+    # a path, a git argument or a comparison.
+    New-Project "$work/cr" '0.19.0' '' "$work/rel20"
+    Invoke-Mig "$work/cr" @('plan', '-Source', $rel20Src, '-Scope', 'repo')
+    $script:stepLog = ''
+    Invoke-Steps "$work/cr" "$work/cr-upgrade" '0.20.0' @('upgrade-01', 'upgrade-02')
+    Same 'the fixture''s first two steps pass' '' $script:stepLog
+    Invoke-Mig "$work/cr" @('plan', '-Scope', 'repo'); $lfPlan = $script:out
+    Invoke-Mig "$work/cr" @('show', 'upgrade-03'); $lfShow = $script:out
+    foreach ($f in @("$work/cr/.sumela/.upgrade/migrate.state", "$work/cr/.sumela/upstream.conf", "$work/cr-upgrade/.sumela/migrations-applied/upgrade-02@0.20.0")) {
+        [IO.File]::WriteAllText($f, (Read-Text $f).Replace("`r`n", "`n").Replace("`n", "`r`n"), $utf8)
+    }
+    Invoke-Mig "$work/cr" @('plan', '-Scope', 'repo'); Same 'a CRLF state, upstream.conf and ledger plan alike' $lfPlan $script:out
+    Invoke-Mig "$work/cr" @('show', 'upgrade-03'); Same '...and show the same step' $lfShow $script:out
+    Invoke-Mig "$work/cr" @('plan', '-Source', $rel20Src, '-Scope', 'repo'); RcIs '...plan -Source still trusts the clone (upstream.conf is read without its CR)' 0
+    Invoke-Mig "$work/cr" @('run', 'upgrade-03'); RcIs '...and the next step runs in the recorded worktree' 0
+
+    Write-Host '== t_windows_path_forms_twins'
+    # On Windows a clone's origin is the native path git recorded (C:/x), while upstream.conf or
+    # -TrustOrigin may hold the MSYS spelling a bash tool wrote (/c/x): the twins fold exactly the
+    # same spellings, and refuse every other difference alike. Elsewhere Windows is simulated:
+    # OS=Windows_NT for the PowerShell runner; uname and cygpath as Git Bash's for the bash one.
+    # C:/sumela-nowhere does not exist: a match then fails at the ls-remote (cannot ask), a mismatch
+    # before it.
+    $fw = "$work/fakewin"
+    Write-Text "$fw/bin/git" @'
+#!/bin/sh
+# git, logging the URL each ls-remote is handed (git [-C <dir>] ls-remote -- <url> <ref>)
+seen=""
+for a in "$@"; do
+  if [ "$seen" = url ]; then printf '%s\n' "$a" >> "$FW_LOG"; break; fi
+  case "$a" in ls-remote) seen=ls ;; --) if [ "$seen" = ls ]; then seen=url; fi ;; esac
+done
+exec "$REAL_GIT" "$@"
+'@
+    Write-Text "$fw/oldgit/git" @'
+#!/bin/sh
+# git before 2.31: rev-parse prints --path-format=absolute back instead of failing
+case " $* " in *" rev-parse --path-format=absolute --git-common-dir "*) printf '%s\n' --path-format=absolute .git; exit 0 ;; esac
+exec "$REAL_GIT" "$@"
+'@
+    Write-Text "$fw/bin/uname" @'
+#!/bin/sh
+if [ "$1" = -s ]; then echo MINGW64_NT-10.0-26100; else exec /usr/bin/uname "$@"; fi
+'@
+    Write-Text "$fw/bin/cygpath" @'
+#!/bin/sh
+# cygpath -m|-w|-u <path>, as Git Bash's for drive paths; any other path is returned as it is.
+up() { printf '%s' "$1" | tr abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ; }
+lo() { printf '%s' "$1" | tr ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz; }
+mode="$1"; p="$2"
+case "$mode" in
+  -m|-w)
+    case "$p" in /[A-Za-z]|/[A-Za-z]/*) r="${p#/?}"; p="$(up "$(printf '%s' "$p" | cut -c2)"):${r:-/}" ;; esac
+    if [ "$mode" = -w ]; then p="$(printf '%s' "$p" | tr / '\\')"; fi ;;
+  -u)
+    case "$p" in [A-Za-z]:*) r="$(printf '%s' "${p#?:}" | tr '\\' /)"; p="/$(lo "$(printf '%s' "$p" | cut -c1)")$r" ;; esac ;;
+  *) echo "cygpath (test stub): unsupported option $mode" >&2; exit 2 ;;
+esac
+printf '%s\n' "$p"
+'@
+    $realGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
+    if (-not $onWindows) { & chmod +x "$fw/bin/git" "$fw/bin/uname" "$fw/bin/cygpath" "$fw/oldgit/git" }
+    $wcl = "$work/winforms.clone"
+    tgit clone -q -- "$work/rel20" $wcl
+    tgit -C $wcl -c advice.detachedHead=false checkout -q v0.20.0
+    New-Project "$work/wp" '0.19.0' '' 'https://example.invalid/upstream.git'
+    # Each runner under (simulated) Windows: git is the logging wrapper outside Windows (a script
+    # PowerShell on Windows would not run).
+    $envPs = @{ GIT_ALLOW_PROTOCOL = 'file' }; $envSh = @{ GIT_ALLOW_PROTOCOL = 'file' }
+    if (-not $onWindows) {
+        $common = @{ PATH = "$fw/bin:$($env:PATH)"; FW_LOG = "$fw/ls-remote.log"; REAL_GIT = $realGit; GIT_ALLOW_PROTOCOL = 'file' }
+        $envPs = $common.Clone(); $envPs['OS'] = 'Windows_NT'
+        $envSh = $common.Clone(); $envSh['LOCALAPPDATA'] = "$fw/lad"
+    }
+    function Get-Refusal([string]$o) { $l = @($o.Split([char]10) | Where-Object { $_ -cmatch '^sumela-migrate: refused' }); if ($l.Count -gt 0) { return $l[-1] }; return '' }
+    function Test-Form([string]$label, [string]$origin, [string]$up, [string]$want, [string[]]$extra = @()) {
+        tgit -C $wcl config remote.origin.url $origin
+        Write-Text "$work/wp/.sumela/upstream.conf" "# upstream`n$up`n"
+        $res = @{}
+        foreach ($who in @('ps', 'sh')) {
+            if ([IO.File]::Exists("$work/wp/.sumela/.upgrade/migrate.state")) { [IO.File]::Delete("$work/wp/.sumela/.upgrade/migrate.state") }
+            if ([IO.File]::Exists("$fw/ls-remote.log")) { [IO.File]::Delete("$fw/ls-remote.log") }
+            $migArgs = @('plan', '--source', $wcl, '--scope', 'repo') + $extra
+            if ($who -ceq 'ps') { Invoke-Mig "$work/wp" $migArgs $envPs } else { Invoke-Mig "$work/wp" $migArgs $envSh -Runner $bashRunner }
+            $res[$who] = [pscustomobject]@{ Rc = $script:rc; Refusal = (Get-Refusal $script:out); Asked = (Read-Text "$fw/ls-remote.log").Trim() }
+        }
+        $stage = 'the release clone comes from '; if ($want -ceq 'match') { $stage = 'cannot ask ' }
+        if (($res['ps'].Rc -eq 1) -and ($res['ps'].Refusal.IndexOf($stage, $ord) -ge 0)) { Ok "${label}: $want" } else { Bad "${label}: $want (exit $($res['ps'].Rc): $($res['ps'].Refusal))" }
+        Same "...the bash runner decides the same, in the same words" "$($res['ps'].Rc) $($res['ps'].Refusal)" "$($res['sh'].Rc) $($res['sh'].Refusal)"
+        return $res
+    }
+    $r = Test-Form 'C:/x against /c/x' 'C:/sumela-nowhere/up' '/c/sumela-nowhere/up' 'match'
+    if (-not $onWindows) { Same '...both hand git the native form' 'C:/sumela-nowhere/up C:/sumela-nowhere/up' "$($r['ps'].Asked) $($r['sh'].Asked)" }
+    $null = Test-Form 'c:\x\ against file:///C:/x.git (any drive-letter case)' 'c:\sumela-nowhere\up\' 'file:///C:/sumela-nowhere/up.git' 'match'
+    $null = Test-Form 'C:/x against file:///c/x' 'C:/sumela-nowhere/up' 'file:///c/sumela-nowhere/up' 'match'
+    $null = Test-Form 'a case difference past the drive letter' 'C:/sumela-nowhere/UP' '/c/sumela-nowhere/up' 'refused'
+    $null = Test-Form 'another drive' 'D:/sumela-nowhere/up' '/c/sumela-nowhere/up' 'refused'
+    $null = Test-Form 'another directory' 'C:/sumela-nowhere/up-fork' '/c/sumela-nowhere/up' 'refused'
+    $r = Test-Form '-TrustOrigin in the MSYS spelling of the native origin' 'C:/sumela-nowhere/fork' 'https://example.invalid/upstream.git' 'match' @('--trust-origin', '/c/sumela-nowhere/fork')
+    if (-not $onWindows) { Same '...both hand git the native form' 'C:/sumela-nowhere/fork C:/sumela-nowhere/fork' "$($r['ps'].Asked) $($r['sh'].Asked)" }
+    # Where git cannot run in the checkout, the twins say why in the same words.
+    [void][IO.Directory]::CreateDirectory("$work/nogit/.sumela")
+    Invoke-Mig "$work/nogit" @('status') @{ GIT_CEILING_DIRECTORIES = $work }; $nogitPs = $script:out; $rcPs = $script:rc
+    Invoke-Mig "$work/nogit" @('status') @{ GIT_CEILING_DIRECTORIES = $work } -Runner $bashRunner
+    Has 'a directory outside every git work tree is named as such' $nogitPs 'is not inside a git work tree, or git refuses the repository there (git''s message is above)'
+    Same '...by both twins' "$rcPs $($nogitPs.Split([char]10)[-1])" "$($script:rc) $($script:out.Split([char]10)[-1])"
+    if ($onWindows) { Skip 'a git older than 2.31 (a git stand-in on PATH is a shell script, which PowerShell on Windows does not run)' }
+    else {
+        $old = @{ PATH = "$fw/oldgit:$($env:PATH)"; REAL_GIT = $realGit }
+        Invoke-Mig "$work/wp" @('status') $old; $oldPs = $script:out; $rcPs = $script:rc
+        Invoke-Mig "$work/wp" @('status') $old -Runner $bashRunner
+        Has 'a git older than 2.31 is named as such' $oldPs 'git 2.31 or later is required: git rev-parse --path-format=absolute printed ''--path-format=absolute'''
+        Same '...by both twins' "$rcPs $($oldPs.Split([char]10)[-1])" "$($script:rc) $($script:out.Split([char]10)[-1])"
+    }
+} catch {
+    # A step that throws (a fixture git command, a delete) ends the suite here, reported as a
+    # failure with its line, and the result is still printed below.
+    Bad "the suite stopped at line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)"
 } finally {
     foreach ($n in $savedEnv.Keys) { Set-EnvVar $n $savedEnv[$n] }
-    try { [IO.Directory]::Delete($work, $true) } catch { }
+    try { Remove-Tree $work } catch { Write-Host "  NOTE  could not remove $work ($($_.Exception.Message))" }
 }
 
 Write-Host ''

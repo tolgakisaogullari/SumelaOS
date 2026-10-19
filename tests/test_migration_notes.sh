@@ -285,9 +285,15 @@ if git -C "$TEMPLATE" check-ignore -q .sumela/.last-update.json; then ok "the fi
 same "the fixture is clean after setup" "" "$(git -C "$TEMPLATE" status --porcelain)"
 
 # --- One end-to-end run ------------------------------------------------------------------------------
-# mig: the release clone's runner, run from the project (the README's procedure)
+# mig: the release clone's runner, run from the project (the README's procedure). The PowerShell
+# runner ends its lines with CRLF on Windows: they are read without that CR, as an agent reads
+# them, so no "\r" reaches a parsed value (the run: or consent: of a step) or a comparison. A CR
+# inside a line (a real leak) stays.
 MIG=()
-mig() { local d="$1"; shift; OUT="$(cd "$d" && "${MIG[@]}" "$@" 2>&1)"; RC=$?; }
+mig() {
+  local d="$1"; shift; OUT="$(cd "$d" && "${MIG[@]}" "$@" 2>&1)"; RC=$?
+  OUT="${OUT//$'\r\n'/$'\n'}"; OUT="${OUT%$'\r'}"
+}
 expected_ids() {  # <target>: the repo step ids the shipped notes select for 0.19.0 -> <target>, as a set
   LC_ALL=C awk -v t="$(vkey "$1")" '
     function vk(v, a) { split(v, a, "."); return sprintf("%06d.%06d.%06d", a[1], a[2], a[3]) }

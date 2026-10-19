@@ -34,7 +34,8 @@
 # character); it is a clean checkout (every tracked file as committed, nothing untracked, no
 # assume-unchanged or skip-worktree entry); HEAD is at an annotated v<target> or v<target>-rc.<n>
 # tag; its origin is this project's upstream (.sumela/upstream.conf, else the default below) or
-# the URL the user confirmed (--trust-origin); and `git ls-remote <that URL> <tag>^{}`, run
+# the URL the user confirmed (--trust-origin), a local path on Windows in any of its spellings
+# (/c/x, C:\x, file:///C:/x: url_key); and `git ls-remote <that URL> <tag>^{}`, run
 # outside every repository, names HEAD. The clone's own git configuration is not trusted: no
 # fsmonitor hook, untracked cache or relaxed stat check applies (cgit), and no url.<x>.insteadOf
 # can redirect the ls-remote. Later commands check the same clone offline against the commit
@@ -95,6 +96,8 @@ NOTES_REL="scripts/sumela-migrations"
 # uses the same default).
 DEFAULT_UPSTREAM="https://github.com/tolgakisaogullari/SumelaOS.git"
 TAB="$(printf '\t')"
+# Git Bash, MSYS2 or Cygwin: git is a native Windows program there (see native_path).
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) ON_WINDOWS=true ;; *) ON_WINDOWS=false ;; esac
 # A hook's environment would point every git call (and every step) at another layout.
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_PREFIX
 
@@ -602,8 +605,22 @@ read_version() {  # <install root> -> its .sumela/VERSION, trimmed
   tr -d ' \t\r\n' < "$1/.sumela/VERSION"
 }
 join_root() { if [ -n "$2" ]; then printf '%s/%s' "${1%/}" "$2"; else printf '%s' "$1"; fi; }
-native_path() {  # paths in the state file are read by both twins: C:/... on Windows
-  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) cygpath -m "$1" ;; *) printf '%s' "$1" ;; esac
+# native_path <path>: on Windows, an absolute POSIX path in the form a native program reads,
+# C:/x: cygpath -m when it exists (it knows the mount table: /tmp, /usr, the cygdrive prefix),
+# else /x/rest maps to X:/rest. Any other path (C:/x, a relative one), and every path elsewhere,
+# is returned as it is. Git Bash converts a POSIX path argument for a native program such as
+# git, but not one that holds ' ` * ? [ or ]: git then receives /c/... and cannot open it. So
+# every path the runner hands git, records (both twins read the state) or hands a step is native
+# on Windows, the form git itself prints.
+native_path() {
+  local p="$1" d
+  if [ "$ON_WINDOWS" != true ]; then printf '%s' "$p"; return 0; fi
+  case "$p" in /*) ;; *) printf '%s' "$p"; return 0 ;; esac
+  if command -v cygpath >/dev/null 2>&1 && d="$(cygpath -m "$p")" && [ -n "$d" ]; then printf '%s' "$d"; return 0; fi
+  case "$p" in
+    /[A-Za-z]|/[A-Za-z]/*) d="$(printf '%s' "${p:1:1}" | LC_ALL=C tr 'a-z' 'A-Z')"; p="${p:2}"; printf '%s:%s' "$d" "${p:-/}" ;;
+    *) printf '%s' "$p" ;;
+  esac
 }
 utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # strip_userinfo <url>: never store or print a credential. http(s) URLs lose their whole
@@ -620,10 +637,31 @@ strip_userinfo() {
     }
     print u }'
 }
-# url_key <url>: a comparable form of a repository URL: no scheme, no user, the host in lower
-# case, an scp-style host:path as host/path, no trailing slash or .git.
-url_key() {
+# local_url_path <url>: exit 0 with the path of a URL that names a local repository (a plain
+# path, or a file:// URL, where file:///C:/x gives C:/x), backslashes as slashes; exit 1 for a
+# remote URL (another scheme, or an scp-style host:path).
+local_url_path() {
   printf '%s' "$1" | LC_ALL=C awk '{ u = $0
+    if (match(u, /^[A-Za-z][A-Za-z0-9+.-]*:\/\//)) {
+      if (tolower(substr(u, 1, RLENGTH)) != "file://") exit 1
+      u = substr(u, RLENGTH + 1)
+      if (u ~ /^\/[A-Za-z]:([\/\\]|$)/) u = substr(u, 2)
+    } else if (u ~ /^[^\/]+:/ && u !~ /^[A-Za-z]:/) exit 1
+    gsub(/\\/, "/", u)
+    printf "%s", u }'
+}
+# url_key <url>: a comparable form of a repository URL: no scheme, no user, the host in lower
+# case, an scp-style host:path as host/path, no trailing slash or .git. On Windows a local path
+# is compared in its native form, the one git for Windows records as a clone's origin: /c/x,
+# c:\x, C:/x, file:///c/x and file:///C:/x are all C:/x (native_path; the drive letter in upper
+# case). Nothing else is folded: any other difference still refuses.
+url_key() {
+  local u="$1" p
+  if [ "$ON_WINDOWS" = true ] && p="$(local_url_path "$u")"; then
+    u="$(native_path "$p")"
+    case "$u" in [abcdefghijklmnopqrstuvwxyz]:*) u="$(printf '%s' "${u%%:*}" | LC_ALL=C tr 'a-z' 'A-Z'):${u#*:}" ;; esac
+  fi
+  printf '%s' "$u" | LC_ALL=C awk '{ u = $0
     if (match(u, /^[A-Za-z][A-Za-z0-9+.-]*:\/\//)) { u = substr(u, RLENGTH + 1); a = u; sub(/\/.*/, "", a); rest = substr(u, length(a) + 1); sub(/^.*@/, "", a); u = tolower(a) rest }
     else if (u ~ /^[^\/]+:/ && u !~ /^[A-Za-z]:/) { a = u; sub(/:.*/, "", a); rest = substr(u, length(a) + 2); sub(/^.*@/, "", a); u = tolower(a) "/" rest }
     sub(/\/+$/, "", u); sub(/\.git$/, "", u); sub(/\/+$/, "", u)
@@ -645,10 +683,23 @@ find_install_root() {
 locate() {  # sets LOCAL_ROOT, PREFIX, MAIN_ROOT, STATE_FILE, COMMON
   local top bare
   LOCAL_ROOT="$(find_install_root)" || die "no .sumela/ above $PWD: run this inside a SumelaOS project's checkout"
-  COMMON="$(git -C "$LOCAL_ROOT" rev-parse --path-format=absolute --git-common-dir)" ||
-    die "$LOCAL_ROOT is not inside a git work tree (git 2.31 or later is required)"
+  LOCAL_ROOT="$(native_path "$LOCAL_ROOT")"
+  # git's own message (not redirected) says why it failed; the probe tells a directory git cannot
+  # enter from a repository it does not find or refuses.
+  if ! COMMON="$(git -C "$LOCAL_ROOT" rev-parse --path-format=absolute --git-common-dir)"; then
+    git -C "$LOCAL_ROOT" version >/dev/null 2>&1 ||
+      die "git cannot enter $LOCAL_ROOT (git's message is above): the directory is missing, unreadable, or named in a form git cannot open"
+    die "$LOCAL_ROOT is not inside a git work tree, or git refuses the repository there (git's message is above)"
+  fi
+  COMMON="${COMMON%$'\r'}"
+  # git before 2.31 does not fail on --path-format: it prints the option back, then a relative path.
+  case "$COMMON" in
+    *$'\n'*|'') die "git 2.31 or later is required: git rev-parse --path-format=absolute printed '$(printf '%s' "$COMMON" | head -1 | tr -d '\r')' ($(git version 2>&1 | tr -d '\r'))" ;;
+    /*|[A-Za-z]:/*) ;;
+    *) die "git 2.31 or later is required: git rev-parse --path-format=absolute printed '$COMMON' ($(git version 2>&1 | tr -d '\r'))" ;;
+  esac
   PREFIX="$(git -C "$LOCAL_ROOT" rev-parse --show-prefix)" || die "git cannot read $LOCAL_ROOT"
-  PREFIX="${PREFIX%$'\r'}"; PREFIX="${PREFIX%/}"; COMMON="${COMMON%$'\r'}"
+  PREFIX="${PREFIX%$'\r'}"; PREFIX="${PREFIX%/}"
   top="$(git -C "$LOCAL_ROOT" worktree list --porcelain | LC_ALL=C awk '{ sub(/\r$/, "") } NR == 1 && /^worktree / { print substr($0, 10) } NR > 1 && /^$/ { exit } /^bare$/ { print "BARE" }')"
   bare="$(printf '%s\n' "$top" | sed -n '2p')"; top="$(printf '%s\n' "$top" | sed -n '1p')"
   MAIN_ROOT="$LOCAL_ROOT"
@@ -718,6 +769,7 @@ main_at_target() {  # the main checkout's VERSION has reached the target (the up
 clone_tag() {
   local d="$1" t="$2" head tag pick=""
   head="$(cgit -C "$d" rev-parse -q --verify "HEAD^{commit}")" || return 1
+  head="${head%$'\r'}"
   while IFS= read -r tag; do
     tag="${tag%$'\r'}"
     case "$tag" in
@@ -725,8 +777,8 @@ clone_tag() {
       "v$t-rc."*) printf '%s' "${tag#"v$t-rc."}" | LC_ALL=C grep -Eq '^[0-9]+$' || continue ;;
       *) continue ;;
     esac
-    [ "$(cgit -C "$d" cat-file -t "refs/tags/$tag" 2>/dev/null)" = tag ] || continue
-    [ "$(cgit -C "$d" rev-parse -q --verify "refs/tags/$tag^{commit}")" = "$head" ] || continue
+    [ "$(cgit -C "$d" cat-file -t "refs/tags/$tag" 2>/dev/null | tr -d '\r')" = tag ] || continue
+    [ "$(cgit -C "$d" rev-parse -q --verify "refs/tags/$tag^{commit}" | tr -d '\r')" = "$head" ] || continue
     if [ "$tag" = "v$t" ] || [ -z "$pick" ]; then pick="$tag"; fi
   done <<EOF
 $(cgit -C "$d" tag --points-at HEAD 2>/dev/null)
@@ -744,6 +796,7 @@ shown_url() { if [ -n "$1" ]; then strip_userinfo "$1"; else printf 'no origin';
 check_clone() {
   local d="$1" mode="$2" v dirty hidden origin up trusted peeled rec
   has_ctrl "$d" && die "refused: the release clone's path holds a control character (a newline?): clone it to a plain path"
+  d="$(native_path "$d")"
   [ -d "$d" ] || die "release clone $d does not exist"
   CLONE_TOP="$(cgit -C "$d" rev-parse --show-toplevel 2>/dev/null)" || die "$d is not a git checkout of the release"
   CLONE_TOP="${CLONE_TOP%$'\r'}"
@@ -786,8 +839,9 @@ check_clone() {
     if [ -n "$CLONE_TAG" ]; then
       # Asked of the trusted URL itself, without credentials (git would print them in its own
       # errors), from outside every repository: the clone's url.<x>.insteadOf cannot redirect it.
+      # A local path goes to git in its native form (native_path).
       peeled="$(cd "$WORK" && GIT_CEILING_DIRECTORIES="$(dirname "$WORK")" GIT_ALLOW_PROTOCOL="${GIT_ALLOW_PROTOCOL:-https:ssh:git}" \
-        git ls-remote -- "$(strip_userinfo "$trusted")" "refs/tags/$CLONE_TAG^{}" | tr -d '\r')" ||
+        git ls-remote -- "$(native_path "$(strip_userinfo "$trusted")")" "refs/tags/$CLONE_TAG^{}" | tr -d '\r')" ||
         die "refused: cannot ask $(shown_url "$trusted") for $CLONE_TAG (git ls-remote failed; the check needs the network)"
       peeled="${peeled%%[[:space:]]*}"
       [ "$peeled" = "$CLONE_HEAD" ] || die "refused: $(shown_url "$trusted") says $CLONE_TAG is ${peeled:-absent}, but the clone's HEAD is $CLONE_HEAD"
@@ -806,7 +860,7 @@ reclone() {  # <path>: the recorded clone is missing; clone the recorded tag aga
   [ -n "$url" ] || url="$(upstream_url)"
   tag="$(state_get tag)" || tag=""; [ -n "$tag" ] || tag="v$(state_get target)"
   say "the release clone $d is missing: cloning $(strip_userinfo "$url") at $tag again"
-  GIT_ALLOW_PROTOCOL="${GIT_ALLOW_PROTOCOL:-https:ssh:git}" git clone --branch "$tag" -- "$url" "$d" ||
+  GIT_ALLOW_PROTOCOL="${GIT_ALLOW_PROTOCOL:-https:ssh:git}" git clone --branch "$tag" -- "$(native_path "$url")" "$(native_path "$d")" ||
     die "cannot clone $(strip_userinfo "$url") at $tag into $d"
 }
 
@@ -1078,15 +1132,19 @@ need_worktree() {
 # --- Running commands ----------------------------------------------------------------------------
 in_step_env() { SUMELA_MIGRATE_SRC="$STEP_SRC" SUMELA_MIGRATE_ROOT="$STEP_ROOT" "$@"; }
 print_env() { printf '  (SUMELA_MIGRATE_SRC=%s SUMELA_MIGRATE_ROOT=%s)\n' "$STEP_SRC" "$STEP_ROOT"; }
-run_line() {  # <command> : runs it from {ROOT}; output is never filtered
-  ( cd "$STEP_ROOT" && in_step_env "${BASH:-bash}" -c "$1" )
+# run_line <command>: runs it from {ROOT}; output is never filtered. The step's own shell enters
+# {ROOT}: no process of the runner sits in it meanwhile (Windows cannot remove a directory a
+# process is in, and upgrade-01's rollback removes {ROOT}).
+run_line() {
+  in_step_env "${BASH:-bash}" -c 'cd "$SUMELA_MIGRATE_ROOT" || exit 1
+'"$1"
 }
 VERIFY_OUT="" VERIFY_RC=0
 # verify_quiet <id>: sets VERIFY_OUT (stdout and stderr, CRs dropped); 0 holds, 3 failed, 4 bad expect
 verify_quiet() {
   local cmd exp all
   cmd="$(subst_cmd "$(field "$1" verify)")"; exp="$(subst_expect "$(field "$1" expect)")"
-  all="$( (cd "$STEP_ROOT" && in_step_env "${BASH:-bash}" -c "$cmd") 2>&1; printf '\n%s' "$?")"
+  all="$(run_line "$cmd" 2>&1; printf '\n%s' "$?")"
   VERIFY_RC="${all##*$'\n'}"
   VERIFY_OUT="$(printf '%s' "${all%$'\n'*}" | tr -d '\r')"
   [ "$VERIFY_RC" -eq 0 ] || return 3
@@ -1297,6 +1355,7 @@ cmd_set() {
         git check-ref-format --branch "$v" >/dev/null 2>&1 || die "branch '$v' is not a valid branch name"
         refuse_tracking "$MAIN_ROOT" "$v" ;;
       worktree)
+        v="$(native_path "$v")"
         [ -d "$v" ] || die "worktree $v does not exist (create it with git worktree add first)"
         top="$(git -C "$v" rev-parse --show-toplevel 2>/dev/null | tr -d '\r')" || die "$v is not a git checkout"
         common="$(git -C "$top" rev-parse --path-format=absolute --git-common-dir | tr -d '\r')"
